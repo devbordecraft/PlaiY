@@ -1,0 +1,13 @@
+{
+  "name": "testplayer",
+  "version-string": "0.1.0",
+  "dependencies": [
+    {
+      "name": "ffmpeg",
+      "features": ["avformat", "avcodec", "swresample", "swscale"],
+      "default-features": false
+    },
+    "libass",
+    "nlohmann-json"
+  ]
+}

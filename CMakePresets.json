@@ -1,0 +1,50 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "apple-debug",
+      "displayName": "Apple Debug",
+      "binaryDir": "${sourceDir}/build/apple-debug",
+      "installDir": "${sourceDir}/build/install",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "apple-release",
+      "displayName": "Apple Release",
+      "binaryDir": "${sourceDir}/build/apple-release",
+      "installDir": "${sourceDir}/build/install",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "apple-debug",
+      "configurePreset": "apple-debug"
+    },
+    {
+      "name": "apple-release",
+      "configurePreset": "apple-release"
+    }
+  ]
+}
