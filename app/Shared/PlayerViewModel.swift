@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CoreGraphics
 
 class PlayerViewModel: ObservableObject {
     let bridge = PlayerBridge()
@@ -18,6 +19,12 @@ class PlayerViewModel: ObservableObject {
     @Published var showDebugOverlay = false
     @Published var playbackStats: PYPlaybackStats?
     @Published var playbackEnded = false
+
+    // Timeline interaction state
+    @Published var isHoveringTimeline = false
+    @Published var isDraggingTimeline = false
+    @Published var hoverFraction: Double = 0
+    @Published var seekPreviewImage: CGImage?
 
     private var positionTimer: Timer?
 
@@ -62,6 +69,10 @@ class PlayerViewModel: ObservableObject {
         } else if !settings.autoSelectSubtitles {
             disableSubtitles()
         }
+
+        // Start background seek thumbnail generation
+        let interval: Int32 = duration > 7_200_000_000 ? 30 : 10
+        bridge.startSeekThumbnails(interval: interval)
     }
 
     func play() {
@@ -91,9 +102,11 @@ class PlayerViewModel: ObservableObject {
     }
 
     func stop() {
+        bridge.cancelSeekThumbnails()
         bridge.stop()
         isPlaying = false
         currentPosition = 0
+        seekPreviewImage = nil
         stopPositionUpdates()
     }
 
@@ -154,6 +167,47 @@ class PlayerViewModel: ObservableObject {
     func setPassthrough(_ enabled: Bool) {
         passthroughEnabled = enabled
         bridge.setAudioPassthrough(enabled)
+    }
+
+    // MARK: - Timeline interaction
+
+    func timelineHoverChanged(_ hovering: Bool) {
+        isHoveringTimeline = hovering
+        if !hovering {
+            seekPreviewImage = nil
+        }
+    }
+
+    func timelineHoverMoved(fraction: Double) {
+        hoverFraction = max(0, min(1, fraction))
+        updateSeekPreview()
+    }
+
+    func timelineDragStarted() {
+        isDraggingTimeline = true
+    }
+
+    func timelineDragChanged(fraction: Double) {
+        let clamped = max(0, min(1, fraction))
+        hoverFraction = clamped
+        seek(to: clamped)
+        updateSeekPreview()
+    }
+
+    func timelineDragEnded() {
+        isDraggingTimeline = false
+        seekPreviewImage = nil
+    }
+
+    private func updateSeekPreview() {
+        guard duration > 0 else { return }
+        let timestampUs = Int64(hoverFraction * Double(duration))
+        seekPreviewImage = bridge.seekThumbnail(at: timestampUs)
+    }
+
+    func timeText(for fraction: Double) -> String {
+        let us = Int64(fraction * Double(duration))
+        return formatTime(us)
     }
 
     private func formatTime(_ us: Int64) -> String {

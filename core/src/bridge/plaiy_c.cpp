@@ -2,6 +2,8 @@
 #include "plaiy/logger.h"
 #include "plaiy/player_engine.h"
 #include "plaiy/media_library.h"
+#include "library/thumbnail_generator.h"
+#include "library/seek_thumbnail_generator.h"
 
 #include <nlohmann/json.hpp>
 #include <string>
@@ -15,6 +17,8 @@ struct PYPlayer {
     py::PlayerEngine engine;
     std::string media_info_json;
     std::string last_error_msg;
+    py::SeekThumbnailGenerator seek_thumbs;
+    std::string video_path;
 };
 
 PYPlayer* py_player_create(void) {
@@ -43,6 +47,7 @@ int py_player_open(PYPlayer* p, const char* path) {
 
     py::Error err = p->engine.open_file(path);
     if (err) return PY_ERROR_FILE_NOT_FOUND;
+    p->video_path = path;
     return PY_OK;
 }
 
@@ -415,6 +420,56 @@ void py_log_set_callback(PYLogCallback cb, void* userdata) {
     } else {
         py::Logger::instance().set_callback(nullptr);
     }
+}
+
+// ---- Thumbnails ----
+
+int py_thumbnail_generate(const char* video_path, const char* output_path,
+                          int max_width, int max_height) {
+    if (!video_path || !output_path) return PY_ERROR_INVALID_ARG;
+    return py::ThumbnailGenerator::generate(video_path, output_path, max_width, max_height)
+        ? PY_OK : PY_ERROR_DECODER;
+}
+
+// ---- Seek preview thumbnails ----
+
+static std::string seek_thumb_cache_dir(const std::string& video_path) {
+    // Simple hash of path for cache directory name
+    std::hash<std::string> hasher;
+    size_t h = hasher(video_path);
+    char hex[32];
+    snprintf(hex, sizeof(hex), "%016zx", h);
+
+    const char* home = getenv("HOME");
+    std::string dir = std::string(home ? home : "/tmp") +
+                      "/Library/Caches/PlaiY/seek_thumbs/" + hex;
+    return dir;
+}
+
+void py_player_start_seek_thumbnails(PYPlayer* p, int interval_seconds) {
+    if (!p || p->video_path.empty()) return;
+    std::string cache_dir = seek_thumb_cache_dir(p->video_path);
+    p->seek_thumbs.start(p->video_path, cache_dir, interval_seconds);
+}
+
+void py_player_cancel_seek_thumbnails(PYPlayer* p) {
+    if (p) p->seek_thumbs.cancel();
+}
+
+int py_player_get_seek_thumbnail(PYPlayer* p, int64_t timestamp_us,
+                                  const uint8_t** out_data,
+                                  int* out_width, int* out_height) {
+    if (!p || !out_data || !out_width || !out_height) return PY_ERROR_INVALID_ARG;
+
+    int64_t dur = p->engine.duration_us();
+    if (!p->seek_thumbs.get_thumbnail(timestamp_us, dur, out_data, out_width, out_height))
+        return PY_ERROR_UNKNOWN;
+    return PY_OK;
+}
+
+int py_player_get_seek_thumbnail_progress(PYPlayer* p) {
+    if (!p) return 0;
+    return p->seek_thumbs.progress();
 }
 
 // ---- Library ----

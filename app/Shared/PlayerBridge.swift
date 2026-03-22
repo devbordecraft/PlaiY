@@ -1,5 +1,6 @@
 import Foundation
 import CoreVideo
+import CoreGraphics
 
 /// Swift wrapper around the C bridge API (plaiy_c.h)
 class PlayerBridge {
@@ -199,6 +200,43 @@ class PlayerBridge {
         return meta
     }
 
+    // Seek preview thumbnails
+    func startSeekThumbnails(interval: Int32 = 10) {
+        py_player_start_seek_thumbnails(handle, interval)
+    }
+
+    func cancelSeekThumbnails() {
+        py_player_cancel_seek_thumbnails(handle)
+    }
+
+    func seekThumbnail(at timestampUs: Int64) -> CGImage? {
+        var dataPtr: UnsafePointer<UInt8>?
+        var width: Int32 = 0
+        var height: Int32 = 0
+        let result = py_player_get_seek_thumbnail(handle, timestampUs, &dataPtr, &width, &height)
+        guard result == Int32(PY_OK.rawValue),
+              let data = dataPtr,
+              width > 0, height > 0 else { return nil }
+
+        let bytesPerRow = Int(width) * 4
+        let totalBytes = bytesPerRow * Int(height)
+        let cfData = Data(bytes: data, count: totalBytes) as CFData
+        guard let provider = CGDataProvider(data: cfData) else { return nil }
+
+        return CGImage(width: Int(width), height: Int(height),
+                       bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: bytesPerRow,
+                       space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                       provider: provider,
+                       decode: nil, shouldInterpolate: true,
+                       intent: .defaultIntent)
+    }
+
+    var seekThumbnailProgress: Int32 {
+        py_player_get_seek_thumbnail_progress(handle)
+    }
+
     // Subtitle
     func getSubtitle(at timestamp: Int64) -> SubtitleData? {
         guard let sf = py_player_get_subtitle(handle, timestamp) else { return nil }
@@ -270,5 +308,10 @@ class LibraryBridge {
 
     func removeFolder(at index: Int32) -> Bool {
         py_library_remove_folder(handle, index) == Int32(PY_OK.rawValue)
+    }
+
+    static func generateThumbnail(videoPath: String, outputPath: String,
+                                   maxWidth: Int32, maxHeight: Int32) -> Bool {
+        py_thumbnail_generate(videoPath, outputPath, maxWidth, maxHeight) == Int32(PY_OK.rawValue)
     }
 }

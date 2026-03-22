@@ -136,7 +136,7 @@ struct PlayerView: View {
 
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
-        guard !showSettings else { return }
+        guard !showSettings && !viewModel.isHoveringTimeline && !viewModel.isDraggingTimeline else { return }
         hideControlsTask = Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
             if !Task.isCancelled {

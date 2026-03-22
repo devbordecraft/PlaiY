@@ -32,6 +32,8 @@ set(CORE_SOURCES
     src/sync/frame_queue.cpp
     src/library/media_library.cpp
     src/library/metadata_reader.cpp
+    src/library/thumbnail_generator.cpp
+    src/library/seek_thumbnail_generator.cpp
     src/util/logger.cpp
     src/bridge/plaiy_c.cpp
 )

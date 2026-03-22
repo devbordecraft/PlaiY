@@ -220,6 +220,23 @@ const char* py_library_get_item_json(PYLibrary* lib, int index);
 // Returns JSON for all items
 const char* py_library_get_all_items_json(PYLibrary* lib);
 
+// ---- Thumbnails ----
+int py_thumbnail_generate(const char* video_path, const char* output_path,
+                          int max_width, int max_height);
+
+// ---- Seek preview thumbnails ----
+// Start background generation of seek preview thumbnails.
+// interval_seconds: one thumbnail every N seconds. Call after py_player_open().
+void py_player_start_seek_thumbnails(PYPlayer* p, int interval_seconds);
+void py_player_cancel_seek_thumbnails(PYPlayer* p);
+
+// Get BGRA thumbnail data for a timestamp. Returns PY_OK if available.
+// out_data points to internal buffer valid until next call or player close.
+int  py_player_get_seek_thumbnail(PYPlayer* p, int64_t timestamp_us,
+                                   const uint8_t** out_data,
+                                   int* out_width, int* out_height);
+int  py_player_get_seek_thumbnail_progress(PYPlayer* p);
+
 // ---- Library folder management ----
 int         py_library_get_folder_count(PYLibrary* lib);
 const char* py_library_get_folder(PYLibrary* lib, int index);
