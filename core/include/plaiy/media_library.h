@@ -21,10 +21,6 @@ public:
     int item_count() const;
     const MediaItem* item_at(int index) const;
 
-    // Serialize/deserialize the library to JSON
-    Error save(const std::string& path);
-    Error load(const std::string& path);
-
     void clear();
 
 private:

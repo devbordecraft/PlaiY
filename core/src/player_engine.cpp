@@ -29,6 +29,33 @@ extern "C" {
 
 static constexpr const char* TAG = "PlayerEngine";
 
+// Open an FFmpeg audio decoder context for the given track.
+// Returns nullptr on failure.
+static AVCodecContext* open_audio_codec(const py::TrackInfo& track) {
+    const AVCodec* codec = avcodec_find_decoder(
+        static_cast<AVCodecID>(track.codec_id));
+    if (!codec) return nullptr;
+
+    AVCodecContext* ctx = avcodec_alloc_context3(codec);
+    if (!ctx) return nullptr;
+
+    ctx->sample_rate = track.sample_rate;
+    av_channel_layout_default(&ctx->ch_layout, track.channels);
+
+    if (!track.extradata.empty()) {
+        ctx->extradata_size = static_cast<int>(track.extradata.size());
+        ctx->extradata = static_cast<uint8_t*>(
+            av_mallocz(track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
+        memcpy(ctx->extradata, track.extradata.data(), track.extradata.size());
+    }
+
+    if (avcodec_open2(ctx, codec, nullptr) < 0) {
+        avcodec_free_context(&ctx);
+        return nullptr;
+    }
+    return ctx;
+}
+
 namespace py {
 
 struct PlayerEngine::Impl {
@@ -749,34 +776,8 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
     if (!audio_decoder || !audio_output) return;
 
-    // We need the AVCodecContext for the resampler — but our AudioDecoder
-    // hides it. We'll create a resampler-compatible path.
-    // For a cleaner design, we integrate decoding + resampling here directly.
-
-    // Re-open codec for this thread to get the AVCodecContext
-    // Actually, let's use FFmpeg directly here for the audio decode+resample pipeline
-    const AVCodec* codec = avcodec_find_decoder(
-        static_cast<AVCodecID>(media_info.tracks[active_audio_stream].codec_id));
-    if (!codec) return;
-
-    AVCodecContext* ctx = avcodec_alloc_context3(codec);
+    AVCodecContext* ctx = open_audio_codec(media_info.tracks[active_audio_stream]);
     if (!ctx) return;
-
-    const auto& track = media_info.tracks[active_audio_stream];
-    ctx->sample_rate = track.sample_rate;
-    av_channel_layout_default(&ctx->ch_layout, track.channels);
-
-    if (!track.extradata.empty()) {
-        ctx->extradata_size = static_cast<int>(track.extradata.size());
-        ctx->extradata = static_cast<uint8_t*>(
-            av_mallocz(track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
-        memcpy(ctx->extradata, track.extradata.data(), track.extradata.size());
-    }
-
-    if (avcodec_open2(ctx, codec, nullptr) < 0) {
-        avcodec_free_context(&ctx);
-        return;
-    }
 
     // Set up resampler
     AudioResampler resampler;
@@ -818,29 +819,9 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
                 // Open new decoder
                 const auto& new_track = media_info.tracks[new_stream];
-                const AVCodec* new_codec = avcodec_find_decoder(
-                    static_cast<AVCodecID>(new_track.codec_id));
-                if (!new_codec) {
-                    PY_LOG_ERROR(TAG, "No decoder for new audio track");
-                    break;
-                }
-
-                ctx = avcodec_alloc_context3(new_codec);
-                if (!ctx) break;
-
-                ctx->sample_rate = new_track.sample_rate;
-                av_channel_layout_default(&ctx->ch_layout, new_track.channels);
-
-                if (!new_track.extradata.empty()) {
-                    ctx->extradata_size = static_cast<int>(new_track.extradata.size());
-                    ctx->extradata = static_cast<uint8_t*>(
-                        av_mallocz(new_track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
-                    memcpy(ctx->extradata, new_track.extradata.data(), new_track.extradata.size());
-                }
-
-                if (avcodec_open2(ctx, new_codec, nullptr) < 0) {
+                ctx = open_audio_codec(new_track);
+                if (!ctx) {
                     PY_LOG_ERROR(TAG, "Failed to open new audio decoder");
-                    avcodec_free_context(&ctx);
                     break;
                 }
 

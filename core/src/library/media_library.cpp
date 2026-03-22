@@ -2,11 +2,8 @@
 #include "plaiy/logger.h"
 #include "metadata_reader.h"
 
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <unordered_set>
 
 static constexpr const char* TAG = "MediaLibrary";
@@ -70,72 +67,6 @@ int MediaLibrary::item_count() const {
 const MediaItem* MediaLibrary::item_at(int index) const {
     if (index < 0 || index >= static_cast<int>(impl_->items.size())) return nullptr;
     return &impl_->items[index];
-}
-
-Error MediaLibrary::save(const std::string& path) {
-    using json = nlohmann::json;
-
-    json arr = json::array();
-    for (const auto& item : impl_->items) {
-        json j;
-        j["file_path"] = item.file_path;
-        j["title"] = item.title;
-        j["container_format"] = item.container_format;
-        j["duration_us"] = item.duration_us;
-        j["video_width"] = item.video_width;
-        j["video_height"] = item.video_height;
-        j["video_codec"] = item.video_codec;
-        j["audio_codec"] = item.audio_codec;
-        j["audio_channels"] = item.audio_channels;
-        j["hdr_type"] = static_cast<int>(item.hdr_type);
-        j["file_size"] = item.file_size;
-        j["audio_track_count"] = item.audio_track_count;
-        j["subtitle_track_count"] = item.subtitle_track_count;
-        arr.push_back(j);
-    }
-
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return {ErrorCode::LibraryError, "Cannot write library file: " + path};
-    }
-    file << arr.dump(2);
-    return Error::Ok();
-}
-
-Error MediaLibrary::load(const std::string& path) {
-    using json = nlohmann::json;
-
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return {ErrorCode::FileNotFound, "Library file not found: " + path};
-    }
-
-    try {
-        json arr = json::parse(file);
-        impl_->items.clear();
-
-        for (const auto& j : arr) {
-            MediaItem item;
-            item.file_path = j.value("file_path", "");
-            item.title = j.value("title", "");
-            item.container_format = j.value("container_format", "");
-            item.duration_us = j.value("duration_us", int64_t(0));
-            item.video_width = j.value("video_width", 0);
-            item.video_height = j.value("video_height", 0);
-            item.video_codec = j.value("video_codec", "");
-            item.audio_codec = j.value("audio_codec", "");
-            item.audio_channels = j.value("audio_channels", 0);
-            item.hdr_type = static_cast<HDRType>(j.value("hdr_type", 0));
-            item.file_size = j.value("file_size", int64_t(0));
-            item.audio_track_count = j.value("audio_track_count", 0);
-            item.subtitle_track_count = j.value("subtitle_track_count", 0);
-            impl_->items.push_back(std::move(item));
-        }
-    } catch (const json::exception& e) {
-        return {ErrorCode::LibraryError, std::string("JSON parse error: ") + e.what()};
-    }
-
-    return Error::Ok();
 }
 
 void MediaLibrary::clear() {

@@ -11,7 +11,6 @@ struct TrackInfo: Identifiable {
     let channels: Int
     let subtitleFormat: Int // 0=Unknown, 1=SRT, 2=ASS, 3=PGS, 4=VobSub
     let codecId: Int
-    let channelLayout: UInt64
     let bitsPerSample: Int
 
     var id: Int { streamIndex }
@@ -80,7 +79,6 @@ struct TrackInfo: Identifiable {
                 channels: t["channels"] as? Int ?? 0,
                 subtitleFormat: t["subtitle_format"] as? Int ?? 0,
                 codecId: t["codec_id"] as? Int ?? 0,
-                channelLayout: (t["channel_layout"] as? NSNumber)?.uint64Value ?? 0,
                 bitsPerSample: t["bits_per_sample"] as? Int ?? 0
             )
 

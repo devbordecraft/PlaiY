@@ -15,12 +15,6 @@ struct PYPlayer {
     py::PlayerEngine engine;
     std::string media_info_json;
     std::string last_error_msg;
-
-    // Callback storage
-    PYStateCallback state_cb = nullptr;
-    void* state_ud = nullptr;
-    PYErrorCallback error_cb = nullptr;
-    void* error_ud = nullptr;
 };
 
 PYPlayer* py_player_create(void) {
@@ -36,18 +30,6 @@ void py_player_destroy(PYPlayer* p) {
 
 int py_player_open(PYPlayer* p, const char* path) {
     if (!p || !path) return PY_ERROR_INVALID_ARG;
-
-    // Wire up callbacks before opening
-    if (p->state_cb) {
-        p->engine.set_state_callback([p](py::PlaybackState s) {
-            p->state_cb(static_cast<int>(s), p->state_ud);
-        });
-    }
-    if (p->error_cb) {
-        p->engine.set_error_callback([p](py::Error err) {
-            p->error_cb(static_cast<int>(err.code), err.message.c_str(), p->error_ud);
-        });
-    }
 
     py::Error err = p->engine.open_file(path);
     if (err) return PY_ERROR_FILE_NOT_FOUND;
@@ -394,20 +376,6 @@ void py_subtitle_free(PYSubtitleFrame* sf) {
     delete[] sf->text;
     delete[] sf->rgba_data;
     delete sf;
-}
-
-// ---- Callbacks ----
-
-void py_player_set_state_callback(PYPlayer* p, PYStateCallback cb, void* userdata) {
-    if (!p) return;
-    p->state_cb = cb;
-    p->state_ud = userdata;
-}
-
-void py_player_set_error_callback(PYPlayer* p, PYErrorCallback cb, void* userdata) {
-    if (!p) return;
-    p->error_cb = cb;
-    p->error_ud = userdata;
 }
 
 // ---- Logging ----

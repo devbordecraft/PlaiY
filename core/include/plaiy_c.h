@@ -185,12 +185,6 @@ typedef struct {
 PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us);
 void             py_subtitle_free(PYSubtitleFrame* sf);
 
-// ---- Callbacks ----
-typedef void (*PYStateCallback)(int state, void* userdata);
-typedef void (*PYErrorCallback)(int error_code, const char* message, void* userdata);
-void py_player_set_state_callback(PYPlayer* p, PYStateCallback cb, void* userdata);
-void py_player_set_error_callback(PYPlayer* p, PYErrorCallback cb, void* userdata);
-
 // ---- Logging ----
 enum PYLogLevel {
     PY_LOG_LEVEL_DEBUG = 0,

@@ -149,10 +149,6 @@ class PlayerBridge {
         py_player_frame_get_color_range(frame)
     }
 
-    static func frameIsHardware(_ frame: UnsafeMutableRawPointer) -> Bool {
-        py_player_frame_is_hardware(frame)
-    }
-
     // HDR10+ per-frame dynamic metadata
     static func frameHasHDR10Plus(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_has_hdr10plus(frame)
@@ -189,10 +185,6 @@ class PlayerBridge {
     }
 
     // Dolby Vision per-frame RPU metadata
-    static func frameHasDovi(_ frame: UnsafeMutableRawPointer) -> Bool {
-        py_player_frame_has_dovi(frame)
-    }
-
     static func frameGetDovi(_ frame: UnsafeMutableRawPointer) -> PYDoviMetadata? {
         var meta = PYDoviMetadata()
         guard py_player_frame_get_dovi(frame, &meta) else { return nil }
@@ -221,11 +213,6 @@ class PlayerBridge {
         return nil
     }
 
-    func setStateCallback(_ callback: @escaping (Int32) -> Void) {
-        // Store callback reference to prevent dealloc
-        // For simplicity, we use the C callback with context
-        // In production, this would need proper prevent-dealloc handling
-    }
 }
 
 enum SubtitleData {

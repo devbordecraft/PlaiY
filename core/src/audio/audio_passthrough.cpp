@@ -13,16 +13,6 @@ bool is_passthrough_eligible(int codec_id) {
            codec_id == AV_CODEC_ID_TRUEHD;
 }
 
-bool is_spdif_compatible(int codec_id) {
-    return codec_id == AV_CODEC_ID_AC3 ||
-           codec_id == AV_CODEC_ID_EAC3 ||
-           codec_id == AV_CODEC_ID_DTS;
-}
-
-bool is_hdmi_only(int codec_id) {
-    return codec_id == AV_CODEC_ID_TRUEHD;
-}
-
 int passthrough_bytes_per_second(int codec_id) {
     // SPDIF transport: 48000 Hz * 2ch * 2 bytes = 192000 bytes/s
     // These are approximate upper bounds for ring buffer sizing.
