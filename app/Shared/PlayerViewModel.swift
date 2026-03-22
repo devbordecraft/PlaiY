@@ -9,6 +9,10 @@ class PlayerViewModel: ObservableObject {
     @Published var duration: Int64 = 0
     @Published var currentSubtitle: SubtitleData?
     @Published var mediaTitle: String = ""
+    @Published var audioTracks: [TrackInfo] = []
+    @Published var subtitleTracks: [TrackInfo] = []
+    @Published var activeAudioStream: Int = -1
+    @Published var activeSubtitleStream: Int = -1
 
     private var positionTimer: Timer?
 
@@ -19,6 +23,14 @@ class PlayerViewModel: ObservableObject {
         // Extract title from path
         let url = URL(fileURLWithPath: path)
         mediaTitle = url.deletingPathExtension().lastPathComponent
+
+        // Parse track info
+        let json = bridge.mediaInfoJSON()
+        let parsed = TrackInfo.parseTracks(from: json)
+        audioTracks = parsed.audio
+        subtitleTracks = parsed.subtitle
+        activeAudioStream = Int(bridge.activeAudioStream)
+        activeSubtitleStream = Int(bridge.activeSubtitleStream)
     }
 
     func play() {
@@ -78,6 +90,21 @@ class PlayerViewModel: ObservableObject {
     private func stopPositionUpdates() {
         positionTimer?.invalidate()
         positionTimer = nil
+    }
+
+    func selectAudioTrack(streamIndex: Int) {
+        bridge.selectAudioTrack(Int32(streamIndex))
+        activeAudioStream = streamIndex
+    }
+
+    func selectSubtitleTrack(streamIndex: Int) {
+        bridge.selectSubtitleTrack(Int32(streamIndex))
+        activeSubtitleStream = streamIndex
+    }
+
+    func disableSubtitles() {
+        bridge.selectSubtitleTrack(-1)
+        activeSubtitleStream = -1
     }
 
     private func formatTime(_ us: Int64) -> String {

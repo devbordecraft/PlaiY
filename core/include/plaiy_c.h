@@ -61,6 +61,8 @@ int         py_player_get_audio_track_count(PYPlayer* p);
 int         py_player_get_subtitle_track_count(PYPlayer* p);
 void        py_player_select_audio_track(PYPlayer* p, int index);
 void        py_player_select_subtitle_track(PYPlayer* p, int index);
+int         py_player_get_active_audio_stream(PYPlayer* p);
+int         py_player_get_active_subtitle_stream(PYPlayer* p);
 
 // ---- Media info ----
 const char* py_player_get_media_info_json(PYPlayer* p);

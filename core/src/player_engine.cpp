@@ -69,6 +69,10 @@ struct PlayerEngine::Impl {
     std::atomic<bool> seeking{false};
     int64_t seek_target_us = 0;
 
+    // For audio track switching
+    std::atomic<bool> audio_track_changed{false};
+    int pending_audio_stream = -1; // protected by audio_buf_mutex
+
     // Threads
     std::thread demux_thread;
     std::thread video_decode_thread;
@@ -278,8 +282,30 @@ MediaInfo PlayerEngine::media_info() const {
 }
 
 void PlayerEngine::select_audio_track(int stream_index) {
-    // TODO: Reopen audio decoder for the new track
+    if (stream_index == impl_->active_audio_stream) return;
+
+    // Validate it's a valid audio track
+    if (stream_index >= 0 &&
+        (stream_index >= static_cast<int>(impl_->media_info.tracks.size()) ||
+         impl_->media_info.tracks[stream_index].type != MediaType::Audio)) {
+        PY_LOG_WARN(TAG, "Invalid audio stream index: %d", stream_index);
+        return;
+    }
+
+    {
+        std::lock_guard lock(impl_->audio_buf_mutex);
+        impl_->pending_audio_stream = stream_index;
+    }
     impl_->active_audio_stream = stream_index;
+    impl_->audio_track_changed.store(true);
+
+    // Flush queued packets and signal the decode thread
+    impl_->audio_packet_queue.flush();
+    Packet flush_pkt;
+    flush_pkt.is_flush = true;
+    impl_->audio_packet_queue.push(flush_pkt);
+
+    PY_LOG_INFO(TAG, "Audio track switched to stream %d", stream_index);
 }
 
 void PlayerEngine::select_subtitle_track(int stream_index) {
@@ -305,6 +331,14 @@ int PlayerEngine::subtitle_track_count() const {
         if (t.type == MediaType::Subtitle) count++;
     }
     return count;
+}
+
+int PlayerEngine::active_audio_stream() const {
+    return impl_->active_audio_stream;
+}
+
+int PlayerEngine::active_subtitle_stream() const {
+    return impl_->active_subtitle_stream;
 }
 
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
@@ -510,11 +544,61 @@ void PlayerEngine::Impl::audio_decode_loop() {
         if (!audio_packet_queue.pop(pkt)) break;
 
         if (pkt.is_flush) {
-            avcodec_flush_buffers(ctx);
-            std::lock_guard lock(audio_buf_mutex);
-            audio_ring_read = 0;
-            audio_ring_write = 0;
-            audio_ring_size = 0;
+            {
+                std::lock_guard lock(audio_buf_mutex);
+                audio_ring_read = 0;
+                audio_ring_write = 0;
+                audio_ring_size = 0;
+            }
+
+            if (audio_track_changed.load()) {
+                audio_track_changed.store(false);
+
+                int new_stream;
+                {
+                    std::lock_guard lock(audio_buf_mutex);
+                    new_stream = pending_audio_stream;
+                }
+
+                // Close old decoder
+                avcodec_free_context(&ctx);
+                resampler.close();
+                resampler_initialized = false;
+                timebase_initialized = false;
+
+                // Open new decoder
+                const auto& new_track = media_info.tracks[new_stream];
+                const AVCodec* new_codec = avcodec_find_decoder(
+                    static_cast<AVCodecID>(new_track.codec_id));
+                if (!new_codec) {
+                    PY_LOG_ERROR(TAG, "No decoder for new audio track");
+                    break;
+                }
+
+                ctx = avcodec_alloc_context3(new_codec);
+                if (!ctx) break;
+
+                ctx->sample_rate = new_track.sample_rate;
+                av_channel_layout_default(&ctx->ch_layout, new_track.channels);
+
+                if (!new_track.extradata.empty()) {
+                    ctx->extradata_size = static_cast<int>(new_track.extradata.size());
+                    ctx->extradata = static_cast<uint8_t*>(
+                        av_mallocz(new_track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
+                    memcpy(ctx->extradata, new_track.extradata.data(), new_track.extradata.size());
+                }
+
+                if (avcodec_open2(ctx, new_codec, nullptr) < 0) {
+                    PY_LOG_ERROR(TAG, "Failed to open new audio decoder");
+                    avcodec_free_context(&ctx);
+                    break;
+                }
+
+                PY_LOG_INFO(TAG, "Audio decoder switched to stream %d (%s)",
+                            new_stream, new_track.codec_name.c_str());
+            } else {
+                avcodec_flush_buffers(ctx);
+            }
             continue;
         }
 

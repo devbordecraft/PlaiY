@@ -95,6 +95,16 @@ void py_player_select_subtitle_track(PYPlayer* p, int index) {
     if (p) p->engine.select_subtitle_track(index);
 }
 
+int py_player_get_active_audio_stream(PYPlayer* p) {
+    if (!p) return -1;
+    return p->engine.active_audio_stream();
+}
+
+int py_player_get_active_subtitle_stream(PYPlayer* p) {
+    if (!p) return -1;
+    return p->engine.active_subtitle_stream();
+}
+
 const char* py_player_get_media_info_json(PYPlayer* p) {
     if (!p) return "{}";
 
@@ -123,6 +133,8 @@ const char* py_player_get_media_info_json(PYPlayer* p) {
         } else if (t.type == py::MediaType::Audio) {
             tj["sample_rate"] = t.sample_rate;
             tj["channels"] = t.channels;
+        } else if (t.type == py::MediaType::Subtitle) {
+            tj["subtitle_format"] = static_cast<int>(t.subtitle_format);
         }
 
         tracks.push_back(tj);

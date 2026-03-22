@@ -7,121 +7,127 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1FBCA6DFAC47D82E842F8DAC /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1051D64F71A8455FEF9995B1 /* MetalViewCoordinator.swift */; };
-		343BD43C8ADEA8A275793AA8 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99896CE2B23D06BE43F467EA /* PlaiYApp.swift */; };
-		350AC0941D7A2FD53897A734 /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A41FE5EDBEC27984F33B64A /* MetalPlayerView.swift */; };
-		4C265DA0CC0111C20FACA86D /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B76A71B3C1650E43809A52 /* PlayerControlsView.swift */; };
-		61BED4230742D641A15006B4 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 39F7564AC52DCAFADA0B8042 /* metal_shaders.metal */; };
-		874E2EB1B649F47D9DFEEBEA /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D9BE4C60AE13A9DA43CA745 /* PlayerView.swift */; };
-		8BAA65E68DDDB56B06FE5265 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A815E76C3BE07DFDFD3610AF /* SubtitleOverlayView.swift */; };
-		8D3F2BF478E7F7DFFF3873AD /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5E7F2A813AB0C8FB7D9DDB /* MediaItemView.swift */; };
-		8D8326440958ADD18AC0320D /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */; };
-		9E2350FCB383A5953F821279 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9DF184FB0A9A67CEF20793 /* LibraryView.swift */; };
-		C558D69EF84D2B2984D3A406 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */; };
-		CA8B40DD840E09B6169D72BD /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09264979C53F24DECF9787ED /* PYLog.swift */; };
-		E111A259EEB59F8F8A74AE78 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B968A511E5527FC49C378D24 /* PlayerBridge.swift */; };
-		EEC6B81641FBFD206A8D642F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB4226524B92103A5325361 /* ContentView.swift */; };
+		0844F79FBCDC31083722DC07 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
+		08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
+		215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
+		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
+		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
+		67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
+		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
+		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
+		8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
+		97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
+		98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
+		C4FD58DB467D65B3843D9A7F /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
+		D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
+		DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
+		DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
+		F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		09264979C53F24DECF9787ED /* PYLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PYLog.swift; sourceTree = "<group>"; };
-		0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
-		1051D64F71A8455FEF9995B1 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
-		1A41FE5EDBEC27984F33B64A /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
-		39F7564AC52DCAFADA0B8042 /* metal_shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = metal_shaders.metal; sourceTree = "<group>"; };
-		3B62EE214318FD205FD46F0A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		69B76A71B3C1650E43809A52 /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
-		6D9BE4C60AE13A9DA43CA745 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
-		7AB4226524B92103A5325361 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		8D9DF184FB0A9A67CEF20793 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
-		99896CE2B23D06BE43F467EA /* PlaiYApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaiYApp.swift; sourceTree = "<group>"; };
-		A815E76C3BE07DFDFD3610AF /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
-		B968A511E5527FC49C378D24 /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
-		D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
-		EB5E7F2A813AB0C8FB7D9DDB /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
-		F6B577FAE7E5881B6F543EF9 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaiYApp.swift; sourceTree = "<group>"; };
+		12D362E93F1F7BFB374D7C8A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		19D4B941118178244122189A /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
+		20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
+		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		2E13F471AA3B2426876CCB66 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
+		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
+		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
+		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
+		BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
+		CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = metal_shaders.metal; sourceTree = "<group>"; };
+		D888DC06954A914994F0D3EC /* TrackSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelectionView.swift; sourceTree = "<group>"; };
+		E70C6C424D83AFFE819F2081 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EBCE734B22E27E48EA38CB20 /* PYLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PYLog.swift; sourceTree = "<group>"; };
+		F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		F793BF28CF63B6D50E101247 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		1A2DCB44D76CAE2EC24774EA /* Products */ = {
+		00D0426CAA8CA1C0D2915B36 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
-				F6B577FAE7E5881B6F543EF9 /* PlaiY.app */,
+				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
+				07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */,
+				19D4B941118178244122189A /* PlayerBridge.swift */,
+				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
+				EBCE734B22E27E48EA38CB20 /* PYLog.swift */,
+				A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */,
+				39C2695F72D1983380708E99 /* Metal */,
+				2A62C07F0B88288C0B50475D /* Views */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		0F2713753C634882BCDB2376 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E70C6C424D83AFFE819F2081 /* PlaiY.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		2DE71AB9084B515F079D5452 /* macOS */ = {
+		2A62C07F0B88288C0B50475D /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				3B62EE214318FD205FD46F0A /* Info.plist */,
+				2E13F471AA3B2426876CCB66 /* ContentView.swift */,
+				2959BC28D55EDB4E02F90CCA /* LibraryView.swift */,
+				60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */,
+				BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */,
+				971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */,
+				F793BF28CF63B6D50E101247 /* PlayerView.swift */,
+				5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */,
+				D888DC06954A914994F0D3EC /* TrackSelectionView.swift */,
 			);
-			path = macOS;
+			path = Views;
 			sourceTree = "<group>";
 		};
-		812F07AF594207205AA28FA1 = {
+		2EE389503B740443F5DB79B3 /* apple */ = {
 			isa = PBXGroup;
 			children = (
-				C0CAE2477D6AD8BE52008D4B /* apple */,
-				2DE71AB9084B515F079D5452 /* macOS */,
-				D09E9E6B2810CC58BB64AF35 /* Shared */,
-				1A2DCB44D76CAE2EC24774EA /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		98E4281531FA8426A1F00168 /* Metal */ = {
-			isa = PBXGroup;
-			children = (
-				1051D64F71A8455FEF9995B1 /* MetalViewCoordinator.swift */,
-			);
-			path = Metal;
-			sourceTree = "<group>";
-		};
-		C0CAE2477D6AD8BE52008D4B /* apple */ = {
-			isa = PBXGroup;
-			children = (
-				39F7564AC52DCAFADA0B8042 /* metal_shaders.metal */,
+				CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */,
 			);
 			name = apple;
 			path = ../core/platform/apple;
 			sourceTree = "<group>";
 		};
-		C440C0B08AB123FC53AD7435 /* Views */ = {
+		39C2695F72D1983380708E99 /* Metal */ = {
 			isa = PBXGroup;
 			children = (
-				7AB4226524B92103A5325361 /* ContentView.swift */,
-				8D9DF184FB0A9A67CEF20793 /* LibraryView.swift */,
-				EB5E7F2A813AB0C8FB7D9DDB /* MediaItemView.swift */,
-				1A41FE5EDBEC27984F33B64A /* MetalPlayerView.swift */,
-				69B76A71B3C1650E43809A52 /* PlayerControlsView.swift */,
-				6D9BE4C60AE13A9DA43CA745 /* PlayerView.swift */,
-				A815E76C3BE07DFDFD3610AF /* SubtitleOverlayView.swift */,
+				20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */,
 			);
-			path = Views;
+			path = Metal;
 			sourceTree = "<group>";
 		};
-		D09E9E6B2810CC58BB64AF35 /* Shared */ = {
+		92E3C42B6B105BF9AD48A0D4 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
-				D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */,
-				B968A511E5527FC49C378D24 /* PlayerBridge.swift */,
-				0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */,
-				99896CE2B23D06BE43F467EA /* PlaiYApp.swift */,
-				09264979C53F24DECF9787ED /* PYLog.swift */,
-				98E4281531FA8426A1F00168 /* Metal */,
-				C440C0B08AB123FC53AD7435 /* Views */,
+				12D362E93F1F7BFB374D7C8A /* Info.plist */,
 			);
-			path = Shared;
+			path = macOS;
+			sourceTree = "<group>";
+		};
+		C8D1E1C292BC4759D95D85F2 = {
+			isa = PBXGroup;
+			children = (
+				2EE389503B740443F5DB79B3 /* apple */,
+				92E3C42B6B105BF9AD48A0D4 /* macOS */,
+				00D0426CAA8CA1C0D2915B36 /* Shared */,
+				0F2713753C634882BCDB2376 /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		331E3BA71F6704B2BED8D955 /* PlaiY */ = {
+		12E70D21735AFAA18A380B49 /* PlaiY */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "PlaiY" */;
+			buildConfigurationList = 794555F2C7B7BA22FDA2220F /* Build configuration list for PBXNativeTarget "PlaiY" */;
 			buildPhases = (
-				E0996F642CD47D0FC60EE580 /* Sources */,
+				2A6EB93FFCA7610DBA1A42CE /* Sources */,
 			);
 			buildRules = (
 			);
@@ -131,13 +137,13 @@
 			packageProductDependencies = (
 			);
 			productName = PlaiY;
-			productReference = F6B577FAE7E5881B6F543EF9 /* PlaiY.app */;
+			productReference = E70C6C424D83AFFE819F2081 /* PlaiY.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		EBCB6A7A61C7CB46423C7DB2 /* Project object */ = {
+		891FD5599C5EC3FA791A5B10 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
@@ -145,51 +151,53 @@
 				TargetAttributes = {
 				};
 			};
-			buildConfigurationList = 7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "PlaiY" */;
+			buildConfigurationList = 6359FB4A0363479A6F553601 /* Build configuration list for PBXProject "PlaiY" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = 812F07AF594207205AA28FA1;
+			mainGroup = C8D1E1C292BC4759D95D85F2;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 1A2DCB44D76CAE2EC24774EA /* Products */;
+			productRefGroup = 0F2713753C634882BCDB2376 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				331E3BA71F6704B2BED8D955 /* PlaiY */,
+				12E70D21735AFAA18A380B49 /* PlaiY */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		E0996F642CD47D0FC60EE580 /* Sources */ = {
+		2A6EB93FFCA7610DBA1A42CE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EEC6B81641FBFD206A8D642F /* ContentView.swift in Sources */,
-				9E2350FCB383A5953F821279 /* LibraryView.swift in Sources */,
-				C558D69EF84D2B2984D3A406 /* LibraryViewModel.swift in Sources */,
-				8D3F2BF478E7F7DFFF3873AD /* MediaItemView.swift in Sources */,
-				350AC0941D7A2FD53897A734 /* MetalPlayerView.swift in Sources */,
-				1FBCA6DFAC47D82E842F8DAC /* MetalViewCoordinator.swift in Sources */,
-				E111A259EEB59F8F8A74AE78 /* PlayerBridge.swift in Sources */,
-				4C265DA0CC0111C20FACA86D /* PlayerControlsView.swift in Sources */,
-				874E2EB1B649F47D9DFEEBEA /* PlayerView.swift in Sources */,
-				8D8326440958ADD18AC0320D /* PlayerViewModel.swift in Sources */,
-				8BAA65E68DDDB56B06FE5265 /* SubtitleOverlayView.swift in Sources */,
-				CA8B40DD840E09B6169D72BD /* PYLog.swift in Sources */,
-				343BD43C8ADEA8A275793AA8 /* PlaiYApp.swift in Sources */,
-				61BED4230742D641A15006B4 /* metal_shaders.metal in Sources */,
+				F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */,
+				2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */,
+				7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */,
+				67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */,
+				DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */,
+				C4FD58DB467D65B3843D9A7F /* MetalViewCoordinator.swift in Sources */,
+				7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */,
+				98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */,
+				08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */,
+				97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */,
+				0844F79FBCDC31083722DC07 /* PlayerView.swift in Sources */,
+				DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */,
+				D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */,
+				215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */,
+				8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */,
+				34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		07F49491F3D6C9E9D9EA21D0 /* Release */ = {
+		044A2F4235C9DD37CF52BF2D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -247,7 +255,7 @@
 			};
 			name = Release;
 		};
-		21A654319D88A4FC18F97C87 /* Release */ = {
+		2A43B6905B9A1337F10AFA64 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -303,7 +311,7 @@
 			};
 			name = Release;
 		};
-		37F3EF811BA35038D65D8859 /* Debug */ = {
+		40434B7A9E3E76E7DFABBA2C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -366,7 +374,7 @@
 			};
 			name = Debug;
 		};
-		505988A266373EC2660A5632 /* Debug */ = {
+		5623AA90B192EC6BE9E8C916 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -427,25 +435,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "PlaiY" */ = {
+		6359FB4A0363479A6F553601 /* Build configuration list for PBXProject "PlaiY" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				37F3EF811BA35038D65D8859 /* Debug */,
-				21A654319D88A4FC18F97C87 /* Release */,
+				40434B7A9E3E76E7DFABBA2C /* Debug */,
+				2A43B6905B9A1337F10AFA64 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "PlaiY" */ = {
+		794555F2C7B7BA22FDA2220F /* Build configuration list for PBXNativeTarget "PlaiY" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				505988A266373EC2660A5632 /* Debug */,
-				07F49491F3D6C9E9D9EA21D0 /* Release */,
+				5623AA90B192EC6BE9E8C916 /* Debug */,
+				044A2F4235C9DD37CF52BF2D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = EBCB6A7A61C7CB46423C7DB2 /* Project object */;
+	rootObject = 891FD5599C5EC3FA791A5B10 /* Project object */;
 }

@@ -62,6 +62,14 @@ class PlayerBridge {
         py_player_select_subtitle_track(handle, index)
     }
 
+    var activeAudioStream: Int32 {
+        py_player_get_active_audio_stream(handle)
+    }
+
+    var activeSubtitleStream: Int32 {
+        py_player_get_active_subtitle_stream(handle)
+    }
+
     func mediaInfoJSON() -> String {
         guard let cStr = py_player_get_media_info_json(handle) else { return "{}" }
         return String(cString: cStr)

@@ -29,6 +29,8 @@ public:
 
     int audio_track_count() const;
     int subtitle_track_count() const;
+    int active_audio_stream() const;
+    int active_subtitle_stream() const;
 
     // Video frame acquisition for the Metal renderer
     // Returns nullptr if no frame is ready

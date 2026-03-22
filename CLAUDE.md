@@ -30,6 +30,7 @@ C++ Core Library (core/)
 
 ```
 plaiy/
+  Makefile                     # Build everything, run the app (make run)
   CMakeLists.txt              # Root CMake project
   core/
     CMakeLists.txt             # Core library build
@@ -67,22 +68,30 @@ plaiy/
 brew install cmake ffmpeg libass nlohmann-json xcodegen
 ```
 
-### Build C++ core
+### Build + run the app (recommended)
 
 ```bash
+make run
+```
+
+### Other make targets
+
+```bash
+make          # Build everything (core + app)
+make core     # Build C++ core only
+make xcodegen # Regenerate Xcode project only
+make app      # Build core + xcodegen + Xcode build
+make clean    # Clean all build artifacts
+```
+
+### Manual build (alternative to make)
+
+```bash
+# C++ core
 cmake -B build/apple-debug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/opt/homebrew
 cmake --build build/apple-debug
-```
 
-### Build + run the app
-
-```bash
-./scripts/run.sh
-```
-
-### Build Xcode project only
-
-```bash
+# Xcode project
 cd app
 xcodegen generate
 xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug build

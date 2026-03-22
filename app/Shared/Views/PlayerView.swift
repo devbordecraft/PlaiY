@@ -5,6 +5,7 @@ struct PlayerView: View {
     let onBack: () -> Void
 
     @State private var showControls = true
+    @State private var showSettings = false
     @State private var hideControlsTask: Task<Void, Never>?
 
     var body: some View {
@@ -34,6 +35,23 @@ struct PlayerView: View {
                             .foregroundStyle(.white)
 
                         Spacer()
+
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                showSettings.toggle()
+                            }
+                            if showSettings {
+                                hideControlsTask?.cancel()
+                            } else {
+                                scheduleHideControls()
+                            }
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
                     }
                     .padding()
                     .background(
@@ -47,13 +65,28 @@ struct PlayerView: View {
                     PlayerControlsView(viewModel: viewModel)
                 }
             }
+
+            // Settings panel overlay
+            if showSettings {
+                TrackSelectionView(
+                    viewModel: viewModel,
+                    isPresented: $showSettings
+                )
+            }
         }
         .background(.black)
         .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showControls.toggle()
+            if showSettings {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showSettings = false
+                }
+                scheduleHideControls()
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showControls.toggle()
+                }
+                scheduleHideControls()
             }
-            scheduleHideControls()
         }
         .onAppear {
             scheduleHideControls()
@@ -62,6 +95,7 @@ struct PlayerView: View {
 
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
+        guard !showSettings else { return }
         hideControlsTask = Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
             if !Task.isCancelled {
