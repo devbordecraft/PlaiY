@@ -64,6 +64,51 @@ void        py_player_select_subtitle_track(PYPlayer* p, int index);
 int         py_player_get_active_audio_stream(PYPlayer* p);
 int         py_player_get_active_subtitle_stream(PYPlayer* p);
 
+// ---- Audio passthrough ----
+void        py_player_set_audio_passthrough(PYPlayer* p, bool enabled);
+bool        py_player_is_passthrough_active(PYPlayer* p);
+
+// ---- Playback stats (debug overlay) ----
+typedef struct {
+    // Video
+    int video_width;
+    int video_height;
+    int video_codec_id;
+    char video_codec_name[32];
+    bool hardware_decode;
+    double video_fps;
+    int frames_rendered;
+    int frames_dropped;
+    int video_queue_size;
+    int video_packet_queue_size;
+
+    // Audio
+    int audio_codec_id;
+    char audio_codec_name[32];
+    int audio_sample_rate;
+    int audio_channels;
+    int audio_output_channels;
+    bool audio_passthrough;
+    int audio_packet_queue_size;
+    int audio_ring_fill_pct;
+
+    // Sync
+    int64_t audio_pts_us;
+    int64_t video_pts_us;
+    int64_t av_drift_us;
+
+    // Container
+    char container_format[32];
+    int64_t bitrate;
+
+    // HDR
+    int hdr_type;
+    int color_space;
+    int transfer_func;
+} PYPlaybackStats;
+
+PYPlaybackStats py_player_get_playback_stats(PYPlayer* p);
+
 // ---- Media info ----
 const char* py_player_get_media_info_json(PYPlayer* p);
 

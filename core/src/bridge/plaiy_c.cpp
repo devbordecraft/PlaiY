@@ -105,6 +105,48 @@ int py_player_get_active_subtitle_stream(PYPlayer* p) {
     return p->engine.active_subtitle_stream();
 }
 
+void py_player_set_audio_passthrough(PYPlayer* p, bool enabled) {
+    if (p) p->engine.set_audio_passthrough(enabled);
+}
+
+bool py_player_is_passthrough_active(PYPlayer* p) {
+    if (!p) return false;
+    return p->engine.is_passthrough_active();
+}
+
+PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
+    PYPlaybackStats out = {};
+    if (!p) return out;
+    py::PlaybackStats s = p->engine.get_playback_stats();
+    out.video_width = s.video_width;
+    out.video_height = s.video_height;
+    out.video_codec_id = s.video_codec_id;
+    memcpy(out.video_codec_name, s.video_codec_name, sizeof(out.video_codec_name));
+    out.hardware_decode = s.hardware_decode;
+    out.video_fps = s.video_fps;
+    out.frames_rendered = s.frames_rendered;
+    out.frames_dropped = s.frames_dropped;
+    out.video_queue_size = s.video_queue_size;
+    out.video_packet_queue_size = s.video_packet_queue_size;
+    out.audio_codec_id = s.audio_codec_id;
+    memcpy(out.audio_codec_name, s.audio_codec_name, sizeof(out.audio_codec_name));
+    out.audio_sample_rate = s.audio_sample_rate;
+    out.audio_channels = s.audio_channels;
+    out.audio_output_channels = s.audio_output_channels;
+    out.audio_passthrough = s.audio_passthrough;
+    out.audio_packet_queue_size = s.audio_packet_queue_size;
+    out.audio_ring_fill_pct = s.audio_ring_fill_pct;
+    out.audio_pts_us = s.audio_pts_us;
+    out.video_pts_us = s.video_pts_us;
+    out.av_drift_us = s.av_drift_us;
+    memcpy(out.container_format, s.container_format, sizeof(out.container_format));
+    out.bitrate = s.bitrate;
+    out.hdr_type = s.hdr_type;
+    out.color_space = s.color_space;
+    out.transfer_func = s.transfer_func;
+    return out;
+}
+
 const char* py_player_get_media_info_json(PYPlayer* p) {
     if (!p) return "{}";
 
@@ -133,6 +175,9 @@ const char* py_player_get_media_info_json(PYPlayer* p) {
         } else if (t.type == py::MediaType::Audio) {
             tj["sample_rate"] = t.sample_rate;
             tj["channels"] = t.channels;
+            tj["codec_id"] = t.codec_id;
+            tj["channel_layout"] = t.channel_layout;
+            tj["bits_per_sample"] = t.bits_per_sample;
         } else if (t.type == py::MediaType::Subtitle) {
             tj["subtitle_format"] = static_cast<int>(t.subtitle_format);
         }

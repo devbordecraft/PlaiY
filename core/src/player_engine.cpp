@@ -9,6 +9,7 @@
 #include "video/video_decoder_factory.h"
 #include "audio/audio_decoder.h"
 #include "audio/audio_resampler.h"
+#include "audio/audio_passthrough.h"
 
 #ifdef __APPLE__
 #include "../platform/apple/ca_audio_output.h"
@@ -64,6 +65,19 @@ struct PlayerEngine::Impl {
 
     int64_t audio_pts_for_ring = 0; // PTS of the audio at ring write position
 
+    // Passthrough state
+    AudioOutputMode audio_output_mode = AudioOutputMode::PCM;
+    bool passthrough_preferred = false;
+
+    // Byte ring buffer for passthrough mode
+    std::vector<uint8_t> passthrough_ring_buffer;
+    size_t passthrough_ring_read = 0;
+    size_t passthrough_ring_write = 0;
+    size_t passthrough_ring_size = 0;
+    size_t passthrough_ring_capacity = 0;
+    int64_t passthrough_pts_for_ring = 0;
+    int passthrough_bytes_per_second = 0;
+
     // Track indices
     int active_video_stream = -1;
     int active_audio_stream = -1;
@@ -91,6 +105,10 @@ struct PlayerEngine::Impl {
     std::mutex presented_frame_mutex;
     std::unique_ptr<VideoFrame> presented_frame;
 
+    // Stats counters
+    std::atomic<int> frames_rendered{0};
+    std::atomic<int> frames_dropped{0};
+
     // FFmpeg codec context for audio (needed by resampler)
     AVCodecContext* audio_codec_ctx = nullptr;
 
@@ -108,6 +126,8 @@ struct PlayerEngine::Impl {
     void video_decode_loop();
     void audio_decode_loop();
     int audio_pull(float* buffer, int frames, int channels);
+    void passthrough_write_loop();
+    int bitstream_pull(uint8_t* buffer, int bytes);
     void stop_threads();
 };
 
@@ -149,46 +169,81 @@ Error PlayerEngine::open_file(const std::string& path) {
     if (impl_->active_audio_stream >= 0) {
         const auto& track = impl_->media_info.tracks[impl_->active_audio_stream];
 
-        impl_->audio_decoder = std::make_unique<AudioDecoder>();
-        err = impl_->audio_decoder->open(track);
-        if (err) {
-            PY_LOG_WARN(TAG, "Audio decoder open failed: %s", err.message.c_str());
-            impl_->audio_decoder.reset();
-        } else {
-            // Create audio output
+        // Create audio output
 #ifdef __APPLE__
-            impl_->audio_output = std::make_unique<CAAudioOutput>();
+        impl_->audio_output = std::make_unique<CAAudioOutput>();
 #endif
-            if (impl_->audio_output) {
-                int out_rate = impl_->audio_decoder->sample_rate();
-                int out_channels = std::min(impl_->audio_decoder->channels(), 2); // Stereo for Phase 1
+        if (impl_->audio_output) {
+            bool passthrough_ok = false;
 
-                err = impl_->audio_output->open(out_rate, out_channels);
+            // Try passthrough if preferred and codec is eligible
+            if (impl_->passthrough_preferred && is_passthrough_eligible(track.codec_id)) {
+                err = impl_->audio_output->open_passthrough(track.codec_id, track.sample_rate, track.channels);
+                if (!err) {
+                    impl_->audio_output_mode = AudioOutputMode::Passthrough;
+                    passthrough_ok = true;
+
+                    // Set up byte ring buffer for passthrough
+                    int bps = passthrough_bytes_per_second(track.codec_id);
+                    impl_->passthrough_bytes_per_second = bps;
+                    impl_->passthrough_ring_capacity = static_cast<size_t>(bps * Impl::AUDIO_RING_SECONDS);
+                    impl_->passthrough_ring_buffer.resize(impl_->passthrough_ring_capacity);
+                    impl_->passthrough_ring_read = 0;
+                    impl_->passthrough_ring_write = 0;
+                    impl_->passthrough_ring_size = 0;
+
+                    impl_->audio_output->set_bitstream_pull_callback(
+                        [this](uint8_t* buf, int bytes) {
+                            return impl_->bitstream_pull(buf, bytes);
+                        });
+
+                    PY_LOG_INFO(TAG, "Audio passthrough: %s at %d Hz",
+                                track.codec_name.c_str(), track.sample_rate);
+                } else {
+                    PY_LOG_INFO(TAG, "Passthrough not available (%s), falling back to decode",
+                                err.message.c_str());
+                }
+            }
+
+            // Normal PCM decode path
+            if (!passthrough_ok) {
+                impl_->audio_output_mode = AudioOutputMode::PCM;
+                impl_->audio_decoder = std::make_unique<AudioDecoder>();
+                err = impl_->audio_decoder->open(track);
                 if (err) {
-                    PY_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
+                    PY_LOG_WARN(TAG, "Audio decoder open failed: %s", err.message.c_str());
+                    impl_->audio_decoder.reset();
                     impl_->audio_output.reset();
                 } else {
-                    // Set up ring buffer sized for the actual audio format
-                    impl_->audio_ring_capacity = static_cast<size_t>(
-                        out_rate * out_channels * Impl::AUDIO_RING_SECONDS);
-                    impl_->audio_ring_buffer.resize(impl_->audio_ring_capacity);
-                    impl_->audio_ring_read = 0;
-                    impl_->audio_ring_write = 0;
-                    impl_->audio_ring_size = 0;
+                    int out_rate = impl_->audio_decoder->sample_rate();
+                    int source_ch = impl_->audio_decoder->channels();
+                    int device_max = impl_->audio_output->max_device_channels();
+                    int out_channels = std::min(source_ch, device_max);
+                    PY_LOG_INFO(TAG, "Audio: source=%d ch, device_max=%d ch, output=%d ch",
+                                source_ch, device_max, out_channels);
 
-                    // Audio pull callback
-                    impl_->audio_output->set_pull_callback(
-                        [this](float* buf, int frames, int ch) {
-                            return impl_->audio_pull(buf, frames, ch);
-                        });
+                    err = impl_->audio_output->open(out_rate, out_channels);
+                    if (err) {
+                        PY_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
+                        impl_->audio_output.reset();
+                    } else {
+                        // Set up ring buffer sized for the actual audio format
+                        impl_->audio_ring_capacity = static_cast<size_t>(
+                            out_rate * out_channels * Impl::AUDIO_RING_SECONDS);
+                        impl_->audio_ring_buffer.resize(impl_->audio_ring_capacity);
+                        impl_->audio_ring_read = 0;
+                        impl_->audio_ring_write = 0;
+                        impl_->audio_ring_size = 0;
 
-                    // PTS callback for clock sync
-                    impl_->audio_output->set_pts_callback(
-                        [this](int64_t pts_us) {
-                            // The audio output reports its playback position
-                            // We offset by the PTS of the audio data being played
-                            // This is approximate; we use the ring buffer's PTS tracking
-                        });
+                        // Audio pull callback
+                        impl_->audio_output->set_pull_callback(
+                            [this](float* buf, int frames, int ch) {
+                                return impl_->audio_pull(buf, frames, ch);
+                            });
+
+                        // PTS callback for clock sync (ring buffer PTS tracking handles this)
+                        impl_->audio_output->set_pts_callback([](int64_t) {});
+                    }
                 }
             }
         }
@@ -267,10 +322,17 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     // Flush ring buffer and wake decode thread
     {
         std::lock_guard lock(impl_->audio_buf_mutex);
-        impl_->audio_ring_read = 0;
-        impl_->audio_ring_write = 0;
-        impl_->audio_ring_size = 0;
-        impl_->audio_pts_for_ring = timestamp_us;
+        if (impl_->audio_output_mode == AudioOutputMode::Passthrough) {
+            impl_->passthrough_ring_read = 0;
+            impl_->passthrough_ring_write = 0;
+            impl_->passthrough_ring_size = 0;
+            impl_->passthrough_pts_for_ring = timestamp_us;
+        } else {
+            impl_->audio_ring_read = 0;
+            impl_->audio_ring_write = 0;
+            impl_->audio_ring_size = 0;
+            impl_->audio_pts_for_ring = timestamp_us;
+        }
     }
     impl_->audio_buf_not_full.notify_one();
 
@@ -294,6 +356,9 @@ void PlayerEngine::stop() {
     impl_->video_decoder.reset();
     impl_->audio_decoder.reset();
     impl_->audio_resampler.reset();
+    impl_->audio_output_mode = AudioOutputMode::PCM;
+    impl_->passthrough_ring_buffer.clear();
+    impl_->passthrough_ring_buffer.shrink_to_fit();
     impl_->subtitle_manager->close();
     impl_->demuxer->close();
 
@@ -377,6 +442,90 @@ int PlayerEngine::active_subtitle_stream() const {
     return impl_->active_subtitle_stream;
 }
 
+void PlayerEngine::set_audio_passthrough(bool enabled) {
+    impl_->passthrough_preferred = enabled;
+}
+
+bool PlayerEngine::is_passthrough_active() const {
+    return impl_->audio_output_mode == AudioOutputMode::Passthrough;
+}
+
+PlaybackStats PlayerEngine::get_playback_stats() const {
+    PlaybackStats s = {};
+
+    // Video info
+    if (impl_->active_video_stream >= 0 &&
+        impl_->active_video_stream < static_cast<int>(impl_->media_info.tracks.size())) {
+        const auto& vt = impl_->media_info.tracks[impl_->active_video_stream];
+        s.video_width = vt.width;
+        s.video_height = vt.height;
+        s.video_codec_id = vt.codec_id;
+        snprintf(s.video_codec_name, sizeof(s.video_codec_name), "%s", vt.codec_name.c_str());
+        s.video_fps = vt.frame_rate;
+        s.hdr_type = static_cast<int>(vt.hdr_metadata.type);
+        s.color_space = vt.color_space;
+        s.transfer_func = vt.color_trc;
+    }
+
+    // Audio info
+    if (impl_->active_audio_stream >= 0 &&
+        impl_->active_audio_stream < static_cast<int>(impl_->media_info.tracks.size())) {
+        const auto& at = impl_->media_info.tracks[impl_->active_audio_stream];
+        s.audio_codec_id = at.codec_id;
+        snprintf(s.audio_codec_name, sizeof(s.audio_codec_name), "%s", at.codec_name.c_str());
+        s.audio_sample_rate = at.sample_rate;
+        s.audio_channels = at.channels;
+    }
+
+    if (impl_->audio_output) {
+        s.audio_output_channels = impl_->audio_output->channels();
+    }
+    s.audio_passthrough = (impl_->audio_output_mode == AudioOutputMode::Passthrough);
+
+    // Hardware decode — check from presented frame
+    {
+        std::lock_guard lock(impl_->presented_frame_mutex);
+        if (impl_->presented_frame) {
+            s.hardware_decode = impl_->presented_frame->hardware_frame;
+            s.video_pts_us = impl_->presented_frame->pts_us;
+        }
+    }
+
+    // Frame stats
+    s.frames_rendered = impl_->frames_rendered.load(std::memory_order_relaxed);
+    s.frames_dropped = impl_->frames_dropped.load(std::memory_order_relaxed);
+
+    // Queue sizes
+    s.video_queue_size = static_cast<int>(impl_->video_frame_queue.size());
+    s.video_packet_queue_size = static_cast<int>(impl_->video_packet_queue.size());
+    s.audio_packet_queue_size = static_cast<int>(impl_->audio_packet_queue.size());
+
+    // Audio ring buffer fill
+    {
+        std::unique_lock lock(impl_->audio_buf_mutex, std::try_to_lock);
+        if (lock.owns_lock()) {
+            if (impl_->audio_output_mode == AudioOutputMode::Passthrough) {
+                size_t cap = impl_->passthrough_ring_capacity;
+                s.audio_ring_fill_pct = cap > 0 ? static_cast<int>(impl_->passthrough_ring_size * 100 / cap) : 0;
+            } else {
+                size_t cap = impl_->audio_ring_capacity;
+                s.audio_ring_fill_pct = cap > 0 ? static_cast<int>(impl_->audio_ring_size * 100 / cap) : 0;
+            }
+        }
+    }
+
+    // Sync
+    s.audio_pts_us = impl_->clock.now_us();
+    s.av_drift_us = s.audio_pts_us - s.video_pts_us;
+
+    // Container
+    snprintf(s.container_format, sizeof(s.container_format), "%s",
+             impl_->media_info.container_format.c_str());
+    s.bitrate = impl_->media_info.bit_rate;
+
+    return s;
+}
+
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
     VideoFrame* front = impl_->video_frame_queue.peek();
     if (!front) {
@@ -412,6 +561,8 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
         return impl_->presented_frame.get();
     }
 
+    impl_->frames_rendered.fetch_add(1, std::memory_order_relaxed);
+
     // Video has a frame — release the audio gate and unfreeze the clock.
     // Audio and clock start together with video, ensuring A-V sync.
     if (force) {
@@ -427,6 +578,7 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
         if (!next || next->pts_us > clock_us) break;
         impl_->video_frame_queue.try_pop(skip_frame);
         *impl_->presented_frame = std::move(skip_frame);
+        impl_->frames_dropped.fetch_add(1, std::memory_order_relaxed);
     }
 
     return impl_->presented_frame.get();
@@ -587,6 +739,11 @@ void PlayerEngine::Impl::video_decode_loop() {
 void PlayerEngine::Impl::audio_decode_loop() {
     PY_LOG_INFO(TAG, "Audio decode thread started");
 
+    if (audio_output_mode == AudioOutputMode::Passthrough) {
+        passthrough_write_loop();
+        return;
+    }
+
     if (!audio_decoder || !audio_output) return;
 
     // We need the AVCodecContext for the resampler — but our AudioDecoder
@@ -684,6 +841,39 @@ void PlayerEngine::Impl::audio_decode_loop() {
                     PY_LOG_ERROR(TAG, "Failed to open new audio decoder");
                     avcodec_free_context(&ctx);
                     break;
+                }
+
+                // Handle channel count change: reconfigure audio output
+                int new_source_ch = new_track.channels;
+                int new_device_max = audio_output->max_device_channels();
+                int new_out_channels = std::min(new_source_ch, new_device_max);
+                if (new_out_channels != out_channels || new_track.sample_rate != out_rate) {
+                    audio_output->stop();
+                    audio_output->close();
+                    out_rate = new_track.sample_rate;
+                    out_channels = new_out_channels;
+                    Error ao_err = audio_output->open(out_rate, out_channels);
+                    if (ao_err) {
+                        PY_LOG_ERROR(TAG, "Failed to reopen audio output: %s", ao_err.message.c_str());
+                        break;
+                    }
+                    // Resize ring buffer
+                    size_t new_cap = static_cast<size_t>(out_rate * out_channels * AUDIO_RING_SECONDS);
+                    {
+                        std::lock_guard lock(audio_buf_mutex);
+                        audio_ring_buffer.resize(new_cap);
+                        audio_ring_capacity = new_cap;
+                        audio_ring_read = 0;
+                        audio_ring_write = 0;
+                        audio_ring_size = 0;
+                    }
+                    audio_output->set_pull_callback(
+                        [this](float* buf, int frames, int ch) {
+                            return audio_pull(buf, frames, ch);
+                        });
+                    audio_output->set_pts_callback([](int64_t) {});
+                    audio_output->start();
+                    PY_LOG_INFO(TAG, "Audio output reconfigured: %d Hz, %d ch", out_rate, out_channels);
                 }
 
                 PY_LOG_INFO(TAG, "Audio decoder switched to stream %d (%s)",
@@ -830,6 +1020,103 @@ int PlayerEngine::Impl::audio_pull(float* buffer, int frames, int channels) {
     }
 
     return static_cast<int>(to_read / channels);
+}
+
+void PlayerEngine::Impl::passthrough_write_loop() {
+    PY_LOG_INFO(TAG, "Audio passthrough loop started");
+
+    if (!audio_output) return;
+
+    while (running.load()) {
+        Packet pkt;
+        if (!audio_packet_queue.pop(pkt)) break;
+
+        if (pkt.is_flush) {
+            {
+                std::lock_guard lock(audio_buf_mutex);
+                passthrough_ring_read = 0;
+                passthrough_ring_write = 0;
+                passthrough_ring_size = 0;
+            }
+
+            if (audio_track_changed.load()) {
+                audio_track_changed.store(false);
+                PY_LOG_WARN(TAG, "Track change during passthrough — exiting passthrough loop");
+                break;
+            }
+            continue;
+        }
+
+        // Calculate PTS for this packet
+        int64_t pts_us = pkt.pts_us();
+
+        // Write raw compressed packet data to byte ring buffer
+        {
+            std::unique_lock lock(audio_buf_mutex);
+            size_t to_write = pkt.data.size();
+            size_t capacity = passthrough_ring_buffer.size();
+
+            if (to_write > capacity) {
+                PY_LOG_WARN(TAG, "Passthrough packet too large: %zu > %zu", to_write, capacity);
+                continue;
+            }
+
+            audio_buf_not_full.wait(lock, [&] {
+                return passthrough_ring_size + to_write <= capacity || !running.load();
+            });
+            if (!running.load()) break;
+
+            const uint8_t* src = pkt.data.data();
+            size_t first_chunk = std::min(to_write, capacity - passthrough_ring_write);
+            memcpy(&passthrough_ring_buffer[passthrough_ring_write], src, first_chunk);
+            if (to_write > first_chunk) {
+                memcpy(&passthrough_ring_buffer[0], src + first_chunk,
+                       to_write - first_chunk);
+            }
+            passthrough_ring_write = (passthrough_ring_write + to_write) % capacity;
+            passthrough_ring_size += to_write;
+
+            // Track PTS at the end of written data
+            int64_t pkt_duration_us = 0;
+            if (pkt.duration > 0 && pkt.time_base_den > 0) {
+                pkt_duration_us = pkt.duration * 1000000LL * pkt.time_base_num / pkt.time_base_den;
+            }
+            passthrough_pts_for_ring = pts_us + pkt_duration_us;
+        }
+    }
+
+    PY_LOG_INFO(TAG, "Audio passthrough loop ended");
+}
+
+int PlayerEngine::Impl::bitstream_pull(uint8_t* buffer, int bytes) {
+    if (waiting_for_first_frame.load()) return 0;
+
+    std::unique_lock lock(audio_buf_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) return 0;
+
+    size_t available = passthrough_ring_size;
+    size_t to_read = std::min(static_cast<size_t>(bytes), available);
+    size_t capacity = passthrough_ring_buffer.size();
+
+    size_t first_chunk = std::min(to_read, capacity - passthrough_ring_read);
+    memcpy(buffer, &passthrough_ring_buffer[passthrough_ring_read], first_chunk);
+    if (to_read > first_chunk) {
+        memcpy(buffer + first_chunk, &passthrough_ring_buffer[0],
+               to_read - first_chunk);
+    }
+    passthrough_ring_read = (passthrough_ring_read + to_read) % capacity;
+    passthrough_ring_size -= to_read;
+
+    audio_buf_not_full.notify_one();
+
+    // Update clock from passthrough PTS
+    if (to_read > 0 && passthrough_bytes_per_second > 0) {
+        int64_t bytes_behind = static_cast<int64_t>(passthrough_ring_size);
+        int64_t offset_us = bytes_behind * 1000000LL / passthrough_bytes_per_second;
+        clock.set_audio_pts(passthrough_pts_for_ring - offset_us);
+    }
+
+    return static_cast<int>(to_read);
 }
 
 void PlayerEngine::Impl::stop_threads() {

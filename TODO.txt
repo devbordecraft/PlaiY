@@ -1,0 +1,60 @@
+PlaiY - Feature TODO
+====================
+
+1. Variable Speed Playback (0.25x - 4x)
+   - Clock already has unused set_rate() method
+   - Integrate clock rate into playback loop
+   - Add audio pitch correction via libswresample tempo filter
+   - Add speed picker UI in settings panel
+   - Effort: Low | Impact: High
+
+2. Chapter Navigation
+   - Extract chapter metadata from AVFormatContext->chapters in ff_demuxer.cpp
+   - Add chapter list to MediaInfo and expose through C bridge
+   - Add chapter list UI in settings panel with seek-on-tap
+   - Effort: Low | Impact: High (MKV/MP4 files commonly have chapters)
+
+3. Resume Playback (Remember Position)
+   - Persist last-played position per file (JSON map on disk)
+   - On open, offer to resume from saved position
+   - Minimal core work, mostly Swift-side persistence
+   - Effort: Low | Impact: High
+
+4. Network Sources (SMB / NFS / HTTP)
+   - FFmpeg avformat_open_input already supports smb://, nfs://, http:// URIs
+   - Allow demuxer to accept URIs, not just local paths
+   - Add "Connect to Server" dialog in library UI
+   - Handle buffering states and network errors gracefully
+   - Effort: Medium | Impact: High (NAS playback)
+
+5. Playlist / Play Queue
+   - Add playlist model (ordered list of file paths)
+   - Implement next/previous controls in PlayerControlsView
+   - Auto-advance to next file on playback completion
+   - Optionally support gapless transition (pre-open next file)
+   - Effort: Medium | Impact: Medium
+
+6. Thumbnail Generation for Library
+   - Seek to ~10% duration and decode one frame per file
+   - Cache thumbnails as JPEG on disk
+   - Display in MediaItemView instead of gray placeholder
+   - Run generation async during library scan
+   - Effort: Medium | Impact: Medium (visual polish)
+
+7. Keyboard Shortcuts & Media Keys
+   - Space: play/pause
+   - Left/Right arrows: seek +/-5s
+   - Shift+Left/Right: seek +/-30s
+   - [ / ]: decrease/increase speed
+   - F: toggle fullscreen
+   - M: mute/unmute
+   - Media keys: play/pause/next/prev
+   - Pure SwiftUI work, no core changes needed
+   - Effort: Low | Impact: High
+
+8. Subtitle Styling & Timing Adjustment
+   - Expose font size, color, position offset in UI
+   - Add subtitle delay adjustment (+/- offset applied to PTS)
+   - ASS renderer already supports style overrides
+   - SRT rendering is in SwiftUI where styling is trivial
+   - Effort: Medium | Impact: Medium

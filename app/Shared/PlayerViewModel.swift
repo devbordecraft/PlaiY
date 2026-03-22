@@ -13,6 +13,10 @@ class PlayerViewModel: ObservableObject {
     @Published var subtitleTracks: [TrackInfo] = []
     @Published var activeAudioStream: Int = -1
     @Published var activeSubtitleStream: Int = -1
+    @Published var passthroughEnabled = false
+    @Published var passthroughActive = false
+    @Published var showDebugOverlay = false
+    @Published var playbackStats: PYPlaybackStats?
 
     private var positionTimer: Timer?
 
@@ -84,6 +88,10 @@ class PlayerViewModel: ObservableObject {
             guard let self else { return }
             self.currentPosition = self.bridge.position
             self.currentSubtitle = self.bridge.getSubtitle(at: self.currentPosition)
+            self.passthroughActive = self.bridge.isPassthroughActive
+            if self.showDebugOverlay {
+                self.playbackStats = self.bridge.getPlaybackStats()
+            }
         }
     }
 
@@ -105,6 +113,11 @@ class PlayerViewModel: ObservableObject {
     func disableSubtitles() {
         bridge.selectSubtitleTrack(-1)
         activeSubtitleStream = -1
+    }
+
+    func setPassthrough(_ enabled: Bool) {
+        passthroughEnabled = enabled
+        bridge.setAudioPassthrough(enabled)
     }
 
     private func formatTime(_ us: Int64) -> String {

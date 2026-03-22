@@ -32,6 +32,11 @@ public:
     int active_audio_stream() const;
     int active_subtitle_stream() const;
 
+    void set_audio_passthrough(bool enabled);
+    bool is_passthrough_active() const;
+
+    PlaybackStats get_playback_stats() const;
+
     // Video frame acquisition for the Metal renderer
     // Returns nullptr if no frame is ready
     VideoFrame* acquire_video_frame(int64_t target_pts_us);

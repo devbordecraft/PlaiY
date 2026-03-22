@@ -52,6 +52,26 @@ struct TrackSelectionView: View {
                             }
                         }
                     }
+
+                    // Output section
+                    trackSection(title: "Output") {
+                        HStack {
+                            Toggle("Audio Passthrough", isOn: Binding(
+                                get: { viewModel.passthroughEnabled },
+                                set: { viewModel.setPassthrough($0) }
+                            ))
+                            .toggleStyle(.switch)
+                            .foregroundStyle(.white)
+                        }
+                        .padding(.vertical, 4)
+
+                        if viewModel.passthroughActive {
+                            Text("Bitstream active")
+                                .font(.caption)
+                                .foregroundStyle(.green.opacity(0.8))
+                                .padding(.leading, 4)
+                        }
+                    }
                 }
                 .padding(20)
             }

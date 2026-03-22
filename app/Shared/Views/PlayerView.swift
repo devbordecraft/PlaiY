@@ -37,6 +37,16 @@ struct PlayerView: View {
                         Spacer()
 
                         Button {
+                            viewModel.showDebugOverlay.toggle()
+                        } label: {
+                            Image(systemName: "ant")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(viewModel.showDebugOverlay ? .green : .white)
+
+                        Button {
                             withAnimation(.easeInOut(duration: 0.25)) {
                                 showSettings.toggle()
                             }
@@ -64,6 +74,19 @@ struct PlayerView: View {
                     // Bottom controls
                     PlayerControlsView(viewModel: viewModel)
                 }
+            }
+
+            // Debug overlay (top-left, always visible when toggled)
+            if viewModel.showDebugOverlay, let stats = viewModel.playbackStats {
+                VStack {
+                    HStack {
+                        DebugOverlayView(stats: stats)
+                            .padding(8)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .allowsHitTesting(false)
             }
 
             // Settings panel overlay

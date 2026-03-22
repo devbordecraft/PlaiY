@@ -10,6 +10,9 @@ struct TrackInfo: Identifiable {
     let sampleRate: Int
     let channels: Int
     let subtitleFormat: Int // 0=Unknown, 1=SRT, 2=ASS, 3=PGS, 4=VobSub
+    let codecId: Int
+    let channelLayout: UInt64
+    let bitsPerSample: Int
 
     var id: Int { streamIndex }
 
@@ -32,6 +35,10 @@ struct TrackInfo: Identifiable {
 
         if type == 2 && channels > 0 {
             details.append(Self.channelLabel(channels))
+        }
+
+        if type == 2 && bitsPerSample > 0 {
+            details.append("\(bitsPerSample)-bit")
         }
 
         if type == 3 && subtitleFormat > 0 {
@@ -71,7 +78,10 @@ struct TrackInfo: Identifiable {
                 isDefault: t["is_default"] as? Bool ?? false,
                 sampleRate: t["sample_rate"] as? Int ?? 0,
                 channels: t["channels"] as? Int ?? 0,
-                subtitleFormat: t["subtitle_format"] as? Int ?? 0
+                subtitleFormat: t["subtitle_format"] as? Int ?? 0,
+                codecId: t["codec_id"] as? Int ?? 0,
+                channelLayout: (t["channel_layout"] as? NSNumber)?.uint64Value ?? 0,
+                bitsPerSample: t["bits_per_sample"] as? Int ?? 0
             )
 
             if type == 2 {

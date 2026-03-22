@@ -18,6 +18,11 @@ public:
     void set_pts_callback(PtsCallback cb) override;
     int sample_rate() const override;
     int channels() const override;
+    int max_device_channels() const override;
+
+    Error open_passthrough(int codec_id, int sample_rate, int channels) override;
+    bool is_passthrough() const override;
+    void set_bitstream_pull_callback(BitstreamPullCallback cb) override;
 
 private:
     struct Impl;

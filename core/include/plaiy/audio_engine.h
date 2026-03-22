@@ -32,6 +32,23 @@ public:
 
     virtual int sample_rate() const = 0;
     virtual int channels() const = 0;
+
+    // Query the maximum channel count supported by the output device.
+    // Default returns 2 (stereo) for platforms without device introspection.
+    virtual int max_device_channels() const { return 2; }
+
+    // Open in passthrough mode for compressed bitstream output.
+    // Returns an error if the output device doesn't support the format.
+    virtual Error open_passthrough(int codec_id, int sample_rate, int channels) {
+        return {ErrorCode::AudioOutputError, "Passthrough not supported"};
+    }
+
+    virtual bool is_passthrough() const { return false; }
+
+    // Callback for passthrough mode: pulls raw compressed bytes.
+    // Returns the number of bytes written to buffer.
+    using BitstreamPullCallback = std::function<int(uint8_t* buffer, int bytes)>;
+    virtual void set_bitstream_pull_callback(BitstreamPullCallback cb) {}
 };
 
 } // namespace py

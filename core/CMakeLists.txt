@@ -22,6 +22,7 @@ set(CORE_SOURCES
     src/video/ff_video_decoder.cpp
     src/audio/audio_decoder.cpp
     src/audio/audio_resampler.cpp
+    src/audio/audio_passthrough.cpp
     src/subtitle/subtitle_manager.cpp
     src/subtitle/srt_parser.cpp
     src/subtitle/ass_renderer.cpp

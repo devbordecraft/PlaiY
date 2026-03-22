@@ -70,6 +70,18 @@ class PlayerBridge {
         py_player_get_active_subtitle_stream(handle)
     }
 
+    func setAudioPassthrough(_ enabled: Bool) {
+        py_player_set_audio_passthrough(handle, enabled)
+    }
+
+    var isPassthroughActive: Bool {
+        py_player_is_passthrough_active(handle)
+    }
+
+    func getPlaybackStats() -> PYPlaybackStats {
+        py_player_get_playback_stats(handle)
+    }
+
     func mediaInfoJSON() -> String {
         guard let cStr = py_player_get_media_info_json(handle) else { return "{}" }
         return String(cString: cStr)

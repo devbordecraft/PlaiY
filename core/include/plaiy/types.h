@@ -34,6 +34,11 @@ enum class HDRType {
     DolbyVision,
 };
 
+enum class AudioOutputMode {
+    PCM,          // Default: decode to float32 PCM
+    Passthrough,  // Send compressed bitstream directly to output
+};
+
 enum class SubtitleFormat {
     Unknown,
     SRT,
@@ -221,6 +226,45 @@ struct SubtitleFrame {
         int y = 0;
     };
     std::vector<BitmapRegion> regions;
+};
+
+// Playback stats for debug overlay
+struct PlaybackStats {
+    // Video
+    int video_width = 0;
+    int video_height = 0;
+    int video_codec_id = 0;
+    char video_codec_name[32] = {};
+    bool hardware_decode = false;
+    double video_fps = 0.0;        // Content framerate from container
+    int frames_rendered = 0;       // Total frames presented
+    int frames_dropped = 0;        // Frames skipped because they were late
+    int video_queue_size = 0;      // Current frame queue depth
+    int video_packet_queue_size = 0;
+
+    // Audio
+    int audio_codec_id = 0;
+    char audio_codec_name[32] = {};
+    int audio_sample_rate = 0;
+    int audio_channels = 0;
+    int audio_output_channels = 0;
+    bool audio_passthrough = false;
+    int audio_packet_queue_size = 0;
+    int audio_ring_fill_pct = 0;   // Ring buffer fill percentage (0-100)
+
+    // Sync
+    int64_t audio_pts_us = 0;
+    int64_t video_pts_us = 0;
+    int64_t av_drift_us = 0;       // Audio PTS - Video PTS
+
+    // Container
+    char container_format[32] = {};
+    int64_t bitrate = 0;
+
+    // HDR
+    int hdr_type = 0;              // 0=SDR, 1=HDR10, 2=HDR10+, 3=HLG, 4=DV
+    int color_space = 0;
+    int transfer_func = 0;
 };
 
 // Media library item
