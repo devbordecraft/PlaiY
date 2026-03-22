@@ -21,6 +21,10 @@ public:
     int item_count() const;
     const MediaItem* item_at(int index) const;
 
+    int folder_count() const;
+    const std::string& folder_at(int index) const;
+    void remove_folder(int index);
+
     void clear();
 
 private:

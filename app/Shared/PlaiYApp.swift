@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct PlaiYApp: App {
     @StateObject private var libraryVM = LibraryViewModel()
+    @StateObject private var settings = AppSettings()
 
     init() {
         PYLog.setup()
@@ -12,6 +13,7 @@ struct PlaiYApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(libraryVM)
+                .environmentObject(settings)
         }
         #if os(macOS)
         .windowStyle(.titleBar)

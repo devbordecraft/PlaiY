@@ -92,6 +92,9 @@ struct PlayerEngine::Impl {
     AudioOutputMode audio_output_mode = AudioOutputMode::PCM;
     bool passthrough_preferred = false;
 
+    // Settings
+    HWDecodePreference hw_decode_pref = HWDecodePreference::Auto;
+
     // Byte ring buffer for passthrough mode
     std::vector<uint8_t> passthrough_ring_buffer;
     size_t passthrough_ring_read = 0;
@@ -181,7 +184,7 @@ Error PlayerEngine::open_file(const std::string& path) {
     // Open video decoder
     if (impl_->active_video_stream >= 0) {
         const auto& track = impl_->media_info.tracks[impl_->active_video_stream];
-        impl_->video_decoder = VideoDecoderFactory::create(track);
+        impl_->video_decoder = VideoDecoderFactory::create(track, impl_->hw_decode_pref);
         if (!impl_->video_decoder) {
             return {ErrorCode::DecoderInitFailed, "No video decoder available"};
         }
@@ -466,6 +469,14 @@ void PlayerEngine::set_audio_passthrough(bool enabled) {
 
 bool PlayerEngine::is_passthrough_active() const {
     return impl_->audio_output_mode == AudioOutputMode::Passthrough;
+}
+
+void PlayerEngine::set_hw_decode_preference(HWDecodePreference pref) {
+    impl_->hw_decode_pref = pref;
+}
+
+void PlayerEngine::set_subtitle_font_scale(double scale) {
+    impl_->subtitle_manager->set_ass_font_scale(scale);
 }
 
 PlaybackStats PlayerEngine::get_playback_stats() const {

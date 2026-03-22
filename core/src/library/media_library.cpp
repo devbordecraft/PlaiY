@@ -19,6 +19,7 @@ static const std::unordered_set<std::string> MEDIA_EXTENSIONS = {
 
 struct MediaLibrary::Impl {
     std::vector<MediaItem> items;
+    std::vector<std::string> folders;
 };
 
 MediaLibrary::MediaLibrary() : impl_(std::make_unique<Impl>()) {}
@@ -28,6 +29,8 @@ Error MediaLibrary::add_folder(const std::string& path) {
     if (!fs::exists(path) || !fs::is_directory(path)) {
         return {ErrorCode::FileNotFound, "Directory not found: " + path};
     }
+
+    impl_->folders.push_back(path);
 
     int added = 0;
     for (const auto& entry : fs::recursive_directory_iterator(path,
@@ -69,8 +72,32 @@ const MediaItem* MediaLibrary::item_at(int index) const {
     return &impl_->items[index];
 }
 
+int MediaLibrary::folder_count() const {
+    return static_cast<int>(impl_->folders.size());
+}
+
+const std::string& MediaLibrary::folder_at(int index) const {
+    static const std::string empty;
+    if (index < 0 || index >= static_cast<int>(impl_->folders.size())) return empty;
+    return impl_->folders[index];
+}
+
+void MediaLibrary::remove_folder(int index) {
+    if (index < 0 || index >= static_cast<int>(impl_->folders.size())) return;
+    impl_->folders.erase(impl_->folders.begin() + index);
+
+    // Re-scan remaining folders
+    impl_->items.clear();
+    auto folders_copy = impl_->folders;
+    impl_->folders.clear();
+    for (const auto& folder : folders_copy) {
+        add_folder(folder);
+    }
+}
+
 void MediaLibrary::clear() {
     impl_->items.clear();
+    impl_->folders.clear();
 }
 
 } // namespace py

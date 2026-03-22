@@ -66,9 +66,10 @@ struct LibraryItem: Identifiable, Codable {
 
 class LibraryViewModel: ObservableObject {
     @Published var items: [LibraryItem] = []
+    @Published var folders: [String] = []
     @Published var isScanning = false
 
-    private let bridge = LibraryBridge()
+    let bridge = LibraryBridge()
 
     func addFolder(_ path: String) {
         isScanning = true
@@ -77,10 +78,28 @@ class LibraryViewModel: ObservableObject {
             let success = self.bridge.addFolder(path)
             if success {
                 self.refreshItems()
+                self.refreshFolders()
             }
             DispatchQueue.main.async {
                 self.isScanning = false
             }
+        }
+    }
+
+    func removeFolder(at index: Int) {
+        let _ = bridge.removeFolder(at: Int32(index))
+        refreshFolders()
+        refreshItems()
+    }
+
+    func refreshFolders() {
+        let count = bridge.folderCount
+        var result: [String] = []
+        for i in 0..<count {
+            result.append(bridge.folder(at: i))
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.folders = result
         }
     }
 

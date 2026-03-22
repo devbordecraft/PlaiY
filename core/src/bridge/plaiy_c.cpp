@@ -28,6 +28,16 @@ void py_player_destroy(PYPlayer* p) {
     }
 }
 
+void py_player_set_hw_decode_pref(PYPlayer* p, int pref) {
+    if (!p) return;
+    p->engine.set_hw_decode_preference(static_cast<py::HWDecodePreference>(pref));
+}
+
+void py_player_set_subtitle_font_scale(PYPlayer* p, double scale) {
+    if (!p) return;
+    p->engine.set_subtitle_font_scale(scale);
+}
+
 int py_player_open(PYPlayer* p, const char* path) {
     if (!p || !path) return PY_ERROR_INVALID_ARG;
 
@@ -413,6 +423,7 @@ struct PYLibrary {
     py::MediaLibrary library;
     std::string item_json_cache;
     std::string all_items_json_cache;
+    std::string folder_cache;
 };
 
 PYLibrary* py_library_create(void) {
@@ -481,4 +492,21 @@ const char* py_library_get_all_items_json(PYLibrary* lib) {
 
     lib->all_items_json_cache = arr.dump();
     return lib->all_items_json_cache.c_str();
+}
+
+int py_library_get_folder_count(PYLibrary* lib) {
+    if (!lib) return 0;
+    return lib->library.folder_count();
+}
+
+const char* py_library_get_folder(PYLibrary* lib, int index) {
+    if (!lib) return "";
+    lib->folder_cache = lib->library.folder_at(index);
+    return lib->folder_cache.c_str();
+}
+
+int py_library_remove_folder(PYLibrary* lib, int index) {
+    if (!lib) return PY_ERROR_INVALID_ARG;
+    lib->library.remove_folder(index);
+    return PY_OK;
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SubtitleOverlayView: View {
+    @EnvironmentObject var settings: AppSettings
     let subtitle: SubtitleData?
 
     // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
@@ -19,15 +20,15 @@ struct SubtitleOverlayView: View {
                 switch subtitle {
                 case .text(let text):
                     Text(text)
-                        .font(.title3)
+                        .font(settings.srtFont)
                         .fontWeight(.medium)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(settings.srtColor)
                         .shadow(color: .black, radius: 2, x: 1, y: 1)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(.black.opacity(0.6))
+                                .fill(settings.srtBgColor)
                         )
                         .multilineTextAlignment(.center)
 

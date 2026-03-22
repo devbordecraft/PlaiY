@@ -34,6 +34,7 @@ public:
     SubtitleFrame render(int64_t timestamp_us);
 
     void set_video_size(int width, int height);
+    void set_font_scale(double scale);
     void flush();
     void close();
 
@@ -43,6 +44,7 @@ private:
     ASS_Track* track_ = nullptr;
     int video_width_ = 1920;
     int video_height_ = 1080;
+    double font_scale_ = 1.0;
 
     // Cache last render to avoid redundant bitmap conversion
     SubtitleFrame cached_frame_;

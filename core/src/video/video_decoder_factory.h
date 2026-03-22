@@ -10,7 +10,9 @@ public:
     // Creates the best available decoder for the given track.
     // On Apple: tries VideoToolbox first, falls back to FFmpeg.
     // On other platforms: uses FFmpeg.
-    static std::unique_ptr<IVideoDecoder> create(const TrackInfo& track);
+    static std::unique_ptr<IVideoDecoder> create(
+        const TrackInfo& track,
+        HWDecodePreference hw_pref = HWDecodePreference::Auto);
 };
 
 } // namespace py

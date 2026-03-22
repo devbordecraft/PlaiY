@@ -21,10 +21,19 @@ class PlayerViewModel: ObservableObject {
 
     private var positionTimer: Timer?
 
-    func open(path: String) {
+    func open(path: String, settings: AppSettings) {
         playbackEnded = false
+
+        // Apply settings before opening
+        bridge.setHWDecodePref(Int32(settings.hwDecodePref))
+        bridge.setSubtitleFontScale(settings.assFontScale)
+
         guard bridge.open(path: path) else { return }
         duration = bridge.duration
+
+        // Apply audio passthrough preference
+        bridge.setAudioPassthrough(settings.audioPassthrough)
+        passthroughEnabled = settings.audioPassthrough
 
         // Extract title from path
         let url = URL(fileURLWithPath: path)
@@ -37,6 +46,22 @@ class PlayerViewModel: ObservableObject {
         subtitleTracks = parsed.subtitle
         activeAudioStream = Int(bridge.activeAudioStream)
         activeSubtitleStream = Int(bridge.activeSubtitleStream)
+
+        // Auto-select preferred audio language
+        if !settings.preferredAudioLanguage.isEmpty {
+            if let match = audioTracks.first(where: { $0.language == settings.preferredAudioLanguage }) {
+                selectAudioTrack(streamIndex: match.streamIndex)
+            }
+        }
+
+        // Auto-select preferred subtitle language
+        if settings.autoSelectSubtitles && !settings.preferredSubtitleLanguage.isEmpty {
+            if let match = subtitleTracks.first(where: { $0.language == settings.preferredSubtitleLanguage }) {
+                selectSubtitleTrack(streamIndex: match.streamIndex)
+            }
+        } else if !settings.autoSelectSubtitles {
+            disableSubtitles()
+        }
     }
 
     func play() {

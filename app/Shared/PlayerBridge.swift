@@ -70,6 +70,14 @@ class PlayerBridge {
         py_player_get_active_subtitle_stream(handle)
     }
 
+    func setHWDecodePref(_ pref: Int32) {
+        py_player_set_hw_decode_pref(handle, pref)
+    }
+
+    func setSubtitleFontScale(_ scale: Double) {
+        py_player_set_subtitle_font_scale(handle, scale)
+    }
+
     func setAudioPassthrough(_ enabled: Bool) {
         py_player_set_audio_passthrough(handle, enabled)
     }
@@ -249,5 +257,18 @@ class LibraryBridge {
     func allItemsJSON() -> String {
         guard let cStr = py_library_get_all_items_json(handle) else { return "[]" }
         return String(cString: cStr)
+    }
+
+    var folderCount: Int32 {
+        py_library_get_folder_count(handle)
+    }
+
+    func folder(at index: Int32) -> String {
+        guard let cStr = py_library_get_folder(handle, index) else { return "" }
+        return String(cString: cStr)
+    }
+
+    func removeFolder(at index: Int32) -> Bool {
+        py_library_remove_folder(handle, index) == Int32(PY_OK.rawValue)
     }
 }

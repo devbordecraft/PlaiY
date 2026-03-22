@@ -28,6 +28,8 @@ public:
     // Set the video dimensions (needed for ASS/PGS positioning)
     void set_video_size(int width, int height);
 
+    void set_ass_font_scale(double scale);
+
     void flush();
     void close();
 

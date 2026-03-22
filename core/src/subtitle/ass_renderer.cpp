@@ -26,6 +26,7 @@ Error AssRenderer::init() {
     }
 
     ass_set_frame_size(renderer_, video_width_, video_height_);
+    ass_set_font_scale(renderer_, font_scale_);
 
     // Use system fonts
 #ifdef __APPLE__
@@ -157,6 +158,13 @@ SubtitleFrame AssRenderer::render(int64_t timestamp_us) {
     cached_frame_ = frame;
     cache_valid_ = true;
     return frame;
+}
+
+void AssRenderer::set_font_scale(double scale) {
+    font_scale_ = scale;
+    if (renderer_) {
+        ass_set_font_scale(renderer_, scale);
+    }
 }
 
 void AssRenderer::set_video_size(int width, int height) {

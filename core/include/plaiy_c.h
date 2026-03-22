@@ -38,6 +38,13 @@ enum PYHDRType {
     PY_HDR_DOLBY_VISION = 4,
 };
 
+// ---- Hardware decode preference ----
+enum PYHWDecodePref {
+    PY_HW_DECODE_AUTO = 0,
+    PY_HW_DECODE_FORCE_HW = 1,
+    PY_HW_DECODE_FORCE_SW = 2,
+};
+
 // ---- Opaque handles ----
 typedef struct PYPlayer PYPlayer;
 typedef struct PYLibrary PYLibrary;
@@ -51,6 +58,10 @@ void        py_player_play(PYPlayer* p);
 void        py_player_pause(PYPlayer* p);
 void        py_player_seek(PYPlayer* p, int64_t timestamp_us);
 void        py_player_stop(PYPlayer* p);
+
+// ---- Player configuration (call before py_player_open) ----
+void        py_player_set_hw_decode_pref(PYPlayer* p, int pref);
+void        py_player_set_subtitle_font_scale(PYPlayer* p, double scale);
 
 int         py_player_get_state(PYPlayer* p);
 int64_t     py_player_get_position(PYPlayer* p);
@@ -208,6 +219,11 @@ int         py_library_get_item_count(PYLibrary* lib);
 const char* py_library_get_item_json(PYLibrary* lib, int index);
 // Returns JSON for all items
 const char* py_library_get_all_items_json(PYLibrary* lib);
+
+// ---- Library folder management ----
+int         py_library_get_folder_count(PYLibrary* lib);
+const char* py_library_get_folder(PYLibrary* lib, int index);
+int         py_library_remove_folder(PYLibrary* lib, int index);
 
 #ifdef __cplusplus
 }

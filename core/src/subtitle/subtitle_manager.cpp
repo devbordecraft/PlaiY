@@ -24,6 +24,7 @@ struct SubtitleManager::Impl {
     std::deque<SubtitleFrame> pgs_frames;
     int video_width = 1920;
     int video_height = 1080;
+    double ass_font_scale = 1.0;
 };
 
 SubtitleManager::SubtitleManager() : impl_(std::make_unique<Impl>()) {}
@@ -50,6 +51,7 @@ Error SubtitleManager::load_external(const std::string& path) {
     } else if (ext == "ass" || ext == "ssa") {
         impl_->ass_renderer = std::make_unique<AssRenderer>();
         impl_->ass_renderer->set_video_size(impl_->video_width, impl_->video_height);
+        impl_->ass_renderer->set_font_scale(impl_->ass_font_scale);
         Error err = impl_->ass_renderer->load_file(path);
         if (err) return err;
         impl_->active_format = SubtitleFormat::ASS;
@@ -75,6 +77,7 @@ Error SubtitleManager::set_embedded_track(const TrackInfo& track) {
         case SubtitleFormat::ASS: {
             impl_->ass_renderer = std::make_unique<AssRenderer>();
             impl_->ass_renderer->set_video_size(impl_->video_width, impl_->video_height);
+            impl_->ass_renderer->set_font_scale(impl_->ass_font_scale);
             if (!track.extradata.empty()) {
                 Error err = impl_->ass_renderer->load_embedded(
                     track.extradata.data(), track.extradata.size());
@@ -167,6 +170,14 @@ SubtitleFrame SubtitleManager::get_frame_at(int64_t timestamp_us) {
     }
 
     return {};
+}
+
+void SubtitleManager::set_ass_font_scale(double scale) {
+    std::lock_guard lock(impl_->mutex);
+    impl_->ass_font_scale = scale;
+    if (impl_->ass_renderer) {
+        impl_->ass_renderer->set_font_scale(scale);
+    }
 }
 
 void SubtitleManager::set_video_size(int width, int height) {

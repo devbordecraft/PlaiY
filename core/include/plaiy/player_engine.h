@@ -35,6 +35,9 @@ public:
     void set_audio_passthrough(bool enabled);
     bool is_passthrough_active() const;
 
+    void set_hw_decode_preference(HWDecodePreference pref);
+    void set_subtitle_font_scale(double scale);
+
     PlaybackStats get_playback_stats() const;
 
     // Video frame acquisition for the Metal renderer

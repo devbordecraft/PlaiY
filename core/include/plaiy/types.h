@@ -39,6 +39,12 @@ enum class AudioOutputMode {
     Passthrough,  // Send compressed bitstream directly to output
 };
 
+enum class HWDecodePreference {
+    Auto,            // Try HW, fallback to SW (default)
+    ForceHardware,   // Only try HW, fail if unavailable
+    ForceSoftware,   // Skip HW entirely, use FFmpeg
+};
+
 enum class SubtitleFormat {
     Unknown,
     SRT,

@@ -2,34 +2,67 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
+    @EnvironmentObject var settings: AppSettings
     @StateObject private var playerVM = PlayerViewModel()
-    @State private var isPlayerActive = false
+
+    enum Screen { case library, settings, player }
+    @State private var screen: Screen = .library
     @State private var selectedFilePath: String?
 
     var body: some View {
         Group {
-            if isPlayerActive, let path = selectedFilePath {
-                PlayerView(viewModel: playerVM, onBack: {
-                    playerVM.stop()
-                    isPlayerActive = false
-                    selectedFilePath = nil
-                })
-                .onAppear {
-                    playerVM.open(path: path)
-                    playerVM.play()
-                }
-                .onChange(of: playerVM.playbackEnded) { ended in
-                    if ended {
+            switch screen {
+            case .player:
+                if let path = selectedFilePath {
+                    PlayerView(viewModel: playerVM, onBack: {
+                        if settings.resumePlayback {
+                            ResumeStore.save(
+                                path: path,
+                                positionUs: playerVM.currentPosition,
+                                durationUs: playerVM.duration
+                            )
+                        }
                         playerVM.stop()
-                        isPlayerActive = false
+                        screen = .library
                         selectedFilePath = nil
+                    })
+                    .onAppear {
+                        playerVM.open(path: path, settings: settings)
+                        if settings.resumePlayback,
+                           let saved = ResumeStore.position(for: path) {
+                            playerVM.bridge.seek(to: saved)
+                        }
+                        if settings.autoplayOnOpen {
+                            playerVM.play()
+                        }
+                    }
+                    .onChange(of: playerVM.playbackEnded) { ended in
+                        if ended {
+                            if settings.resumePlayback {
+                                ResumeStore.clear(path: path)
+                            }
+                            playerVM.stop()
+                            screen = .library
+                            selectedFilePath = nil
+                        }
                     }
                 }
-            } else {
-                LibraryView(onSelect: { path in
-                    selectedFilePath = path
-                    isPlayerActive = true
-                })
+
+            case .settings:
+                SettingsView(onDismiss: { screen = .library })
+                    .environmentObject(settings)
+                    .environmentObject(libraryVM)
+
+            case .library:
+                LibraryView(
+                    onSelect: { path in
+                        selectedFilePath = path
+                        screen = .player
+                    },
+                    onSettings: {
+                        screen = .settings
+                    }
+                )
                 .environmentObject(libraryVM)
             }
         }

@@ -16,10 +16,13 @@
 		67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
 		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
+		83545C0D32833ACFE12379B3 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
 		8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
 		97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
 		98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
+		AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		C4FD58DB467D65B3843D9A7F /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
+		C5BFB243D1153CBA63F184AD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
 		D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
@@ -29,6 +32,7 @@
 /* Begin PBXFileReference section */
 		07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaiYApp.swift; sourceTree = "<group>"; };
 		12D362E93F1F7BFB374D7C8A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumeStore.swift; sourceTree = "<group>"; };
 		19D4B941118178244122189A /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
 		20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
 		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
@@ -36,9 +40,11 @@
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
+		91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
 		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
 		BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
+		CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = metal_shaders.metal; sourceTree = "<group>"; };
 		D888DC06954A914994F0D3EC /* TrackSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelectionView.swift; sourceTree = "<group>"; };
 		E70C6C424D83AFFE819F2081 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,11 +58,13 @@
 		00D0426CAA8CA1C0D2915B36 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */,
 				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
 				07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */,
 				19D4B941118178244122189A /* PlayerBridge.swift */,
 				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
 				EBCE734B22E27E48EA38CB20 /* PYLog.swift */,
+				175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */,
 				A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */,
 				39C2695F72D1983380708E99 /* Metal */,
 				2A62C07F0B88288C0B50475D /* Views */,
@@ -82,6 +90,7 @@
 				BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */,
 				971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */,
 				F793BF28CF63B6D50E101247 /* PlayerView.swift */,
+				CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */,
 				5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */,
 				D888DC06954A914994F0D3EC /* TrackSelectionView.swift */,
 			);
@@ -178,6 +187,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				83545C0D32833ACFE12379B3 /* AppSettings.swift in Sources */,
 				F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */,
 				2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */,
 				2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */,
@@ -191,6 +201,8 @@
 				97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */,
 				0844F79FBCDC31083722DC07 /* PlayerView.swift in Sources */,
 				DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */,
+				AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */,
+				C5BFB243D1153CBA63F184AD /* SettingsView.swift in Sources */,
 				D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */,
 				215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */,
 				8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */,

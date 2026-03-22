@@ -6,6 +6,7 @@ import AppKit
 struct LibraryView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
     let onSelect: (String) -> Void
+    let onSettings: () -> Void
 
     private let columns = [
         GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 16)
@@ -27,6 +28,14 @@ struct LibraryView: View {
                     Text("Scanning...")
                         .foregroundStyle(.secondary)
                 }
+
+                Button {
+                    onSettings()
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.title2)
+                }
+                .buttonStyle(.bordered)
 
                 Button("Add Folder") {
                     pickFolder()
