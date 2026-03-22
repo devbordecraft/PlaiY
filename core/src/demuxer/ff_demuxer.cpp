@@ -1,5 +1,5 @@
 #include "ff_demuxer.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -9,7 +9,7 @@ extern "C" {
 
 static constexpr const char* TAG = "FFDemuxer";
 
-namespace tp {
+namespace py {
 
 FFDemuxer::FFDemuxer() = default;
 
@@ -34,7 +34,7 @@ Error FFDemuxer::open(const std::string& path) {
     }
 
     populate_media_info();
-    TP_LOG_INFO(TAG, "Opened: %s (%s), duration=%.2fs, %zu tracks",
+    PY_LOG_INFO(TAG, "Opened: %s (%s), duration=%.2fs, %zu tracks",
                 path.c_str(), info_.container_format.c_str(),
                 info_.duration_us / 1e6, info_.tracks.size());
 
@@ -190,14 +190,14 @@ void FFDemuxer::populate_media_info() {
                         stream->codecpar->nb_coded_side_data,
                         AV_PKT_DATA_MASTERING_DISPLAY_METADATA);
                     if (sd) {
-                        TP_LOG_DEBUG(TAG, "Stream %d has mastering display metadata", i);
+                        PY_LOG_DEBUG(TAG, "Stream %d has mastering display metadata", i);
                     }
                     sd = av_packet_side_data_get(
                         stream->codecpar->coded_side_data,
                         stream->codecpar->nb_coded_side_data,
                         AV_PKT_DATA_CONTENT_LIGHT_LEVEL);
                     if (sd) {
-                        TP_LOG_DEBUG(TAG, "Stream %d has content light level metadata", i);
+                        PY_LOG_DEBUG(TAG, "Stream %d has content light level metadata", i);
                     }
                 }
                 break;
@@ -254,4 +254,4 @@ SubtitleFormat FFDemuxer::detect_subtitle_format(int codec_id) {
     }
 }
 
-} // namespace tp
+} // namespace py

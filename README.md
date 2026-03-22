@@ -1,4 +1,4 @@
-# TestPlayer
+# PlaiY
 
 A high-quality video player built with a C++20 core and SwiftUI frontend. Designed for cinephiles who care about accurate HDR rendering, lossless audio, and proper subtitle support.
 
@@ -32,8 +32,8 @@ brew install cmake ffmpeg libass nlohmann-json xcodegen
 ### 2. Build and run
 
 ```bash
-git clone <repo-url> testplayer
-cd testplayer
+git clone <repo-url> plaiy
+cd plaiy
 ./scripts/run.sh
 ```
 
@@ -61,30 +61,30 @@ cmake --build build/apple-debug
 ```bash
 cd app
 xcodegen generate
-xcodebuild -project TestPlayer.xcodeproj -scheme TestPlayer -configuration Debug build
+xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug build
 ```
 
 ### Launch the app
 
 ```bash
-open ~/Library/Developer/Xcode/DerivedData/TestPlayer-*/Build/Products/Debug/TestPlayer.app
+open ~/Library/Developer/Xcode/DerivedData/PlaiY-*/Build/Products/Debug/PlaiY.app
 ```
 
 ### Or open in Xcode
 
 ```bash
-open app/TestPlayer.xcodeproj
+open app/PlaiY.xcodeproj
 ```
 
 Then hit Cmd+R to build and run.
 
 ## Architecture
 
-TestPlayer is split into two layers:
+PlaiY is split into two layers:
 
 ### C++ core (`core/`)
 
-A platform-agnostic static library (`libtestplayer_core.a`) that handles all media processing:
+A platform-agnostic static library (`libplaiy_core.a`) that handles all media processing:
 
 - **Demuxer**: FFmpeg `libavformat` for universal container support
 - **Video decoder**: VideoToolbox for hardware acceleration, FFmpeg for software fallback
@@ -102,7 +102,7 @@ The macOS frontend that handles UI and rendering:
 - **Player view**: Full-screen playback with overlay controls
 - **Subtitle overlay**: Text rendering (SRT) and bitmap compositing (ASS/PGS)
 
-The two layers communicate through a pure C API (`testplayer_c.h`), making the core reusable with any UI framework on any platform.
+The two layers communicate through a pure C API (`plaiy_c.h`), making the core reusable with any UI framework on any platform.
 
 ## Supported formats
 
@@ -137,13 +137,13 @@ HDR10 (SMPTE ST 2084 PQ), HLG (ARIB STD-B67), Dolby Vision (detection)
 ## Project structure
 
 ```
-testplayer/
+plaiy/
   CMakeLists.txt                 # Root CMake
   core/
     CMakeLists.txt               # Core library build
     include/
-      testplayer/                # Public C++ interfaces
-      testplayer_c.h             # C bridge API
+      plaiy/                # Public C++ interfaces
+      plaiy_c.h             # C bridge API
     src/
       player_engine.cpp          # Multi-threaded orchestrator
       demuxer/                   # FFmpeg demuxer

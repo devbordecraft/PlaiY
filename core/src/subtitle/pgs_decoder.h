@@ -1,12 +1,12 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 #include <vector>
 
 struct AVCodecContext;
 
-namespace tp {
+namespace py {
 
 class PgsDecoder {
 public:
@@ -24,4 +24,4 @@ private:
     AVCodecContext* codec_ctx_ = nullptr;
 };
 
-} // namespace tp
+} // namespace py

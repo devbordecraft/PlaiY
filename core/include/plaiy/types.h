@@ -8,7 +8,7 @@
 struct AVPacket;
 struct AVFrame;
 
-namespace tp {
+namespace py {
 
 enum class PlaybackState {
     Idle,
@@ -230,4 +230,4 @@ struct MediaItem {
     int subtitle_track_count = 0;
 };
 
-} // namespace tp
+} // namespace py

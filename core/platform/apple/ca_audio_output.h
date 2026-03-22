@@ -1,8 +1,8 @@
 #pragma once
 
-#include "testplayer/audio_engine.h"
+#include "plaiy/audio_engine.h"
 
-namespace tp {
+namespace py {
 
 class CAAudioOutput : public IAudioOutput {
 public:
@@ -23,4 +23,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace tp
+} // namespace py

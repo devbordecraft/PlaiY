@@ -1,6 +1,6 @@
-#include "testplayer/clock.h"
+#include "plaiy/clock.h"
 
-namespace tp {
+namespace py {
 
 Clock::Clock()
     : last_update_(std::chrono::steady_clock::now()) {}
@@ -62,4 +62,4 @@ void Clock::reset() {
     rate_ = 1.0;
 }
 
-} // namespace tp
+} // namespace py

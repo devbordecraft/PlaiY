@@ -1,6 +1,6 @@
-#include "testplayer/frame_queue.h"
+#include "plaiy/frame_queue.h"
 
-namespace tp {
+namespace py {
 
 FrameQueue::FrameQueue(size_t max_size) : max_size_(max_size) {}
 
@@ -78,4 +78,4 @@ bool FrameQueue::empty() const {
     return queue_.empty();
 }
 
-} // namespace tp
+} // namespace py

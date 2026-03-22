@@ -1,9 +1,9 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 
-namespace tp {
+namespace py {
 
 class IVideoDecoder {
 public:
@@ -20,4 +20,4 @@ public:
     virtual Error receive_frame(VideoFrame& out) = 0;
 };
 
-} // namespace tp
+} // namespace py

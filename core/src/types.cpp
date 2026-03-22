@@ -1,10 +1,10 @@
-#include "testplayer/types.h"
+#include "plaiy/types.h"
 
 #ifdef __APPLE__
 #include <CoreVideo/CoreVideo.h>
 #endif
 
-namespace tp {
+namespace py {
 
 VideoFrame::~VideoFrame() {
     release();
@@ -60,4 +60,4 @@ void VideoFrame::release() {
     }
 }
 
-} // namespace tp
+} // namespace py

@@ -32,7 +32,7 @@ set(CORE_SOURCES
     src/library/media_library.cpp
     src/library/metadata_reader.cpp
     src/util/logger.cpp
-    src/bridge/testplayer_c.cpp
+    src/bridge/plaiy_c.cpp
 )
 
 # Apple platform sources
@@ -44,32 +44,32 @@ if(APPLE)
     )
 endif()
 
-add_library(testplayer_core STATIC ${CORE_SOURCES})
+add_library(plaiy_core STATIC ${CORE_SOURCES})
 
-target_include_directories(testplayer_core
+target_include_directories(plaiy_core
     PUBLIC include
     PRIVATE src
 )
 
 if(FFmpeg_FOUND)
-    target_link_libraries(testplayer_core PRIVATE
+    target_link_libraries(plaiy_core PRIVATE
         FFmpeg::avformat FFmpeg::avcodec FFmpeg::avutil
         FFmpeg::swresample FFmpeg::swscale
     )
 else()
-    target_link_libraries(testplayer_core PRIVATE
+    target_link_libraries(plaiy_core PRIVATE
         PkgConfig::AVFORMAT PkgConfig::AVCODEC PkgConfig::AVUTIL
         PkgConfig::SWRESAMPLE PkgConfig::SWSCALE
     )
 endif()
 
-target_link_libraries(testplayer_core PRIVATE
+target_link_libraries(plaiy_core PRIVATE
     PkgConfig::LIBASS
     nlohmann_json::nlohmann_json
 )
 
 if(APPLE)
-    target_link_libraries(testplayer_core PRIVATE
+    target_link_libraries(plaiy_core PRIVATE
         "-framework VideoToolbox"
         "-framework CoreMedia"
         "-framework CoreVideo"
@@ -88,5 +88,5 @@ if(APPLE)
     )
 endif()
 
-install(TARGETS testplayer_core ARCHIVE DESTINATION lib)
+install(TARGETS plaiy_core ARCHIVE DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)

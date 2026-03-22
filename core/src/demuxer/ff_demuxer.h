@@ -1,10 +1,10 @@
 #pragma once
 
-#include "testplayer/demuxer.h"
+#include "plaiy/demuxer.h"
 
 struct AVFormatContext;
 
-namespace tp {
+namespace py {
 
 class FFDemuxer : public IDemuxer {
 public:
@@ -26,4 +26,4 @@ private:
     MediaInfo info_;
 };
 
-} // namespace tp
+} // namespace py

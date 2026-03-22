@@ -1,6 +1,6 @@
 #pragma once
 
-#include "testplayer/error.h"
+#include "plaiy/error.h"
 #include <cstdint>
 #include <vector>
 
@@ -8,7 +8,7 @@ struct SwrContext;
 struct AVFrame;
 struct AVCodecContext;
 
-namespace tp {
+namespace py {
 
 class AudioResampler {
 public:
@@ -30,4 +30,4 @@ private:
     int out_channels_ = 0;
 };
 
-} // namespace tp
+} // namespace py

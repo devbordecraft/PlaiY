@@ -1,11 +1,11 @@
 #pragma once
 
-#include "testplayer/video_decoder.h"
+#include "plaiy/video_decoder.h"
 
 struct AVCodecContext;
 struct AVFrame;
 
-namespace tp {
+namespace py {
 
 class FFVideoDecoder : public IVideoDecoder {
 public:
@@ -26,4 +26,4 @@ private:
     TrackInfo track_info_;
 };
 
-} // namespace tp
+} // namespace py

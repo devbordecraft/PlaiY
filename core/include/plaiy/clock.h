@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <mutex>
 
-namespace tp {
+namespace py {
 
 // Audio-master presentation clock for A-V synchronization.
 // The audio output callback sets the current audio PTS;
@@ -38,4 +38,4 @@ private:
     double rate_ = 1.0;
 };
 
-} // namespace tp
+} // namespace py

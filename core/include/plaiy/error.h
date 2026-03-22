@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace tp {
+namespace py {
 
 enum class ErrorCode {
     OK = 0,
@@ -39,4 +39,4 @@ struct Error {
     static Error Ok() { return {ErrorCode::OK}; }
 };
 
-} // namespace tp
+} // namespace py

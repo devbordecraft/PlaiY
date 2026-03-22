@@ -1,8 +1,8 @@
-# CLAUDE.md - TestPlayer
+# CLAUDE.md - PlaiY
 
 ## Project overview
 
-TestPlayer is a high-quality video player with a C++ core library and SwiftUI frontend. The core handles demuxing, decoding, audio output, subtitles, and A-V sync. The SwiftUI layer handles UI and Metal rendering. Communication between the two happens through a pure C bridge API (`testplayer_c.h`).
+PlaiY is a high-quality video player with a C++ core library and SwiftUI frontend. The core handles demuxing, decoding, audio output, subtitles, and A-V sync. The SwiftUI layer handles UI and Metal rendering. Communication between the two happens through a pure C bridge API (`plaiy_c.h`).
 
 Current platform: macOS 14+. Future: tvOS, Linux, Windows.
 
@@ -13,7 +13,7 @@ SwiftUI App (app/)
     |
     | calls C functions via bridging header
     v
-Pure C Bridge (core/include/testplayer_c.h)
+Pure C Bridge (core/include/plaiy_c.h)
     |
     | wraps C++ objects
     v
@@ -29,12 +29,12 @@ C++ Core Library (core/)
 ## Directory structure
 
 ```
-testplayer/
+plaiy/
   CMakeLists.txt              # Root CMake project
   core/
     CMakeLists.txt             # Core library build
-    include/testplayer/        # Public C++ headers (interfaces, types)
-    include/testplayer_c.h     # Pure C bridge API (the Swift<->C++ contract)
+    include/plaiy/        # Public C++ headers (interfaces, types)
+    include/plaiy_c.h     # Pure C bridge API (the Swift<->C++ contract)
     src/                       # Implementation
       player_engine.cpp        # Central orchestrator (threading, state machine)
       demuxer/                 # FFmpeg demuxer (libavformat)
@@ -47,7 +47,7 @@ testplayer/
     platform/apple/            # Apple-specific: VideoToolbox, CoreAudio, Metal shaders
   app/
     project.yml                # XcodeGen spec (generates .xcodeproj)
-    BridgingHeader.h           # Imports testplayer_c.h into Swift
+    BridgingHeader.h           # Imports plaiy_c.h into Swift
     Shared/                    # SwiftUI code (shared macOS/tvOS)
       PlayerBridge.swift       # Swift wrapper around C API
       Metal/                   # MetalViewCoordinator (display link + rendering)
@@ -85,22 +85,22 @@ cmake --build build/apple-debug
 ```bash
 cd app
 xcodegen generate
-xcodebuild -project TestPlayer.xcodeproj -scheme TestPlayer -configuration Debug build
+xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug build
 ```
 
 ### Launch without rebuilding
 
 ```bash
-open ~/Library/Developer/Xcode/DerivedData/TestPlayer-*/Build/Products/Debug/TestPlayer.app
+open ~/Library/Developer/Xcode/DerivedData/PlaiY-*/Build/Products/Debug/PlaiY.app
 ```
 
 ## Build order matters
 
-Always build the C++ core **before** the Xcode project. The Xcode project links against `libtestplayer_core.a` from `build/apple-debug/core/`.
+Always build the C++ core **before** the Xcode project. The Xcode project links against `libplaiy_core.a` from `build/apple-debug/core/`.
 
 ## Key interfaces
 
-- **`testplayer_c.h`** - The sole contract between Swift and C++. All cross-language calls go through here. Changes here require updating both `testplayer_c.cpp` and `PlayerBridge.swift`.
+- **`plaiy_c.h`** - The sole contract between Swift and C++. All cross-language calls go through here. Changes here require updating both `plaiy_c.cpp` and `PlayerBridge.swift`.
 - **`player_engine.h`** - The C++ orchestrator. Owns demuxer, decoders, audio, subtitles, queues, and threads.
 - **`video_decoder.h`** - `IVideoDecoder` interface. `VideoDecoderFactory` picks VT or FFmpeg.
 - **`audio_engine.h`** - `IAudioOutput` interface. `CAAudioOutput` implements it on Apple.
@@ -141,8 +141,8 @@ Metal shaders in `core/platform/apple/metal_shaders.metal` handle:
 3. Rebuild the core
 
 ### Adding a new C bridge function
-1. Declare in `core/include/testplayer_c.h`
-2. Implement in `core/src/bridge/testplayer_c.cpp`
+1. Declare in `core/include/plaiy_c.h`
+2. Implement in `core/src/bridge/plaiy_c.cpp`
 3. Add Swift wrapper in `app/Shared/PlayerBridge.swift`
 
 ### Adding a new SwiftUI view
@@ -160,17 +160,17 @@ The codebase has a unified logging system that spans both the C++ core and the S
 
 ### C++ (core)
 
-The logger lives in `core/include/testplayer/logger.h` (singleton) with implementation in `core/src/util/logger.cpp`.
+The logger lives in `core/include/plaiy/logger.h` (singleton) with implementation in `core/src/util/logger.cpp`.
 
 Use the macros with a module tag:
 
 ```cpp
 static constexpr const char* TAG = "MyModule";
 
-TP_LOG_DEBUG(TAG, "detailed info: %d", value);  // Compiled out in release (NDEBUG)
-TP_LOG_INFO(TAG, "opened file: %s", path);
-TP_LOG_WARN(TAG, "fallback: %s", reason);
-TP_LOG_ERROR(TAG, "failed: %s", err.message.c_str());
+PY_LOG_DEBUG(TAG, "detailed info: %d", value);  // Compiled out in release (NDEBUG)
+PY_LOG_INFO(TAG, "opened file: %s", path);
+PY_LOG_WARN(TAG, "fallback: %s", reason);
+PY_LOG_ERROR(TAG, "failed: %s", err.message.c_str());
 ```
 
 Default output goes to stderr with timestamps: `HH:MM:SS.mmm [L/TAG] message`
@@ -179,20 +179,20 @@ The log level defaults to `Debug` in debug builds and `Info` in release builds. 
 
 ### Swift (app)
 
-`TPLog` in `app/Shared/TPLog.swift` provides Swift-side logging and wires the C++ core logs into Apple's unified logging (`os.Logger`).
+`PYLog` in `app/Shared/PYLog.swift` provides Swift-side logging and wires the C++ core logs into Apple's unified logging (`os.Logger`).
 
 ```swift
-TPLog.debug("detailed info", tag: "MyView")    // Only in DEBUG builds
-TPLog.info("loaded items", tag: "Library")
-TPLog.warning("missing data", tag: "Library")
-TPLog.error("decode failed: \(error)", tag: "Metal")
+PYLog.debug("detailed info", tag: "MyView")    // Only in DEBUG builds
+PYLog.info("loaded items", tag: "Library")
+PYLog.warning("missing data", tag: "Library")
+PYLog.error("decode failed: \(error)", tag: "Metal")
 ```
 
-`TPLog.setup()` is called at app launch (`TestPlayerApp.init`). It sets the C++ log level and installs a callback that forwards all core logs to `os_log`, viewable in Console.app under subsystem `com.testplayer.app`.
+`PYLog.setup()` is called at app launch (`PlaiYApp.init`). It sets the C++ log level and installs a callback that forwards all core logs to `os_log`, viewable in Console.app under subsystem `com.plaiy.app`.
 
 ### C bridge
 
-`testplayer_c.h` exposes `tp_log_set_level()`, `tp_log_get_level()`, and `tp_log_set_callback()` for configuring logging from the Swift side without touching C++ directly.
+`plaiy_c.h` exposes `py_log_set_level()`, `py_log_get_level()`, and `py_log_set_callback()` for configuring logging from the Swift side without touching C++ directly.
 
 ## Phase 1 status (current)
 

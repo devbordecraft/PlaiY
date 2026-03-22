@@ -1,6 +1,6 @@
-name: TestPlayer
+name: PlaiY
 options:
-  bundleIdPrefix: com.testplayer
+  bundleIdPrefix: com.plaiy
   deploymentTarget:
     macOS: "14.0"
   xcodeVersion: "16.0"
@@ -12,7 +12,7 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 targets:
-  TestPlayer:
+  PlaiY:
     type: application
     platform: macOS
     sources:
@@ -25,8 +25,8 @@ targets:
         buildPhase: sources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.testplayer.app
-        PRODUCT_NAME: TestPlayer
+        PRODUCT_BUNDLE_IDENTIFIER: com.plaiy.app
+        PRODUCT_NAME: PlaiY
         INFOPLIST_FILE: macOS/Info.plist
         SWIFT_OBJC_BRIDGING_HEADER: BridgingHeader.h
         HEADER_SEARCH_PATHS:
@@ -38,7 +38,7 @@ targets:
           - /opt/homebrew/lib
         OTHER_LDFLAGS:
           - -lc++
-          - -ltestplayer_core
+          - -lplaiy_core
           - -lavformat
           - -lavcodec
           - -lavutil

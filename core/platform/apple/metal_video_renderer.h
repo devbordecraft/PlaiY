@@ -4,7 +4,7 @@
 // The actual Metal rendering is driven from Swift (MetalViewCoordinator.swift).
 // This file provides shared constants used by both the C++ core and Swift.
 
-namespace tp {
+namespace py {
 
 struct VideoRenderConstants {
     // Color space IDs matching VideoUniforms.colorSpace in metal_shaders.metal
@@ -20,4 +20,4 @@ struct VideoRenderConstants {
     static constexpr float SDR_WHITE_NITS = 203.0f;
 };
 
-} // namespace tp
+} // namespace py

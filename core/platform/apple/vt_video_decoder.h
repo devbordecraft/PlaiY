@@ -1,10 +1,10 @@
 #pragma once
 
-#include "testplayer/video_decoder.h"
+#include "plaiy/video_decoder.h"
 #include <deque>
 #include <mutex>
 
-namespace tp {
+namespace py {
 
 class VTVideoDecoder : public IVideoDecoder {
 public:
@@ -22,4 +22,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace tp
+} // namespace py

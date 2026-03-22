@@ -1,5 +1,5 @@
 #include "metadata_reader.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -10,7 +10,7 @@ extern "C" {
 
 static constexpr const char* TAG = "MetadataReader";
 
-namespace tp {
+namespace py {
 
 bool MetadataReader::read(const std::string& path, MediaItem& out) {
     AVFormatContext* fmt = nullptr;
@@ -107,4 +107,4 @@ bool MetadataReader::read(const std::string& path, MediaItem& out) {
     return true;
 }
 
-} // namespace tp
+} // namespace py

@@ -1,9 +1,9 @@
-#include "testplayer/player_engine.h"
-#include "testplayer/clock.h"
-#include "testplayer/frame_queue.h"
-#include "testplayer/logger.h"
-#include "testplayer/packet_queue.h"
-#include "testplayer/subtitle_manager.h"
+#include "plaiy/player_engine.h"
+#include "plaiy/clock.h"
+#include "plaiy/frame_queue.h"
+#include "plaiy/logger.h"
+#include "plaiy/packet_queue.h"
+#include "plaiy/subtitle_manager.h"
 
 #include "demuxer/ff_demuxer.h"
 #include "video/video_decoder_factory.h"
@@ -27,7 +27,7 @@ extern "C" {
 
 static constexpr const char* TAG = "PlayerEngine";
 
-namespace tp {
+namespace py {
 
 struct PlayerEngine::Impl {
     // State
@@ -88,7 +88,7 @@ struct PlayerEngine::Impl {
     }
 
     void report_error(Error err) {
-        TP_LOG_ERROR(TAG, "Error: %s", err.message.c_str());
+        PY_LOG_ERROR(TAG, "Error: %s", err.message.c_str());
         if (error_callback) error_callback(err);
     }
 
@@ -140,7 +140,7 @@ Error PlayerEngine::open_file(const std::string& path) {
         impl_->audio_decoder = std::make_unique<AudioDecoder>();
         err = impl_->audio_decoder->open(track);
         if (err) {
-            TP_LOG_WARN(TAG, "Audio decoder open failed: %s", err.message.c_str());
+            PY_LOG_WARN(TAG, "Audio decoder open failed: %s", err.message.c_str());
             impl_->audio_decoder.reset();
         } else {
             // Create audio output
@@ -153,7 +153,7 @@ Error PlayerEngine::open_file(const std::string& path) {
 
                 err = impl_->audio_output->open(out_rate, out_channels);
                 if (err) {
-                    TP_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
+                    PY_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
                     impl_->audio_output.reset();
                 } else {
                     // Set up ring buffer
@@ -187,7 +187,7 @@ Error PlayerEngine::open_file(const std::string& path) {
     }
 
     impl_->set_state(PlaybackState::Ready);
-    TP_LOG_INFO(TAG, "File opened: %s (%.1fs)",
+    PY_LOG_INFO(TAG, "File opened: %s (%.1fs)",
                 path.c_str(), impl_->media_info.duration_us / 1e6);
     return Error::Ok();
 }
@@ -369,7 +369,7 @@ void PlayerEngine::set_error_callback(ErrorCallback cb) {
 // ---- Thread implementations ----
 
 void PlayerEngine::Impl::demux_loop() {
-    TP_LOG_INFO(TAG, "Demux thread started");
+    PY_LOG_INFO(TAG, "Demux thread started");
 
     while (running.load()) {
         // Handle seek
@@ -396,7 +396,7 @@ void PlayerEngine::Impl::demux_loop() {
         Error err = demuxer->read_packet(pkt);
 
         if (err.code == ErrorCode::EndOfFile) {
-            TP_LOG_INFO(TAG, "Demux: end of file");
+            PY_LOG_INFO(TAG, "Demux: end of file");
             // Send EOF flush packets
             Packet eof_pkt;
             eof_pkt.is_flush = true;
@@ -419,11 +419,11 @@ void PlayerEngine::Impl::demux_loop() {
         }
     }
 
-    TP_LOG_INFO(TAG, "Demux thread ended");
+    PY_LOG_INFO(TAG, "Demux thread ended");
 }
 
 void PlayerEngine::Impl::video_decode_loop() {
-    TP_LOG_INFO(TAG, "Video decode thread started");
+    PY_LOG_INFO(TAG, "Video decode thread started");
 
     if (!video_decoder) return;
 
@@ -439,7 +439,7 @@ void PlayerEngine::Impl::video_decode_loop() {
 
         Error err = video_decoder->send_packet(pkt);
         if (err && err.code != ErrorCode::NeedMoreInput) {
-            TP_LOG_WARN(TAG, "Video send_packet error: %s", err.message.c_str());
+            PY_LOG_WARN(TAG, "Video send_packet error: %s", err.message.c_str());
             continue;
         }
 
@@ -450,18 +450,18 @@ void PlayerEngine::Impl::video_decode_loop() {
             if (err.code == ErrorCode::OutputNotReady) break;
             if (err.code == ErrorCode::EndOfFile) break;
             if (err) {
-                TP_LOG_WARN(TAG, "Video receive_frame error: %s", err.message.c_str());
+                PY_LOG_WARN(TAG, "Video receive_frame error: %s", err.message.c_str());
                 break;
             }
             if (!video_frame_queue.push(std::move(frame))) break;
         }
     }
 
-    TP_LOG_INFO(TAG, "Video decode thread ended");
+    PY_LOG_INFO(TAG, "Video decode thread ended");
 }
 
 void PlayerEngine::Impl::audio_decode_loop() {
-    TP_LOG_INFO(TAG, "Audio decode thread started");
+    PY_LOG_INFO(TAG, "Audio decode thread started");
 
     if (!audio_decoder || !audio_output) return;
 
@@ -542,7 +542,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
             if (!resampler_initialized) {
                 Error err = resampler.open(ctx, out_rate, out_channels);
                 if (err) {
-                    TP_LOG_ERROR(TAG, "Resampler init failed: %s", err.message.c_str());
+                    PY_LOG_ERROR(TAG, "Resampler init failed: %s", err.message.c_str());
                     break;
                 }
                 resampler_initialized = true;
@@ -590,7 +590,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
     resampler.close();
     avcodec_free_context(&ctx);
 
-    TP_LOG_INFO(TAG, "Audio decode thread ended");
+    PY_LOG_INFO(TAG, "Audio decode thread ended");
 }
 
 int PlayerEngine::Impl::audio_pull(float* buffer, int frames, int channels) {
@@ -628,4 +628,4 @@ void PlayerEngine::Impl::stop_threads() {
     if (audio_decode_thread.joinable()) audio_decode_thread.join();
 }
 
-} // namespace tp
+} // namespace py

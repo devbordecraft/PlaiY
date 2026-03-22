@@ -1,5 +1,5 @@
-#include "testplayer/subtitle_manager.h"
-#include "testplayer/logger.h"
+#include "plaiy/subtitle_manager.h"
+#include "plaiy/logger.h"
 #include "srt_parser.h"
 #include "ass_renderer.h"
 #include "pgs_decoder.h"
@@ -8,7 +8,7 @@
 
 static constexpr const char* TAG = "SubtitleManager";
 
-namespace tp {
+namespace py {
 
 struct SubtitleManager::Impl {
     std::mutex mutex;
@@ -45,14 +45,14 @@ Error SubtitleManager::load_external(const std::string& path) {
             return {ErrorCode::SubtitleError, "Failed to parse SRT: " + path};
         }
         impl_->active_format = SubtitleFormat::SRT;
-        TP_LOG_INFO(TAG, "Loaded external SRT: %s", path.c_str());
+        PY_LOG_INFO(TAG, "Loaded external SRT: %s", path.c_str());
     } else if (ext == "ass" || ext == "ssa") {
         impl_->ass_renderer = std::make_unique<AssRenderer>();
         impl_->ass_renderer->set_video_size(impl_->video_width, impl_->video_height);
         Error err = impl_->ass_renderer->load_file(path);
         if (err) return err;
         impl_->active_format = SubtitleFormat::ASS;
-        TP_LOG_INFO(TAG, "Loaded external ASS: %s", path.c_str());
+        PY_LOG_INFO(TAG, "Loaded external ASS: %s", path.c_str());
     } else {
         return {ErrorCode::UnsupportedFormat, "Unknown subtitle format: " + ext};
     }
@@ -196,4 +196,4 @@ void SubtitleManager::close() {
     impl_->active_format = SubtitleFormat::Unknown;
 }
 
-} // namespace tp
+} // namespace py

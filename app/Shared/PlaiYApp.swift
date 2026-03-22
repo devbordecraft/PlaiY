@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct TestPlayerApp: App {
+struct PlaiYApp: App {
     @StateObject private var libraryVM = LibraryViewModel()
 
     init() {
-        TPLog.setup()
+        PYLog.setup()
     }
 
     var body: some Scene {

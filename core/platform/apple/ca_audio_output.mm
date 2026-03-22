@@ -2,13 +2,13 @@
 #import <CoreAudio/CoreAudio.h>
 
 #include "ca_audio_output.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 #include <mutex>
 
 static constexpr const char* TAG = "CAAudioOutput";
 
-namespace tp {
+namespace py {
 
 struct CAAudioOutput::Impl {
     AudioComponentInstance audio_unit = nullptr;
@@ -106,7 +106,7 @@ Error CAAudioOutput::open(int sample_rate, int channels) {
         return {ErrorCode::AudioOutputError, "Failed to initialize audio unit"};
     }
 
-    TP_LOG_INFO(TAG, "Audio output opened: %d Hz, %d channels", sample_rate, channels);
+    PY_LOG_INFO(TAG, "Audio output opened: %d Hz, %d channels", sample_rate, channels);
     return Error::Ok();
 }
 
@@ -125,7 +125,7 @@ void CAAudioOutput::start() {
         OSStatus status = AudioOutputUnitStart(impl_->audio_unit);
         if (status == noErr) {
             impl_->running = true;
-            TP_LOG_INFO(TAG, "Audio output started");
+            PY_LOG_INFO(TAG, "Audio output started");
         }
     }
 }
@@ -191,4 +191,4 @@ OSStatus CAAudioOutput::Impl::renderCallback(
     return noErr;
 }
 
-} // namespace tp
+} // namespace py

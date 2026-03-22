@@ -1,10 +1,10 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 #include <string>
 
-namespace tp {
+namespace py {
 
 class IDemuxer {
 public:
@@ -22,4 +22,4 @@ public:
     virtual Error seek(int64_t timestamp_us) = 0;
 };
 
-} // namespace tp
+} // namespace py

@@ -1,6 +1,6 @@
-#include "testplayer/packet_queue.h"
+#include "plaiy/packet_queue.h"
 
-namespace tp {
+namespace py {
 
 PacketQueue::PacketQueue(size_t max_size) : max_size_(max_size) {}
 
@@ -63,4 +63,4 @@ int64_t PacketQueue::total_bytes() const {
     return total_bytes_;
 }
 
-} // namespace tp
+} // namespace py

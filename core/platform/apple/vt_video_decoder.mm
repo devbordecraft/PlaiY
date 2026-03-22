@@ -3,7 +3,7 @@
 #import <CoreVideo/CoreVideo.h>
 
 #include "vt_video_decoder.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 #include <deque>
 #include <mutex>
@@ -15,7 +15,7 @@ extern "C" {
 
 static constexpr const char* TAG = "VTVideoDecoder";
 
-namespace tp {
+namespace py {
 
 struct VTVideoDecoder::Impl {
     VTDecompressionSessionRef session = nullptr;
@@ -157,7 +157,7 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
             kCFBooleanTrue);
     }
 
-    TP_LOG_INFO(TAG, "Opened VideoToolbox decoder: %s (%dx%d, %s)",
+    PY_LOG_INFO(TAG, "Opened VideoToolbox decoder: %s (%dx%d, %s)",
                 track.codec_name.c_str(), track.width, track.height,
                 impl_->is_10bit ? "10-bit" : "8-bit");
 
@@ -289,7 +289,7 @@ void VTVideoDecoder::Impl::decompressionCallback(
     int64_t* pts_data = static_cast<int64_t*>(sourceFrameRefCon);
 
     if (status != noErr || !imageBuffer) {
-        TP_LOG_WARN(TAG, "VT decode callback error: %d", (int)status);
+        PY_LOG_WARN(TAG, "VT decode callback error: %d", (int)status);
         delete[] pts_data;
         return;
     }
@@ -338,4 +338,4 @@ void VTVideoDecoder::Impl::decompressionCallback(
     self->decoded_frames.push_back(std::move(frame));
 }
 
-} // namespace tp
+} // namespace py

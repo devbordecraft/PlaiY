@@ -1,11 +1,11 @@
 #include "ass_renderer.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 #include <ass/ass.h>
 
 static constexpr const char* TAG = "AssRenderer";
 
-namespace tp {
+namespace py {
 
 AssRenderer::AssRenderer() = default;
 
@@ -53,7 +53,7 @@ Error AssRenderer::load_file(const std::string& path) {
         return {ErrorCode::SubtitleError, "Failed to load ASS file: " + path};
     }
 
-    TP_LOG_INFO(TAG, "Loaded ASS file: %s (%d events)", path.c_str(), track_->n_events);
+    PY_LOG_INFO(TAG, "Loaded ASS file: %s (%d events)", path.c_str(), track_->n_events);
     return Error::Ok();
 }
 
@@ -76,7 +76,7 @@ Error AssRenderer::load_embedded(const uint8_t* header, size_t header_size) {
     ass_process_codec_private(track_, const_cast<char*>(reinterpret_cast<const char*>(header)),
                                static_cast<int>(header_size));
 
-    TP_LOG_INFO(TAG, "Loaded embedded ASS track");
+    PY_LOG_INFO(TAG, "Loaded embedded ASS track");
     return Error::Ok();
 }
 
@@ -175,4 +175,4 @@ void AssRenderer::close() {
     }
 }
 
-} // namespace tp
+} // namespace py

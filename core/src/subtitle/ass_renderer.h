@@ -1,7 +1,7 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 #include <string>
 
 struct ass_library;
@@ -11,7 +11,7 @@ typedef struct ass_library ASS_Library;
 typedef struct ass_renderer ASS_Renderer;
 typedef struct ass_track ASS_Track;
 
-namespace tp {
+namespace py {
 
 class AssRenderer {
 public:
@@ -45,4 +45,4 @@ private:
     int video_height_ = 1080;
 };
 
-} // namespace tp
+} // namespace py

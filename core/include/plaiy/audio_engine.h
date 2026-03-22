@@ -1,10 +1,10 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 #include <functional>
 
-namespace tp {
+namespace py {
 
 class IAudioOutput {
 public:
@@ -31,4 +31,4 @@ public:
     virtual int channels() const = 0;
 };
 
-} // namespace tp
+} // namespace py

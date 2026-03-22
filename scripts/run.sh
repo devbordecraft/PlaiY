@@ -11,14 +11,14 @@ cmake --build "$PROJECT_DIR/build/apple-debug" --parallel
 echo "Building app..."
 cd "$PROJECT_DIR/app"
 xcodegen generate 2>/dev/null
-xcodebuild -project TestPlayer.xcodeproj -scheme TestPlayer -configuration Debug build 2>&1 | grep -E '(BUILD|error:)' || true
+xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug build 2>&1 | grep -E '(BUILD|error:)' || true
 
 # Find the built app
-APP_PATH=$(xcodebuild -project TestPlayer.xcodeproj -scheme TestPlayer -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')
-APP="$APP_PATH/TestPlayer.app"
+APP_PATH=$(xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $3}')
+APP="$APP_PATH/PlaiY.app"
 
 if [ -d "$APP" ]; then
-    echo "Launching TestPlayer..."
+    echo "Launching PlaiY..."
     open "$APP"
 else
     echo "Build failed — app not found."

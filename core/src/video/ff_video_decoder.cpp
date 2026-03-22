@@ -1,5 +1,5 @@
 #include "ff_video_decoder.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -9,7 +9,7 @@ extern "C" {
 
 static constexpr const char* TAG = "FFVideoDecoder";
 
-namespace tp {
+namespace py {
 
 FFVideoDecoder::FFVideoDecoder() = default;
 
@@ -63,7 +63,7 @@ Error FFVideoDecoder::open(const TrackInfo& track) {
         return {ErrorCode::OutOfMemory, "Failed to allocate frame"};
     }
 
-    TP_LOG_INFO(TAG, "Opened software decoder: %s (%dx%d)", codec->name, track.width, track.height);
+    PY_LOG_INFO(TAG, "Opened software decoder: %s (%dx%d)", codec->name, track.width, track.height);
     return Error::Ok();
 }
 
@@ -187,4 +187,4 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     }
 }
 
-} // namespace tp
+} // namespace py

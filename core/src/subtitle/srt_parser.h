@@ -1,10 +1,10 @@
 #pragma once
 
-#include "testplayer/types.h"
+#include "plaiy/types.h"
 #include <string>
 #include <vector>
 
-namespace tp {
+namespace py {
 
 class SrtParser {
 public:
@@ -31,4 +31,4 @@ private:
     std::vector<Entry> entries_;
 };
 
-} // namespace tp
+} // namespace py

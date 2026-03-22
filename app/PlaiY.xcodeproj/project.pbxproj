@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1FBCA6DFAC47D82E842F8DAC /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1051D64F71A8455FEF9995B1 /* MetalViewCoordinator.swift */; };
-		343BD43C8ADEA8A275793AA8 /* TestPlayerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99896CE2B23D06BE43F467EA /* TestPlayerApp.swift */; };
+		343BD43C8ADEA8A275793AA8 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99896CE2B23D06BE43F467EA /* PlaiYApp.swift */; };
 		350AC0941D7A2FD53897A734 /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A41FE5EDBEC27984F33B64A /* MetalPlayerView.swift */; };
 		4C265DA0CC0111C20FACA86D /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B76A71B3C1650E43809A52 /* PlayerControlsView.swift */; };
 		61BED4230742D641A15006B4 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 39F7564AC52DCAFADA0B8042 /* metal_shaders.metal */; };
@@ -18,13 +18,13 @@
 		8D8326440958ADD18AC0320D /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */; };
 		9E2350FCB383A5953F821279 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D9DF184FB0A9A67CEF20793 /* LibraryView.swift */; };
 		C558D69EF84D2B2984D3A406 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */; };
-		CA8B40DD840E09B6169D72BD /* TPLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09264979C53F24DECF9787ED /* TPLog.swift */; };
+		CA8B40DD840E09B6169D72BD /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09264979C53F24DECF9787ED /* PYLog.swift */; };
 		E111A259EEB59F8F8A74AE78 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = B968A511E5527FC49C378D24 /* PlayerBridge.swift */; };
 		EEC6B81641FBFD206A8D642F /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AB4226524B92103A5325361 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		09264979C53F24DECF9787ED /* TPLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TPLog.swift; sourceTree = "<group>"; };
+		09264979C53F24DECF9787ED /* PYLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PYLog.swift; sourceTree = "<group>"; };
 		0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		1051D64F71A8455FEF9995B1 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
 		1A41FE5EDBEC27984F33B64A /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
@@ -34,19 +34,19 @@
 		6D9BE4C60AE13A9DA43CA745 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		7AB4226524B92103A5325361 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		8D9DF184FB0A9A67CEF20793 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
-		99896CE2B23D06BE43F467EA /* TestPlayerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestPlayerApp.swift; sourceTree = "<group>"; };
+		99896CE2B23D06BE43F467EA /* PlaiYApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaiYApp.swift; sourceTree = "<group>"; };
 		A815E76C3BE07DFDFD3610AF /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		B968A511E5527FC49C378D24 /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
 		D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		EB5E7F2A813AB0C8FB7D9DDB /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
-		F6B577FAE7E5881B6F543EF9 /* TestPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TestPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6B577FAE7E5881B6F543EF9 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		1A2DCB44D76CAE2EC24774EA /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F6B577FAE7E5881B6F543EF9 /* TestPlayer.app */,
+				F6B577FAE7E5881B6F543EF9 /* PlaiY.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,8 +106,8 @@
 				D9A806B479D2C4ACD5C96D48 /* LibraryViewModel.swift */,
 				B968A511E5527FC49C378D24 /* PlayerBridge.swift */,
 				0B9CCE3FA88A4A557794FEF0 /* PlayerViewModel.swift */,
-				99896CE2B23D06BE43F467EA /* TestPlayerApp.swift */,
-				09264979C53F24DECF9787ED /* TPLog.swift */,
+				99896CE2B23D06BE43F467EA /* PlaiYApp.swift */,
+				09264979C53F24DECF9787ED /* PYLog.swift */,
 				98E4281531FA8426A1F00168 /* Metal */,
 				C440C0B08AB123FC53AD7435 /* Views */,
 			);
@@ -117,9 +117,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		331E3BA71F6704B2BED8D955 /* TestPlayer */ = {
+		331E3BA71F6704B2BED8D955 /* PlaiY */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "TestPlayer" */;
+			buildConfigurationList = 9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "PlaiY" */;
 			buildPhases = (
 				E0996F642CD47D0FC60EE580 /* Sources */,
 			);
@@ -127,11 +127,11 @@
 			);
 			dependencies = (
 			);
-			name = TestPlayer;
+			name = PlaiY;
 			packageProductDependencies = (
 			);
-			productName = TestPlayer;
-			productReference = F6B577FAE7E5881B6F543EF9 /* TestPlayer.app */;
+			productName = PlaiY;
+			productReference = F6B577FAE7E5881B6F543EF9 /* PlaiY.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -145,7 +145,7 @@
 				TargetAttributes = {
 				};
 			};
-			buildConfigurationList = 7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "TestPlayer" */;
+			buildConfigurationList = 7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "PlaiY" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -159,7 +159,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				331E3BA71F6704B2BED8D955 /* TestPlayer */,
+				331E3BA71F6704B2BED8D955 /* PlaiY */,
 			);
 		};
 /* End PBXProject section */
@@ -180,8 +180,8 @@
 				874E2EB1B649F47D9DFEEBEA /* PlayerView.swift in Sources */,
 				8D8326440958ADD18AC0320D /* PlayerViewModel.swift in Sources */,
 				8BAA65E68DDDB56B06FE5265 /* SubtitleOverlayView.swift in Sources */,
-				CA8B40DD840E09B6169D72BD /* TPLog.swift in Sources */,
-				343BD43C8ADEA8A275793AA8 /* TestPlayerApp.swift in Sources */,
+				CA8B40DD840E09B6169D72BD /* PYLog.swift in Sources */,
+				343BD43C8ADEA8A275793AA8 /* PlaiYApp.swift in Sources */,
 				61BED4230742D641A15006B4 /* metal_shaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -212,7 +212,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"-lc++",
-					"-ltestplayer_core",
+					"-lplaiy_core",
 					"-lavformat",
 					"-lavcodec",
 					"-lavutil",
@@ -240,8 +240,8 @@
 					"-framework IOSurface",
 					"-framework Security",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.testplayer.app;
-				PRODUCT_NAME = TestPlayer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
+				PRODUCT_NAME = PlaiY;
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
 			};
@@ -389,7 +389,7 @@
 				);
 				OTHER_LDFLAGS = (
 					"-lc++",
-					"-ltestplayer_core",
+					"-lplaiy_core",
 					"-lavformat",
 					"-lavcodec",
 					"-lavutil",
@@ -417,8 +417,8 @@
 					"-framework IOSurface",
 					"-framework Security",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.testplayer.app;
-				PRODUCT_NAME = TestPlayer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
+				PRODUCT_NAME = PlaiY;
 				SDKROOT = macosx;
 				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
 			};
@@ -427,7 +427,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "TestPlayer" */ = {
+		7027F96AF5FDB82B96C8068B /* Build configuration list for PBXProject "PlaiY" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				37F3EF811BA35038D65D8859 /* Debug */,
@@ -436,7 +436,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "TestPlayer" */ = {
+		9F64C11F93070B118BF46F6B /* Build configuration list for PBXNativeTarget "PlaiY" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				505988A266373EC2660A5632 /* Debug */,

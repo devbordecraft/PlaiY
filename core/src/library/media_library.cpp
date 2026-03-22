@@ -1,5 +1,5 @@
-#include "testplayer/media_library.h"
-#include "testplayer/logger.h"
+#include "plaiy/media_library.h"
+#include "plaiy/logger.h"
 #include "metadata_reader.h"
 
 #include <nlohmann/json.hpp>
@@ -13,7 +13,7 @@ static constexpr const char* TAG = "MediaLibrary";
 
 namespace fs = std::filesystem;
 
-namespace tp {
+namespace py {
 
 static const std::unordered_set<std::string> MEDIA_EXTENSIONS = {
     ".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov",
@@ -55,7 +55,7 @@ Error MediaLibrary::add_folder(const std::string& path) {
                   return a.title < b.title;
               });
 
-    TP_LOG_INFO(TAG, "Scanned %s: %d media files found", path.c_str(), added);
+    PY_LOG_INFO(TAG, "Scanned %s: %d media files found", path.c_str(), added);
     return Error::Ok();
 }
 
@@ -142,4 +142,4 @@ void MediaLibrary::clear() {
     impl_->items.clear();
 }
 
-} // namespace tp
+} // namespace py

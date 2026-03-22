@@ -1,11 +1,11 @@
 #pragma once
 
-#include "testplayer/types.h"
+#include "plaiy/types.h"
 #include <condition_variable>
 #include <deque>
 #include <mutex>
 
-namespace tp {
+namespace py {
 
 class FrameQueue {
 public:
@@ -44,4 +44,4 @@ private:
     bool aborted_ = false;
 };
 
-} // namespace tp
+} // namespace py

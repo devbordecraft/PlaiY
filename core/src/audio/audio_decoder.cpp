@@ -1,5 +1,5 @@
 #include "audio_decoder.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -8,7 +8,7 @@ extern "C" {
 
 static constexpr const char* TAG = "AudioDecoder";
 
-namespace tp {
+namespace py {
 
 AudioDecoder::AudioDecoder() = default;
 
@@ -55,7 +55,7 @@ Error AudioDecoder::open(const TrackInfo& track) {
         return {ErrorCode::OutOfMemory};
     }
 
-    TP_LOG_INFO(TAG, "Opened audio decoder: %s (%d Hz, %d ch)",
+    PY_LOG_INFO(TAG, "Opened audio decoder: %s (%d Hz, %d ch)",
                 codec->name, codec_ctx_->sample_rate, codec_ctx_->ch_layout.nb_channels);
     return Error::Ok();
 }
@@ -135,4 +135,4 @@ int AudioDecoder::channels() const {
     return codec_ctx_ ? codec_ctx_->ch_layout.nb_channels : 0;
 }
 
-} // namespace tp
+} // namespace py

@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-namespace tp {
+namespace py {
 
 enum class LogLevel {
     Debug,
@@ -31,15 +31,15 @@ private:
     LogCallback callback_;
 };
 
-} // namespace tp
+} // namespace py
 
 // Debug logs compile away in release builds
 #ifdef NDEBUG
-#define TP_LOG_DEBUG(tag, ...) ((void)0)
+#define PY_LOG_DEBUG(tag, ...) ((void)0)
 #else
-#define TP_LOG_DEBUG(tag, ...) ::tp::Logger::instance().log(::tp::LogLevel::Debug, tag, __VA_ARGS__)
+#define PY_LOG_DEBUG(tag, ...) ::py::Logger::instance().log(::py::LogLevel::Debug, tag, __VA_ARGS__)
 #endif
 
-#define TP_LOG_INFO(tag, ...)  ::tp::Logger::instance().log(::tp::LogLevel::Info, tag, __VA_ARGS__)
-#define TP_LOG_WARN(tag, ...)  ::tp::Logger::instance().log(::tp::LogLevel::Warning, tag, __VA_ARGS__)
-#define TP_LOG_ERROR(tag, ...) ::tp::Logger::instance().log(::tp::LogLevel::Error, tag, __VA_ARGS__)
+#define PY_LOG_INFO(tag, ...)  ::py::Logger::instance().log(::py::LogLevel::Info, tag, __VA_ARGS__)
+#define PY_LOG_WARN(tag, ...)  ::py::Logger::instance().log(::py::LogLevel::Warning, tag, __VA_ARGS__)
+#define PY_LOG_ERROR(tag, ...) ::py::Logger::instance().log(::py::LogLevel::Error, tag, __VA_ARGS__)

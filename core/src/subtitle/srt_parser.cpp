@@ -1,5 +1,5 @@
 #include "srt_parser.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 #include <algorithm>
 #include <fstream>
@@ -7,12 +7,12 @@
 
 static constexpr const char* TAG = "SrtParser";
 
-namespace tp {
+namespace py {
 
 bool SrtParser::parse_file(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        TP_LOG_ERROR(TAG, "Cannot open SRT file: %s", path.c_str());
+        PY_LOG_ERROR(TAG, "Cannot open SRT file: %s", path.c_str());
         return false;
     }
     std::string content((std::istreambuf_iterator<char>(file)),
@@ -88,7 +88,7 @@ bool SrtParser::parse_string(const std::string& content) {
     std::sort(entries_.begin(), entries_.end(),
               [](const Entry& a, const Entry& b) { return a.start_us < b.start_us; });
 
-    TP_LOG_INFO(TAG, "Parsed %zu SRT entries", entries_.size());
+    PY_LOG_INFO(TAG, "Parsed %zu SRT entries", entries_.size());
     return !entries_.empty();
 }
 
@@ -130,4 +130,4 @@ int64_t SrtParser::parse_timestamp(const std::string& ts) {
            static_cast<int64_t>(ms) * 1000LL;
 }
 
-} // namespace tp
+} // namespace py

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "testplayer/error.h"
-#include "testplayer/types.h"
+#include "plaiy/error.h"
+#include "plaiy/types.h"
 #include <string>
 #include <vector>
 
-namespace tp {
+namespace py {
 
 class MediaLibrary {
 public:
@@ -32,4 +32,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace tp
+} // namespace py

@@ -1,5 +1,5 @@
 #include "audio_resampler.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -11,7 +11,7 @@ extern "C" {
 
 static constexpr const char* TAG = "AudioResampler";
 
-namespace tp {
+namespace py {
 
 AudioResampler::AudioResampler() = default;
 
@@ -53,7 +53,7 @@ Error AudioResampler::open(AVCodecContext* codec_ctx, int out_sample_rate, int o
         return {ErrorCode::AudioOutputError, "Failed to init resampler"};
     }
 
-    TP_LOG_INFO(TAG, "Resampler: %d Hz %d ch -> %d Hz %d ch float32",
+    PY_LOG_INFO(TAG, "Resampler: %d Hz %d ch -> %d Hz %d ch float32",
                 codec_ctx->sample_rate, codec_ctx->ch_layout.nb_channels,
                 out_sample_rate, out_channels);
     return Error::Ok();
@@ -94,4 +94,4 @@ Error AudioResampler::convert(AVFrame* frame, std::vector<float>& out_samples, i
     return Error::Ok();
 }
 
-} // namespace tp
+} // namespace py

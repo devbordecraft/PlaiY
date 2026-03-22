@@ -1,6 +1,6 @@
 #include "video_decoder_factory.h"
 #include "ff_video_decoder.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 #ifdef __APPLE__
 #include "../../platform/apple/vt_video_decoder.h"
@@ -12,7 +12,7 @@ extern "C" {
 
 static constexpr const char* TAG = "DecoderFactory";
 
-namespace tp {
+namespace py {
 
 std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(const TrackInfo& track) {
 #ifdef __APPLE__
@@ -33,10 +33,10 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(const TrackInfo& trac
         auto vt = std::make_unique<VTVideoDecoder>();
         Error err = vt->open(track);
         if (err.ok()) {
-            TP_LOG_INFO(TAG, "Using VideoToolbox for %s", track.codec_name.c_str());
+            PY_LOG_INFO(TAG, "Using VideoToolbox for %s", track.codec_name.c_str());
             return vt;
         }
-        TP_LOG_WARN(TAG, "VideoToolbox failed for %s: %s, falling back to FFmpeg",
+        PY_LOG_WARN(TAG, "VideoToolbox failed for %s: %s, falling back to FFmpeg",
                     track.codec_name.c_str(), err.message.c_str());
     }
 #endif
@@ -45,12 +45,12 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(const TrackInfo& trac
     auto ff = std::make_unique<FFVideoDecoder>();
     Error err = ff->open(track);
     if (err.ok()) {
-        TP_LOG_INFO(TAG, "Using FFmpeg software decoder for %s", track.codec_name.c_str());
+        PY_LOG_INFO(TAG, "Using FFmpeg software decoder for %s", track.codec_name.c_str());
         return ff;
     }
 
-    TP_LOG_ERROR(TAG, "No decoder available for %s: %s", track.codec_name.c_str(), err.message.c_str());
+    PY_LOG_ERROR(TAG, "No decoder available for %s: %s", track.codec_name.c_str(), err.message.c_str());
     return nullptr;
 }
 
-} // namespace tp
+} // namespace py

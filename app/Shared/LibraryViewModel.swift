@@ -94,7 +94,7 @@ class LibraryViewModel: ObservableObject {
                 self?.items = decoded
             }
         } catch {
-            TPLog.error("Library decode error: \(error)", tag: "Library")
+            PYLog.error("Library decode error: \(error)", tag: "Library")
         }
     }
 }

@@ -1,5 +1,5 @@
 #include "pgs_decoder.h"
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -7,7 +7,7 @@ extern "C" {
 
 static constexpr const char* TAG = "PgsDecoder";
 
-namespace tp {
+namespace py {
 
 PgsDecoder::PgsDecoder() = default;
 
@@ -32,7 +32,7 @@ Error PgsDecoder::open() {
         return {ErrorCode::DecoderInitFailed, "Failed to open PGS decoder"};
     }
 
-    TP_LOG_INFO(TAG, "PGS subtitle decoder opened");
+    PY_LOG_INFO(TAG, "PGS subtitle decoder opened");
     return Error::Ok();
 }
 
@@ -114,4 +114,4 @@ Error PgsDecoder::decode(const Packet& pkt, SubtitleFrame& out, bool& has_output
     return Error::Ok();
 }
 
-} // namespace tp
+} // namespace py

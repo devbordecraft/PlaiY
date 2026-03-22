@@ -1,10 +1,10 @@
-#include "testplayer/logger.h"
+#include "plaiy/logger.h"
 #include <chrono>
 #include <cstdio>
 #include <cstdarg>
 #include <ctime>
 
-namespace tp {
+namespace py {
 
 Logger::Logger()
 #ifdef NDEBUG
@@ -67,4 +67,4 @@ void Logger::log(LogLevel level, const char* tag, const char* fmt, ...) {
             static_cast<int>(ms.count()), level_str, tag, buf);
 }
 
-} // namespace tp
+} // namespace py

@@ -40,7 +40,7 @@ class MetalViewCoordinator {
         // Load shaders from the default library
         // The metal_shaders.metal file must be included in the Xcode project
         guard let library = device.makeDefaultLibrary() else {
-            TPLog.error("Failed to load Metal shader library", tag: "Metal")
+            PYLog.error("Failed to load Metal shader library", tag: "Metal")
             return
         }
 
@@ -60,7 +60,7 @@ class MetalViewCoordinator {
         do {
             pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
         } catch {
-            TPLog.error("Failed to create render pipeline: \(error)", tag: "Metal")
+            PYLog.error("Failed to create render pipeline: \(error)", tag: "Metal")
         }
     }
 

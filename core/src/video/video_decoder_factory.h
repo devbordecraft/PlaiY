@@ -1,9 +1,9 @@
 #pragma once
 
-#include "testplayer/video_decoder.h"
+#include "plaiy/video_decoder.h"
 #include <memory>
 
-namespace tp {
+namespace py {
 
 class VideoDecoderFactory {
 public:
@@ -13,4 +13,4 @@ public:
     static std::unique_ptr<IVideoDecoder> create(const TrackInfo& track);
 };
 
-} // namespace tp
+} // namespace py

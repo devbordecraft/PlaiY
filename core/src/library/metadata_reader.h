@@ -1,9 +1,9 @@
 #pragma once
 
-#include "testplayer/types.h"
+#include "plaiy/types.h"
 #include <string>
 
-namespace tp {
+namespace py {
 
 class MetadataReader {
 public:
@@ -11,4 +11,4 @@ public:
     static bool read(const std::string& path, MediaItem& out);
 };
 
-} // namespace tp
+} // namespace py
