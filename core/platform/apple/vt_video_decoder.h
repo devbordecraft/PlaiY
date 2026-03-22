@@ -14,6 +14,7 @@ public:
     Error open(const TrackInfo& track) override;
     void close() override;
     void flush() override;
+    void drain() override;
     Error send_packet(const Packet& pkt) override;
     Error receive_frame(VideoFrame& out) override;
 

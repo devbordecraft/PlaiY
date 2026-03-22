@@ -17,10 +17,12 @@ class PlayerViewModel: ObservableObject {
     @Published var passthroughActive = false
     @Published var showDebugOverlay = false
     @Published var playbackStats: PYPlaybackStats?
+    @Published var playbackEnded = false
 
     private var positionTimer: Timer?
 
     func open(path: String) {
+        playbackEnded = false
         guard bridge.open(path: path) else { return }
         duration = bridge.duration
 
@@ -86,6 +88,15 @@ class PlayerViewModel: ObservableObject {
     private func startPositionUpdates() {
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self else { return }
+
+            // Detect end-of-stream (C++ engine sets Stopped on EOF)
+            if self.bridge.state == PY_STATE_STOPPED.rawValue {
+                self.isPlaying = false
+                self.stopPositionUpdates()
+                self.playbackEnded = true
+                return
+            }
+
             self.currentPosition = self.bridge.position
             self.currentSubtitle = self.bridge.getSubtitle(at: self.currentPosition)
             self.passthroughActive = self.bridge.isPassthroughActive

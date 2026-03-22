@@ -185,6 +185,7 @@ struct Packet {
     std::vector<uint8_t> data;
     bool is_keyframe = false;
     bool is_flush = false;  // sentinel to signal decoder flush
+    bool is_eof = false;    // true when this flush is end-of-stream (not seek)
 
     // Time base numerator/denominator for this packet's stream
     int time_base_num = 1;

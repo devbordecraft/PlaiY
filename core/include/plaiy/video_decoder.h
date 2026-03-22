@@ -13,6 +13,11 @@ public:
     virtual void close() = 0;
     virtual void flush() = 0;
 
+    // Wait for in-flight decodes and allow all buffered frames to be
+    // retrieved via receive_frame (e.g. lower the reorder depth to 0).
+    // Called at end-of-stream before the final drain.  Default: no-op.
+    virtual void drain() {}
+
     // Send a compressed packet to the decoder.
     virtual Error send_packet(const Packet& pkt) = 0;
 

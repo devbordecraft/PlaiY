@@ -28,6 +28,11 @@ struct VTVideoDecoder::Impl {
     bool is_hevc = false;
     bool is_10bit = false;
 
+    // Reorder buffer depth: H264/HEVC with B-frames deliver decoded frames
+    // in decode order, not display order.  We accumulate this many extra
+    // frames before emitting the lowest-PTS one, guaranteeing correct order.
+    int reorder_depth = 0;
+
     static void decompressionCallback(
         void* decompressionOutputRefCon,
         void* sourceFrameRefCon,
@@ -50,6 +55,13 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
 
     auto codec_id = static_cast<AVCodecID>(track.codec_id);
     impl_->is_hevc = (codec_id == AV_CODEC_ID_HEVC);
+
+    // H264/HEVC use B-frames whose decode order differs from display order.
+    // Buffer enough frames so the sorted callback insertion can place them
+    // correctly before receive_frame emits them.  4 covers virtually all
+    // real-world content (max_num_reorder_frames is typically 2-4).
+    impl_->reorder_depth = (codec_id == AV_CODEC_ID_H264 ||
+                            codec_id == AV_CODEC_ID_HEVC) ? 4 : 0;
 
     // Detect 10-bit: check pixel format, bit depth, and HDR indicators.
     // par->format is often AV_PIX_FMT_NONE for HEVC in containers,
@@ -235,6 +247,22 @@ void VTVideoDecoder::flush() {
     }
     std::lock_guard lock(impl_->frame_mutex);
     impl_->decoded_frames.clear();
+
+    // Restore reorder depth (drain() may have zeroed it for EOF draining)
+    auto codec_id = static_cast<AVCodecID>(impl_->track_info.codec_id);
+    impl_->reorder_depth = (codec_id == AV_CODEC_ID_H264 ||
+                            codec_id == AV_CODEC_ID_HEVC) ? 4 : 0;
+}
+
+void VTVideoDecoder::drain() {
+    // Wait for all in-flight async decodes to complete, then lower the
+    // reorder depth so receive_frame emits every remaining buffered frame.
+    // Called at end-of-stream (or seek-near-end) before the final drain.
+    if (impl_->session) {
+        VTDecompressionSessionWaitForAsynchronousFrames(impl_->session);
+    }
+    std::lock_guard lock(impl_->frame_mutex);
+    impl_->reorder_depth = 0;
 }
 
 Error VTVideoDecoder::send_packet(const Packet& pkt) {
@@ -293,7 +321,9 @@ Error VTVideoDecoder::send_packet(const Packet& pkt) {
         return {ErrorCode::DecoderError, "Failed to create sample buffer"};
     }
 
-    // Decode
+    // Async decode — reordering is handled by our own buffer (reorder_depth)
+    // rather than kVTDecodeFrame_EnableTemporalProcessing, which adds an
+    // uncontrolled delivery delay that drifts the audio clock ahead of video.
     VTDecodeFrameFlags flags = kVTDecodeFrame_EnableAsynchronousDecompression;
     VTDecodeInfoFlags info_flags = 0;
 
@@ -324,7 +354,12 @@ Error VTVideoDecoder::send_packet(const Packet& pkt) {
 
 Error VTVideoDecoder::receive_frame(VideoFrame& out) {
     std::lock_guard lock(impl_->frame_mutex);
-    if (impl_->decoded_frames.empty()) {
+
+    // Wait until the reorder buffer has enough frames to guarantee
+    // the front (lowest PTS, via sorted insertion) is in the correct
+    // display position.  Without this, B-frames that arrive after
+    // their reference P-frame would be emitted out of order.
+    if (impl_->decoded_frames.size() <= static_cast<size_t>(impl_->reorder_depth)) {
         return {ErrorCode::OutputNotReady};
     }
 
@@ -423,7 +458,15 @@ void VTVideoDecoder::Impl::decompressionCallback(
     }
 
     std::lock_guard lock(self->frame_mutex);
-    self->decoded_frames.push_back(std::move(frame));
+    // Insert sorted by PTS so frames are in display order even if VT
+    // delivers them out of order (safety net for temporal processing).
+    auto it = self->decoded_frames.end();
+    while (it != self->decoded_frames.begin()) {
+        auto prev = std::prev(it);
+        if (prev->pts_us <= frame.pts_us) break;
+        it = prev;
+    }
+    self->decoded_frames.insert(it, std::move(frame));
 }
 
 } // namespace py

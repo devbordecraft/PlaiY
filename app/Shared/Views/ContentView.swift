@@ -18,6 +18,13 @@ struct ContentView: View {
                     playerVM.open(path: path)
                     playerVM.play()
                 }
+                .onChange(of: playerVM.playbackEnded) { ended in
+                    if ended {
+                        playerVM.stop()
+                        isPlayerActive = false
+                        selectedFilePath = nil
+                    }
+                }
             } else {
                 LibraryView(onSelect: { path in
                     selectedFilePath = path

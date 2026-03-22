@@ -637,9 +637,11 @@ void PlayerEngine::Impl::demux_loop() {
 
         if (err.code == ErrorCode::EndOfFile) {
             PY_LOG_INFO(TAG, "Demux: end of file");
-            // Send EOF flush packets
+            // Send EOF flush packets (marked so decode loops can
+            // drain reorder buffers instead of discarding them)
             Packet eof_pkt;
             eof_pkt.is_flush = true;
+            eof_pkt.is_eof = true;
             if (active_video_stream >= 0) video_packet_queue.push(eof_pkt);
             if (active_audio_stream >= 0) audio_packet_queue.push(eof_pkt);
             break;
@@ -713,6 +715,16 @@ void PlayerEngine::Impl::video_decode_loop() {
         }
 
         if (pkt.is_flush) {
+            if (pkt.is_eof) {
+                // End of stream: drain the reorder buffer so the last
+                // few frames reach the output queue instead of being lost.
+                video_decoder->drain();
+                drain_frames();
+                PY_LOG_INFO(TAG, "Video EOF: final frames drained");
+                set_state(PlaybackState::Stopped);
+                break;
+            }
+            // Seek: discard stale frames and start fresh
             video_decoder->flush();
             video_frame_queue.flush();
             skip_to_target = true;
