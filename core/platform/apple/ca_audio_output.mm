@@ -164,12 +164,11 @@ OSStatus CAAudioOutput::Impl::renderCallback(
     int frames = static_cast<int>(inNumberFrames);
     int channels = self->channels;
 
+    // Callbacks are set before start() and cleared after stop(),
+    // so they are safe to read without locking on the real-time thread.
     int written = 0;
-    {
-        std::lock_guard lock(self->callback_mutex);
-        if (self->pull_callback) {
-            written = self->pull_callback(buffer, frames, channels);
-        }
+    if (self->pull_callback) {
+        written = self->pull_callback(buffer, frames, channels);
     }
 
     // Silence any remaining frames
@@ -180,12 +179,9 @@ OSStatus CAAudioOutput::Impl::renderCallback(
 
     // Update samples played and report PTS
     self->samples_played += frames;
-    {
-        std::lock_guard lock(self->callback_mutex);
-        if (self->pts_callback && self->sample_rate > 0) {
-            int64_t pts_us = self->samples_played * 1000000LL / self->sample_rate;
-            self->pts_callback(pts_us);
-        }
+    if (self->pts_callback && self->sample_rate > 0) {
+        int64_t pts_us = self->samples_played * 1000000LL / self->sample_rate;
+        self->pts_callback(pts_us);
     }
 
     return noErr;

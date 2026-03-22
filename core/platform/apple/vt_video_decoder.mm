@@ -236,23 +236,24 @@ Error VTVideoDecoder::send_packet(const Packet& pkt) {
     VTDecodeFrameFlags flags = kVTDecodeFrame_EnableAsynchronousDecompression;
     VTDecodeInfoFlags info_flags = 0;
 
-    // Pack PTS info for the callback
-    int64_t* pts_data = new int64_t[3];
-    pts_data[0] = pkt.pts;
-    pts_data[1] = pkt.time_base_num;
-    pts_data[2] = pkt.time_base_den;
+    // Pre-compute PTS in microseconds to avoid heap allocation per frame
+    int64_t pts_us = 0;
+    if (pkt.pts >= 0 && pkt.time_base_den > 0) {
+        pts_us = pkt.pts * 1000000LL * pkt.time_base_num / pkt.time_base_den;
+    }
+    // Pack into a pointer-sized integer (safe on 64-bit platforms)
+    void* pts_refcon = reinterpret_cast<void*>(pts_us);
 
     status = VTDecompressionSessionDecodeFrame(
         impl_->session,
         sample_buffer,
         flags,
-        pts_data,  // sourceFrameRefCon
+        pts_refcon,  // sourceFrameRefCon
         &info_flags);
 
     CFRelease(sample_buffer);
 
     if (status != noErr) {
-        delete[] pts_data;
         return {ErrorCode::DecoderError,
                 "VTDecompressionSessionDecodeFrame failed: " + std::to_string(status)};
     }
@@ -286,11 +287,9 @@ void VTVideoDecoder::Impl::decompressionCallback(
     CMTime presentationDuration)
 {
     auto* self = static_cast<Impl*>(decompressionOutputRefCon);
-    int64_t* pts_data = static_cast<int64_t*>(sourceFrameRefCon);
 
     if (status != noErr || !imageBuffer) {
         PY_LOG_WARN(TAG, "VT decode callback error: %d", (int)status);
-        delete[] pts_data;
         return;
     }
 
@@ -299,16 +298,8 @@ void VTVideoDecoder::Impl::decompressionCallback(
     frame.height = static_cast<int>(CVPixelBufferGetHeight(imageBuffer));
     frame.hardware_frame = true;
 
-    // Calculate PTS in microseconds
-    if (pts_data) {
-        int64_t pts = pts_data[0];
-        int64_t tb_num = pts_data[1];
-        int64_t tb_den = pts_data[2];
-        if (tb_den > 0) {
-            frame.pts_us = pts * 1000000LL * tb_num / tb_den;
-        }
-        delete[] pts_data;
-    }
+    // PTS was pre-computed and packed into the pointer
+    frame.pts_us = reinterpret_cast<int64_t>(sourceFrameRefCon);
 
     if (CMTIME_IS_VALID(presentationDuration)) {
         frame.duration_us = static_cast<int64_t>(CMTimeGetSeconds(presentationDuration) * 1e6);

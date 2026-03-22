@@ -61,6 +61,10 @@ Error AudioDecoder::open(const TrackInfo& track) {
 }
 
 void AudioDecoder::close() {
+    if (reuse_pkt_) {
+        av_packet_free(&reuse_pkt_);
+        reuse_pkt_ = nullptr;
+    }
     if (av_frame_) {
         av_frame_free(&av_frame_);
         av_frame_ = nullptr;
@@ -78,22 +82,24 @@ void AudioDecoder::flush() {
 Error AudioDecoder::send_packet(const Packet& pkt) {
     if (!codec_ctx_) return {ErrorCode::InvalidState};
 
-    AVPacket* av_pkt = av_packet_alloc();
-    if (!av_pkt) return {ErrorCode::OutOfMemory};
+    if (!reuse_pkt_) {
+        reuse_pkt_ = av_packet_alloc();
+        if (!reuse_pkt_) return {ErrorCode::OutOfMemory};
+    }
+    av_packet_unref(reuse_pkt_);
 
     if (pkt.is_flush) {
-        av_pkt->data = nullptr;
-        av_pkt->size = 0;
+        reuse_pkt_->data = nullptr;
+        reuse_pkt_->size = 0;
     } else {
-        av_pkt->data = const_cast<uint8_t*>(pkt.data.data());
-        av_pkt->size = static_cast<int>(pkt.data.size());
-        av_pkt->pts = pkt.pts;
-        av_pkt->dts = pkt.dts;
-        av_pkt->duration = pkt.duration;
+        reuse_pkt_->data = const_cast<uint8_t*>(pkt.data.data());
+        reuse_pkt_->size = static_cast<int>(pkt.data.size());
+        reuse_pkt_->pts = pkt.pts;
+        reuse_pkt_->dts = pkt.dts;
+        reuse_pkt_->duration = pkt.duration;
     }
 
-    int ret = avcodec_send_packet(codec_ctx_, pkt.is_flush ? nullptr : av_pkt);
-    av_packet_free(&av_pkt);
+    int ret = avcodec_send_packet(codec_ctx_, pkt.is_flush ? nullptr : reuse_pkt_);
 
     if (ret == AVERROR(EAGAIN)) return {ErrorCode::NeedMoreInput};
     if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};

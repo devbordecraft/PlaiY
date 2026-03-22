@@ -26,6 +26,7 @@ public:
 private:
     AVCodecContext* codec_ctx_ = nullptr;
     AVFrame* av_frame_ = nullptr;
+    AVPacket* reuse_pkt_ = nullptr;
 };
 
 } // namespace py

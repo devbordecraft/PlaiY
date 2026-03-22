@@ -94,16 +94,20 @@ bool SrtParser::parse_string(const std::string& content) {
 
 SubtitleFrame SrtParser::get_frame_at(int64_t timestamp_us) const {
     SubtitleFrame frame;
+    if (entries_.empty()) return frame;
 
-    for (const auto& entry : entries_) {
-        if (timestamp_us >= entry.start_us && timestamp_us < entry.end_us) {
-            frame.start_us = entry.start_us;
-            frame.end_us = entry.end_us;
-            frame.text = entry.text;
+    // Binary search: find the last entry whose start_us <= timestamp_us
+    auto it = std::upper_bound(entries_.begin(), entries_.end(), timestamp_us,
+        [](int64_t ts, const Entry& e) { return ts < e.start_us; });
+
+    if (it != entries_.begin()) {
+        --it;
+        if (timestamp_us >= it->start_us && timestamp_us < it->end_us) {
+            frame.start_us = it->start_us;
+            frame.end_us = it->end_us;
+            frame.text = it->text;
             frame.is_text = true;
-            return frame;
         }
-        if (entry.start_us > timestamp_us) break; // entries are sorted
     }
 
     return frame;

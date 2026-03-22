@@ -52,6 +52,7 @@ struct PlayerEngine::Impl {
 
     // Audio ring buffer for the pull callback
     std::mutex audio_buf_mutex;
+    std::condition_variable audio_buf_not_full;
     std::vector<float> audio_ring_buffer;
     size_t audio_ring_read = 0;
     size_t audio_ring_write = 0;
@@ -234,13 +235,14 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     impl_->audio_packet_queue.flush();
     impl_->video_frame_queue.flush();
 
-    // Flush ring buffer
+    // Flush ring buffer and wake decode thread
     {
         std::lock_guard lock(impl_->audio_buf_mutex);
         impl_->audio_ring_read = 0;
         impl_->audio_ring_write = 0;
         impl_->audio_ring_size = 0;
     }
+    impl_->audio_buf_not_full.notify_one();
 
     impl_->subtitle_manager->flush();
 }
@@ -277,7 +279,7 @@ int64_t PlayerEngine::duration_us() const {
     return impl_->media_info.duration_us;
 }
 
-MediaInfo PlayerEngine::media_info() const {
+const MediaInfo& PlayerEngine::media_info() const {
     return impl_->media_info;
 }
 
@@ -344,7 +346,6 @@ int PlayerEngine::active_subtitle_stream() const {
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
     VideoFrame* front = impl_->video_frame_queue.peek();
     if (!front) {
-        // No new frame — re-present the last one
         std::lock_guard lock(impl_->presented_frame_mutex);
         return impl_->presented_frame.get();
     }
@@ -352,34 +353,32 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
     int64_t clock_us = impl_->clock.now_us();
     int64_t threshold_us = 40000; // 40ms tolerance
 
-    // Frame is too early — keep showing the current one
     if (front->pts_us > clock_us + threshold_us) {
         std::lock_guard lock(impl_->presented_frame_mutex);
         return impl_->presented_frame.get();
     }
 
-    // Pop the frame (non-blocking — never stall the render thread)
-    auto frame = std::make_unique<VideoFrame>();
-    if (!impl_->video_frame_queue.try_pop(*frame)) {
-        std::lock_guard lock(impl_->presented_frame_mutex);
+    std::lock_guard lock(impl_->presented_frame_mutex);
+
+    // Lazily create the presented frame storage once
+    if (!impl_->presented_frame) {
+        impl_->presented_frame = std::make_unique<VideoFrame>();
+    }
+
+    // Pop directly into the existing frame (release old data via move-assign)
+    if (!impl_->video_frame_queue.try_pop(*impl_->presented_frame)) {
         return impl_->presented_frame.get();
     }
 
-    // If frame is too late and there's another one, skip
+    // Skip late frames
+    VideoFrame skip_frame;
     while (true) {
         VideoFrame* next = impl_->video_frame_queue.peek();
-        if (!next) break;
-        if (next->pts_us <= clock_us + threshold_us) {
-            // This frame is also ready — skip the current one
-            *frame = {};
-            impl_->video_frame_queue.try_pop(*frame);
-        } else {
-            break;
-        }
+        if (!next || next->pts_us > clock_us + threshold_us) break;
+        impl_->video_frame_queue.try_pop(skip_frame);
+        *impl_->presented_frame = std::move(skip_frame);
     }
 
-    std::lock_guard lock(impl_->presented_frame_mutex);
-    impl_->presented_frame = std::move(frame);
     return impl_->presented_frame.get();
 }
 
@@ -538,6 +537,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
     AVPacket* av_pkt = av_packet_alloc();
     bool resampler_initialized = false;
     bool timebase_initialized = false;
+    std::vector<float> resample_buf; // reused across frames
 
     while (running.load()) {
         Packet pkt;
@@ -632,10 +632,9 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 resampler_initialized = true;
             }
 
-            // Resample to float32 interleaved
-            std::vector<float> samples;
+            // Resample to float32 interleaved (reuse buffer)
             int num_samples = 0;
-            Error err = resampler.convert(av_frame, samples, num_samples);
+            Error err = resampler.convert(av_frame, resample_buf, num_samples);
             if (err) continue;
 
             // Calculate PTS for this audio chunk
@@ -644,23 +643,26 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 pts_us = av_rescale_q(av_frame->pts, ctx->pkt_timebase, {1, 1000000});
             }
 
-            // Write to ring buffer
+            // Write to ring buffer with proper condition variable wait
             {
-                std::lock_guard lock(audio_buf_mutex);
-                size_t to_write = samples.size();
+                std::unique_lock lock(audio_buf_mutex);
+                size_t to_write = resample_buf.size();
                 size_t capacity = audio_ring_buffer.size();
 
-                // Wait if buffer is full (spin with yield)
-                while (audio_ring_size + to_write > capacity && running.load()) {
-                    audio_buf_mutex.unlock();
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    audio_buf_mutex.lock();
-                }
+                audio_buf_not_full.wait(lock, [&] {
+                    return audio_ring_size + to_write <= capacity || !running.load();
+                });
+                if (!running.load()) break;
 
-                for (size_t i = 0; i < to_write; i++) {
-                    audio_ring_buffer[audio_ring_write] = samples[i];
-                    audio_ring_write = (audio_ring_write + 1) % capacity;
+                // Bulk memcpy into ring buffer (up to 2 segments for wrap-around)
+                const float* src = resample_buf.data();
+                size_t first_chunk = std::min(to_write, capacity - audio_ring_write);
+                memcpy(&audio_ring_buffer[audio_ring_write], src, first_chunk * sizeof(float));
+                if (to_write > first_chunk) {
+                    memcpy(&audio_ring_buffer[0], src + first_chunk,
+                           (to_write - first_chunk) * sizeof(float));
                 }
+                audio_ring_write = (audio_ring_write + to_write) % capacity;
                 audio_ring_size += to_write;
                 audio_pts_for_ring = pts_us;
             }
@@ -682,17 +684,23 @@ int PlayerEngine::Impl::audio_pull(float* buffer, int frames, int channels) {
     size_t needed = static_cast<size_t>(frames * channels);
     size_t available = audio_ring_size;
     size_t to_read = std::min(needed, available);
+    size_t capacity = audio_ring_buffer.size();
 
-    for (size_t i = 0; i < to_read; i++) {
-        buffer[i] = audio_ring_buffer[audio_ring_read];
-        audio_ring_read = (audio_ring_read + 1) % audio_ring_buffer.size();
+    // Bulk memcpy from ring buffer (up to 2 segments for wrap-around)
+    size_t first_chunk = std::min(to_read, capacity - audio_ring_read);
+    memcpy(buffer, &audio_ring_buffer[audio_ring_read], first_chunk * sizeof(float));
+    if (to_read > first_chunk) {
+        memcpy(buffer + first_chunk, &audio_ring_buffer[0],
+               (to_read - first_chunk) * sizeof(float));
     }
+    audio_ring_read = (audio_ring_read + to_read) % capacity;
     audio_ring_size -= to_read;
+
+    // Signal the decode thread that space is available
+    audio_buf_not_full.notify_one();
 
     // Update clock based on audio position
     if (to_read > 0 && audio_output && audio_output->sample_rate() > 0) {
-        // Estimate PTS: the pts_for_ring is the PTS at the write cursor
-        // The read cursor is behind by audio_ring_size samples
         int64_t samples_behind = static_cast<int64_t>(audio_ring_size) / channels;
         int64_t offset_us = samples_behind * 1000000LL / audio_output->sample_rate();
         clock.set_audio_pts(audio_pts_for_ring - offset_us);

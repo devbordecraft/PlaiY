@@ -42,6 +42,10 @@ Error FFDemuxer::open(const std::string& path) {
 }
 
 void FFDemuxer::close() {
+    if (reuse_pkt_) {
+        av_packet_free(&reuse_pkt_);
+        reuse_pkt_ = nullptr;
+    }
     if (fmt_ctx_) {
         avformat_close_input(&fmt_ctx_);
         fmt_ctx_ = nullptr;
@@ -49,44 +53,47 @@ void FFDemuxer::close() {
     info_ = {};
 }
 
-MediaInfo FFDemuxer::media_info() const {
+const MediaInfo& FFDemuxer::media_info() const {
     return info_;
 }
 
 Error FFDemuxer::read_packet(Packet& out) {
     if (!fmt_ctx_) return {ErrorCode::InvalidState, "Demuxer not open"};
 
-    AVPacket* pkt = av_packet_alloc();
-    if (!pkt) return {ErrorCode::OutOfMemory, "Failed to allocate packet"};
+    if (!reuse_pkt_) {
+        reuse_pkt_ = av_packet_alloc();
+        if (!reuse_pkt_) return {ErrorCode::OutOfMemory, "Failed to allocate packet"};
+    }
 
-    int ret = av_read_frame(fmt_ctx_, pkt);
+    av_packet_unref(reuse_pkt_);
+    int ret = av_read_frame(fmt_ctx_, reuse_pkt_);
     if (ret < 0) {
-        av_packet_free(&pkt);
         if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};
         return {ErrorCode::DemuxerError, "Error reading packet"};
     }
 
-    out.stream_index = pkt->stream_index;
-    out.pts = pkt->pts;
-    out.dts = pkt->dts;
-    out.duration = pkt->duration;
-    out.is_keyframe = (pkt->flags & AV_PKT_FLAG_KEY) != 0;
+    out.stream_index = reuse_pkt_->stream_index;
+    out.pts = reuse_pkt_->pts;
+    out.dts = reuse_pkt_->dts;
+    out.duration = reuse_pkt_->duration;
+    out.is_keyframe = (reuse_pkt_->flags & AV_PKT_FLAG_KEY) != 0;
     out.is_flush = false;
 
-    if (pkt->data && pkt->size > 0) {
-        out.data.assign(pkt->data, pkt->data + pkt->size);
+    if (reuse_pkt_->data && reuse_pkt_->size > 0) {
+        size_t new_size = static_cast<size_t>(reuse_pkt_->size);
+        out.data.resize(new_size);
+        memcpy(out.data.data(), reuse_pkt_->data, new_size);
     } else {
         out.data.clear();
     }
 
     // Store the time base for this stream
-    if (pkt->stream_index >= 0 && pkt->stream_index < static_cast<int>(fmt_ctx_->nb_streams)) {
-        AVRational tb = fmt_ctx_->streams[pkt->stream_index]->time_base;
+    if (reuse_pkt_->stream_index >= 0 && reuse_pkt_->stream_index < static_cast<int>(fmt_ctx_->nb_streams)) {
+        AVRational tb = fmt_ctx_->streams[reuse_pkt_->stream_index]->time_base;
         out.time_base_num = tb.num;
         out.time_base_den = tb.den;
     }
 
-    av_packet_free(&pkt);
     return Error::Ok();
 }
 

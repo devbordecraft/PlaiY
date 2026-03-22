@@ -22,7 +22,7 @@ public:
     PlaybackState state() const;
     int64_t current_position_us() const;
     int64_t duration_us() const;
-    MediaInfo media_info() const;
+    const MediaInfo& media_info() const;
 
     void select_audio_track(int stream_index);
     void select_subtitle_track(int stream_index);

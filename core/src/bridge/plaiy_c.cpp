@@ -108,7 +108,7 @@ int py_player_get_active_subtitle_stream(PYPlayer* p) {
 const char* py_player_get_media_info_json(PYPlayer* p) {
     if (!p) return "{}";
 
-    py::MediaInfo info = p->engine.media_info();
+    const py::MediaInfo& info = p->engine.media_info();
     json j;
     j["file_path"] = info.file_path;
     j["container_format"] = info.container_format;

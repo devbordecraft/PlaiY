@@ -23,6 +23,7 @@ private:
 
     AVCodecContext* codec_ctx_ = nullptr;
     AVFrame* av_frame_ = nullptr;
+    AVPacket* reuse_pkt_ = nullptr;
     TrackInfo track_info_;
 };
 

@@ -4,6 +4,7 @@
 #include "ass_renderer.h"
 #include "pgs_decoder.h"
 
+#include <deque>
 #include <mutex>
 
 static constexpr const char* TAG = "SubtitleManager";
@@ -20,7 +21,7 @@ struct SubtitleManager::Impl {
     std::unique_ptr<PgsDecoder> pgs_decoder;
 
     // Cached PGS frames (bitmap subs are decode-once, display for duration)
-    std::vector<SubtitleFrame> pgs_frames;
+    std::deque<SubtitleFrame> pgs_frames;
     int video_width = 1920;
     int video_height = 1080;
 };
@@ -128,7 +129,7 @@ void SubtitleManager::feed_packet(const Packet& pkt) {
                     impl_->pgs_frames.push_back(std::move(frame));
                     // Keep only recent frames (sliding window)
                     while (impl_->pgs_frames.size() > 32) {
-                        impl_->pgs_frames.erase(impl_->pgs_frames.begin());
+                        impl_->pgs_frames.pop_front();
                     }
                 }
             }

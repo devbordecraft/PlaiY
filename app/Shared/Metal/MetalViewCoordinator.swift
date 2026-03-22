@@ -169,9 +169,6 @@ class MetalViewCoordinator {
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
-
-        // Flush stale entries from the texture cache
-        CVMetalTextureCacheFlush(textureCache, 0)
     }
 
     private func drawBlack(descriptor: MTLRenderPassDescriptor, drawable: CAMetalDrawable) {

@@ -13,7 +13,7 @@ public:
 
     Error open(const std::string& path) override;
     void close() override;
-    MediaInfo media_info() const override;
+    const MediaInfo& media_info() const override;
     Error read_packet(Packet& out) override;
     Error seek(int64_t timestamp_us) override;
 
@@ -23,6 +23,7 @@ private:
     static SubtitleFormat detect_subtitle_format(int codec_id);
 
     AVFormatContext* fmt_ctx_ = nullptr;
+    AVPacket* reuse_pkt_ = nullptr;
     MediaInfo info_;
 };
 
