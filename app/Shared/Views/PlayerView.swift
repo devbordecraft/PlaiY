@@ -36,6 +36,18 @@ struct PlayerView: View {
 
                         Spacer()
 
+                        #if os(macOS)
+                        Button {
+                            toggleFullScreen()
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        #endif
+
                         Button {
                             viewModel.showDebugOverlay.toggle()
                         } label: {
@@ -115,6 +127,12 @@ struct PlayerView: View {
             scheduleHideControls()
         }
     }
+
+    #if os(macOS)
+    private func toggleFullScreen() {
+        NSApp.keyWindow?.toggleFullScreen(nil)
+    }
+    #endif
 
     private func scheduleHideControls() {
         hideControlsTask?.cancel()

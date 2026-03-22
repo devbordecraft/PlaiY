@@ -10,6 +10,60 @@ struct VideoUniforms {
     var edrHeadroom: Float = 1.0
     var maxLuminance: Float = 100.0
     var sdrWhite: Float = 203.0
+
+    // HDR10+ dynamic metadata
+    var hdr10plusPresent: Int32 = 0
+    var kneePointX: Float = 0.0
+    var kneePointY: Float = 0.0
+    var numBezierAnchors: Int32 = 0
+    var bezierAnchors: (Float, Float, Float, Float, Float,
+                        Float, Float, Float, Float, Float,
+                        Float, Float, Float, Float, Float) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+    var targetMaxLuminance: Float = 0.0
+}
+
+struct DoviUniforms {
+    var present: Int32 = 0
+
+    // Per-component reshaping curves
+    var numPivots: (Int32, Int32, Int32) = (0, 0, 0)
+    var pivots: ((Float,Float,Float,Float,Float,Float,Float,Float,Float),
+                 (Float,Float,Float,Float,Float,Float,Float,Float,Float),
+                 (Float,Float,Float,Float,Float,Float,Float,Float,Float)) =
+        ((0,0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0,0))
+    var polyOrder: ((Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32),
+                    (Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32),
+                    (Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32)) =
+        ((0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0))
+    var polyCoef: (
+        // component 0: 8 pieces x 3 coefficients
+        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
+         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float)),
+        // component 1
+        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
+         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float)),
+        // component 2
+        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
+         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float))
+    ) = (
+        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)),
+        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)),
+        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0))
+    )
+
+    // Per-frame brightness
+    var minPQ: Float = 0
+    var maxPQ: Float = 0
+    var avgPQ: Float = 0
+    var sourceMaxPQ: Float = 0
+    var sourceMinPQ: Float = 0
+
+    // Trim
+    var trimSlope: Float = 1.0
+    var trimOffset: Float = 0.0
+    var trimPower: Float = 1.0
+    var trimChromaWeight: Float = 1.0
+    var trimSaturationGain: Float = 1.0
 }
 
 class MetalViewCoordinator {
@@ -184,16 +238,88 @@ class MetalViewCoordinator {
         }
 
         // Query EDR headroom from the display.
-        // Use maximumPotentialExtendedDynamicRangeColorComponentValue (hardware capability)
-        // instead of maximumExtendedDynamicRangeColorComponentValue (current state),
-        // because the latter is 1.0 until the system detects HDR content — creating a
-        // chicken-and-egg problem where tone mapping clips to 1.0 and EDR never activates.
         #if os(macOS)
         if let screen = view.window?.screen {
             uniforms.edrHeadroom = Float(screen.maximumPotentialExtendedDynamicRangeColorComponentValue)
         }
         #endif
         uniforms.edrHeadroom = max(uniforms.edrHeadroom, 1.0)
+
+        // Populate HDR10+ per-frame dynamic metadata
+        if PlayerBridge.frameHasHDR10Plus(framePtr) {
+            uniforms.hdr10plusPresent = 1
+            uniforms.kneePointX = PlayerBridge.frameHDR10PlusKneeX(framePtr)
+            uniforms.kneePointY = PlayerBridge.frameHDR10PlusKneeY(framePtr)
+            uniforms.targetMaxLuminance = PlayerBridge.frameHDR10PlusTargetMaxLum(framePtr)
+
+            let anchors = PlayerBridge.frameHDR10PlusAnchors(framePtr)
+            uniforms.numBezierAnchors = Int32(anchors.count)
+            withUnsafeMutablePointer(to: &uniforms.bezierAnchors) { ptr in
+                ptr.withMemoryRebound(to: Float.self, capacity: 15) { floatPtr in
+                    for i in 0..<min(anchors.count, 15) {
+                        floatPtr[i] = anchors[i]
+                    }
+                }
+            }
+        }
+
+        // Populate Dolby Vision per-frame RPU metadata
+        var doviUniforms = DoviUniforms()
+        if let dovi = PlayerBridge.frameGetDovi(framePtr) {
+            doviUniforms.present = 1
+            doviUniforms.minPQ = dovi.min_pq
+            doviUniforms.maxPQ = dovi.max_pq
+            doviUniforms.avgPQ = dovi.avg_pq
+            doviUniforms.sourceMaxPQ = dovi.source_max_pq
+            doviUniforms.sourceMinPQ = dovi.source_min_pq
+            doviUniforms.trimSlope = dovi.trim_slope
+            doviUniforms.trimOffset = dovi.trim_offset
+            doviUniforms.trimPower = dovi.trim_power
+            doviUniforms.trimChromaWeight = dovi.trim_chroma_weight
+            doviUniforms.trimSaturationGain = dovi.trim_saturation_gain
+
+            // Copy reshaping curves from C struct tuples into DoviUniforms.
+            // C arrays are imported as tuples in Swift; use withMemoryRebound
+            // to bulk-copy the flat memory layout.
+            withUnsafePointer(to: dovi.curves) { srcPtr in
+                srcPtr.withMemoryRebound(to: PYDoviCurve.self, capacity: 3) { curves in
+                    for c in 0..<3 {
+                        withUnsafeMutablePointer(to: &doviUniforms.numPivots) { p in
+                            p.withMemoryRebound(to: Int32.self, capacity: 3) { dst in
+                                dst[c] = curves[c].num_pivots
+                            }
+                        }
+                        withUnsafePointer(to: curves[c].pivots) { src in
+                            src.withMemoryRebound(to: Float.self, capacity: 9) { srcF in
+                                withUnsafeMutablePointer(to: &doviUniforms.pivots) { dst in
+                                    dst.withMemoryRebound(to: Float.self, capacity: 27) { dstF in
+                                        for i in 0..<9 { dstF[c * 9 + i] = srcF[i] }
+                                    }
+                                }
+                            }
+                        }
+                        withUnsafePointer(to: curves[c].poly_order) { src in
+                            src.withMemoryRebound(to: Int32.self, capacity: 8) { srcI in
+                                withUnsafeMutablePointer(to: &doviUniforms.polyOrder) { dst in
+                                    dst.withMemoryRebound(to: Int32.self, capacity: 24) { dstI in
+                                        for i in 0..<8 { dstI[c * 8 + i] = srcI[i] }
+                                    }
+                                }
+                            }
+                        }
+                        withUnsafePointer(to: curves[c].poly_coef) { src in
+                            src.withMemoryRebound(to: Float.self, capacity: 24) { srcF in
+                                withUnsafeMutablePointer(to: &doviUniforms.polyCoef) { dst in
+                                    dst.withMemoryRebound(to: Float.self, capacity: 72) { dstF in
+                                        for i in 0..<24 { dstF[c * 24 + i] = srcF[i] }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Configure CAEDRMetadata so macOS activates HDR mode on the display.
         // Only update when the content type changes to avoid per-frame overhead.
@@ -262,6 +388,7 @@ class MetalViewCoordinator {
         encoder.setFragmentTexture(yTex, index: 0)
         encoder.setFragmentTexture(uvTex, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)
+        encoder.setFragmentBytes(&doviUniforms, length: MemoryLayout<DoviUniforms>.size, index: 1)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 

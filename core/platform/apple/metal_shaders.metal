@@ -132,6 +132,66 @@ float3 hdrToneMap(float3 linearCdm2, float sdrWhite, float maxLum, float edrHead
     return clamp(mapped, 0.0, peak);
 }
 
+// BT.2390 EETF: hermite spline tone mapping in PQ domain.
+// Maps a PQ-encoded value from source range to display range with smooth roll-off.
+float bt2390EETF(float pqVal, float srcMaxPQ, float dstMaxPQ) {
+    float e = pqVal / max(srcMaxPQ, 0.001);
+
+    // Knee start: where compression begins
+    float ks = 1.5 * dstMaxPQ / srcMaxPQ - 0.5;
+    ks = clamp(ks, 0.0, 1.0);
+
+    if (e <= ks) {
+        return e * srcMaxPQ;
+    }
+
+    // Hermite spline in [ks, 1] -> [ks, maxBound]
+    float t = (e - ks) / (1.0 - ks);
+    float t2 = t * t;
+    float t3 = t2 * t;
+
+    float maxBound = dstMaxPQ / srcMaxPQ;
+    float p = 2.0 * t3 - 3.0 * t2 + 1.0;
+    float q = t3 - 2.0 * t2 + t;
+    float r = -2.0 * t3 + 3.0 * t2;
+
+    float result = p * ks + q * (1.0 - ks) + r * maxBound;
+    return result * srcMaxPQ;
+}
+
+// HDR10+ bezier curve evaluation (SMPTE ST 2094-40).
+// Evaluates a bezier curve defined by knee point and anchor points.
+// Input/output in PQ-normalized [0, 1] domain.
+float hdr10plusBezier(float x, float kneeX, float kneeY,
+                      int numAnchors, constant float* anchors) {
+    if (x <= kneeX) {
+        // Below knee: linear mapping
+        return (kneeX > 0.0) ? x * (kneeY / kneeX) : 0.0;
+    }
+
+    // Above knee: bezier curve on [kneeX, 1] -> [kneeY, 1]
+    float t = (x - kneeX) / (1.0 - kneeX);
+
+    // Control points: [kneeY, anchors..., 1.0]
+    float pts[17];
+    pts[0] = kneeY;
+    for (int i = 0; i < numAnchors && i < 15; i++) {
+        pts[i + 1] = anchors[i];
+    }
+    pts[numAnchors + 1] = 1.0;
+    int n = numAnchors + 1; // bezier degree
+
+    // De Casteljau evaluation
+    float work[17];
+    for (int i = 0; i <= n; i++) work[i] = pts[i];
+    for (int r = 1; r <= n; r++) {
+        for (int i = 0; i <= n - r; i++) {
+            work[i] = (1.0 - t) * work[i] + t * work[i + 1];
+        }
+    }
+    return work[0];
+}
+
 // ---- Uniforms ----
 
 struct VideoUniforms {
@@ -141,6 +201,54 @@ struct VideoUniforms {
     float edrHeadroom;  // Max EDR value (e.g., 2.0 means 2x SDR brightness)
     float maxLuminance; // Max content luminance in cd/m2
     float sdrWhite;     // SDR reference white in cd/m2 (typically 203)
+
+    // HDR10+ dynamic metadata
+    int hdr10plusPresent;       // 0=no, 1=yes
+    float kneePointX;
+    float kneePointY;
+    int numBezierAnchors;
+    float bezierAnchors[15];
+    float targetMaxLuminance;
+};
+
+// Dolby Vision reshaping uniforms (passed as buffer(1))
+struct DoviUniforms {
+    int present;                   // 0=no, 1=yes
+
+    // Per-component reshaping curves
+    int numPivots[3];
+    float pivots[3][9];
+    int polyOrder[3][8];
+    float polyCoef[3][8][3];
+
+    // Per-frame brightness (PQ normalized)
+    float minPQ, maxPQ, avgPQ;
+    float sourceMaxPQ, sourceMinPQ;
+
+    // Trim
+    float trimSlope, trimOffset, trimPower;
+    float trimChromaWeight, trimSaturationGain;
+};
+
+// Evaluate DV piecewise polynomial reshaping for one component
+float doviReshape(float x, int numPivots, constant float* pivots,
+                  constant int* polyOrder, constant float polyCoef[][3]) {
+    if (numPivots < 2) return x;
+
+    // Find which piece x falls into
+    int piece = 0;
+    for (int i = 1; i < numPivots - 1; i++) {
+        if (x >= pivots[i]) piece = i;
+    }
+
+    float c0 = polyCoef[piece][0];
+    float c1 = polyCoef[piece][1];
+    float c2 = polyCoef[piece][2];
+    float result = c0 + c1 * x;
+    if (polyOrder[piece] >= 2) {
+        result += c2 * x * x;
+    }
+    return clamp(result, 0.0, 1.0);
 };
 
 // ---- NV12/P010 fragment shader (biplanar: Y + UV textures) ----
@@ -149,7 +257,8 @@ fragment float4 fragmentBiplanar(
     VertexOut in [[stage_in]],
     texture2d<float> textureY [[texture(0)]],
     texture2d<float> textureUV [[texture(1)]],
-    constant VideoUniforms& uniforms [[buffer(0)]])
+    constant VideoUniforms& uniforms [[buffer(0)]],
+    constant DoviUniforms& doviUniforms [[buffer(1)]])
 {
     constexpr sampler texSampler(mag_filter::linear, min_filter::linear);
 
@@ -188,13 +297,61 @@ fragment float4 fragmentBiplanar(
     }
     // Apply transfer function and tone mapping
     if (uniforms.transferFunc == 1) {
-        // PQ HDR10: clamp to valid signal range first (chroma overshoot can
-        // produce values outside [0,1] which cause NaN in pow()).
+        // PQ content (HDR10 / HDR10+ / Dolby Vision)
         rgb = clamp(rgb, 0.0, 1.0);
-        float3 linear = pqEOTF(rgb);
-        float sdrWhite = max(uniforms.sdrWhite, 1.0);
-        float maxLum = max(uniforms.maxLuminance, 1000.0);
-        rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
+
+        if (doviUniforms.present != 0) {
+            // Dolby Vision: apply polynomial reshaping in PQ domain, then EOTF
+            float3 reshaped;
+            reshaped.x = doviReshape(rgb.x, doviUniforms.numPivots[0],
+                                     doviUniforms.pivots[0], doviUniforms.polyOrder[0],
+                                     doviUniforms.polyCoef[0]);
+            reshaped.y = doviReshape(rgb.y, doviUniforms.numPivots[1],
+                                     doviUniforms.pivots[1], doviUniforms.polyOrder[1],
+                                     doviUniforms.polyCoef[1]);
+            reshaped.z = doviReshape(rgb.z, doviUniforms.numPivots[2],
+                                     doviUniforms.pivots[2], doviUniforms.polyOrder[2],
+                                     doviUniforms.polyCoef[2]);
+            float3 linear = pqEOTF(reshaped);
+            float sdrWhite = max(uniforms.sdrWhite, 1.0);
+            float maxLum = max(uniforms.maxLuminance, 1000.0);
+            rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
+        } else if (uniforms.hdr10plusPresent != 0) {
+            // HDR10+: apply bezier curve tone mapping per-channel
+            float3 norm = rgb; // already in PQ [0, 1]
+            for (int i = 0; i < 3; i++) {
+                norm[i] = hdr10plusBezier(norm[i], uniforms.kneePointX,
+                                          uniforms.kneePointY,
+                                          uniforms.numBezierAnchors,
+                                          uniforms.bezierAnchors);
+            }
+            // Bezier output is PQ-normalized for target display; apply EOTF
+            float3 linear = pqEOTF(norm);
+            float sdrWhite = max(uniforms.sdrWhite, 1.0);
+            rgb = linear / sdrWhite;
+            rgb = clamp(rgb, 0.0, uniforms.edrHeadroom);
+        } else {
+            // Static HDR10: BT.2390 EETF
+            float3 linear = pqEOTF(rgb);
+            float sdrWhite = max(uniforms.sdrWhite, 1.0);
+            float maxLum = max(uniforms.maxLuminance, 1000.0);
+
+            // Convert source max luminance to PQ for BT.2390
+            // PQ inverse: L -> PQ signal. Approximate using the content's max luminance.
+            float srcMaxPQ = max(maxLum / 10000.0, 0.01);
+            float dstMaxPQ = max(uniforms.edrHeadroom * sdrWhite / 10000.0, 0.01);
+
+            if (srcMaxPQ > dstMaxPQ * 1.1) {
+                // Source brighter than display: apply BT.2390 compression
+                float3 pqNorm = rgb; // PQ signal values
+                for (int i = 0; i < 3; i++) {
+                    pqNorm[i] = bt2390EETF(pqNorm[i], srcMaxPQ, dstMaxPQ);
+                }
+                linear = pqEOTF(pqNorm);
+            }
+            rgb = linear / sdrWhite;
+            rgb = clamp(rgb, 0.0, uniforms.edrHeadroom);
+        }
     } else if (uniforms.transferFunc == 2) {
         // HLG: same clamp needed
         rgb = clamp(rgb, 0.0, 1.0);

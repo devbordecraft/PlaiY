@@ -74,6 +74,55 @@ struct HDRMetadata {
     uint16_t max_frame_average_light_level = 0;
 };
 
+// HDR10+ per-frame dynamic metadata (SMPTE ST 2094-40)
+struct HDR10PlusMetadata {
+    bool present = false;
+
+    // Targeted system display max luminance (cd/m2)
+    float targeted_max_luminance = 0.0f;
+
+    // Bezier curve knee point (normalized [0,1])
+    float knee_point_x = 0.0f;
+    float knee_point_y = 0.0f;
+
+    // Bezier curve anchor points (up to 15)
+    int num_bezier_anchors = 0;
+    float bezier_anchors[15] = {};
+
+    // Per-window scene max luminance (R, G, B) in cd/m2
+    float maxscl[3] = {};
+};
+
+// Dolby Vision per-frame RPU metadata (Profile 8)
+struct DoviMetadata {
+    bool present = false;
+
+    // Per-component polynomial reshaping curves
+    struct ReshapingCurve {
+        int num_pivots = 0;         // [2, 9]
+        float pivots[9] = {};       // normalized [0, 1]
+        int poly_order[8] = {};     // 1 or 2 per piece
+        float poly_coef[8][3] = {}; // c0, c1, c2 per piece
+    };
+    ReshapingCurve curves[3];       // Y, Cb, Cr
+
+    // DM Level 1: per-frame brightness (PQ-normalized [0, 1])
+    float min_pq = 0.0f;
+    float max_pq = 0.0f;
+    float avg_pq = 0.0f;
+
+    // DM Level 2: trim for target display
+    float trim_slope = 1.0f;
+    float trim_offset = 0.0f;
+    float trim_power = 1.0f;
+    float trim_chroma_weight = 1.0f;
+    float trim_saturation_gain = 1.0f;
+
+    // Source signal range (PQ-normalized)
+    float source_max_pq = 0.0f;
+    float source_min_pq = 0.0f;
+};
+
 struct TrackInfo {
     int stream_index = -1;
     MediaType type = MediaType::Unknown;
@@ -164,6 +213,10 @@ struct VideoFrame {
     int color_primaries = 0;
     int color_trc = 0;
     int color_range = 0; // 0=unspecified, 1=MPEG/limited, 2=JPEG/full
+
+    // Per-frame dynamic HDR metadata
+    HDR10PlusMetadata hdr10plus;
+    DoviMetadata dovi;
 
     // Software decoded frame: plane pointers and strides
     uint8_t* planes[4] = {};

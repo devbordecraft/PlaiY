@@ -5,6 +5,8 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/hdr_dynamic_metadata.h>
+#include <libavutil/dovi_meta.h>
 #include <libswscale/swscale.h>
 }
 
@@ -165,6 +167,92 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     out.hdr_metadata = track_info_.hdr_metadata;
     out.sar_num = track_info_.sar_num;
     out.sar_den = track_info_.sar_den;
+
+    // Extract HDR10+ per-frame dynamic metadata
+    {
+        AVFrameSideData* sd = av_frame_get_side_data(
+            av_frame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
+        if (sd && sd->size >= sizeof(AVDynamicHDRPlus)) {
+            auto* hdr10p = reinterpret_cast<const AVDynamicHDRPlus*>(sd->data);
+            out.hdr10plus.present = true;
+            out.hdr10plus.targeted_max_luminance =
+                static_cast<float>(av_q2d(hdr10p->targeted_system_display_maximum_luminance));
+
+            if (hdr10p->num_windows >= 1) {
+                const auto& p = hdr10p->params[0];
+                for (int i = 0; i < 3; i++) {
+                    out.hdr10plus.maxscl[i] =
+                        static_cast<float>(av_q2d(p.maxscl[i]));
+                }
+                if (p.tone_mapping_flag) {
+                    out.hdr10plus.knee_point_x = static_cast<float>(av_q2d(p.knee_point_x));
+                    out.hdr10plus.knee_point_y = static_cast<float>(av_q2d(p.knee_point_y));
+                    out.hdr10plus.num_bezier_anchors = p.num_bezier_curve_anchors;
+                    for (int i = 0; i < p.num_bezier_curve_anchors && i < 15; i++) {
+                        out.hdr10plus.bezier_anchors[i] =
+                            static_cast<float>(av_q2d(p.bezier_curve_anchors[i]));
+                    }
+                }
+            }
+        }
+    }
+
+    // Extract Dolby Vision per-frame RPU metadata
+    {
+        AVFrameSideData* sd = av_frame_get_side_data(
+            av_frame, AV_FRAME_DATA_DOVI_METADATA);
+        if (sd && sd->data) {
+            auto* dovi = reinterpret_cast<const AVDOVIMetadata*>(sd->data);
+            const AVDOVIDataMapping* mapping = av_dovi_get_mapping(dovi);
+            const AVDOVIColorMetadata* color = av_dovi_get_color(dovi);
+            const AVDOVIRpuDataHeader* header = av_dovi_get_header(dovi);
+
+            if (mapping && color && header) {
+                out.dovi.present = true;
+                out.dovi.source_max_pq = static_cast<float>(color->source_max_pq) / 4095.0f;
+                out.dovi.source_min_pq = static_cast<float>(color->source_min_pq) / 4095.0f;
+
+                float coef_scale = 1.0f / static_cast<float>(1 << header->coef_log2_denom);
+
+                // Extract reshaping curves per component
+                for (int c = 0; c < 3; c++) {
+                    const AVDOVIReshapingCurve& src = mapping->curves[c];
+                    auto& dst = out.dovi.curves[c];
+                    dst.num_pivots = src.num_pivots;
+                    for (int i = 0; i < src.num_pivots && i < 9; i++) {
+                        dst.pivots[i] = static_cast<float>(src.pivots[i]) / 4095.0f;
+                    }
+                    for (int i = 0; i < src.num_pivots - 1 && i < 8; i++) {
+                        if (src.mapping_idc[i] == AV_DOVI_MAPPING_POLYNOMIAL) {
+                            dst.poly_order[i] = src.poly_order[i];
+                            for (int j = 0; j <= src.poly_order[i] && j < 3; j++) {
+                                dst.poly_coef[i][j] =
+                                    static_cast<float>(src.poly_coef[i][j]) * coef_scale;
+                            }
+                        }
+                    }
+                }
+
+                // DM Level 1: per-frame brightness
+                AVDOVIDmData* l1 = av_dovi_find_level(dovi, 1);
+                if (l1) {
+                    out.dovi.min_pq = static_cast<float>(l1->l1.min_pq) / 4095.0f;
+                    out.dovi.max_pq = static_cast<float>(l1->l1.max_pq) / 4095.0f;
+                    out.dovi.avg_pq = static_cast<float>(l1->l1.avg_pq) / 4095.0f;
+                }
+
+                // DM Level 2: trim for target display
+                AVDOVIDmData* l2 = av_dovi_find_level(dovi, 2);
+                if (l2) {
+                    out.dovi.trim_slope = static_cast<float>(l2->l2.trim_slope) / 4096.0f;
+                    out.dovi.trim_offset = static_cast<float>(l2->l2.trim_offset) / 4096.0f;
+                    out.dovi.trim_power = static_cast<float>(l2->l2.trim_power) / 4096.0f;
+                    out.dovi.trim_chroma_weight = static_cast<float>(l2->l2.trim_chroma_weight) / 4096.0f;
+                    out.dovi.trim_saturation_gain = static_cast<float>(l2->l2.trim_saturation_gain) / 4096.0f;
+                }
+            }
+        }
+    }
 
 #ifdef __APPLE__
     // On Apple, wrap the decoded frame in a CVPixelBuffer so the Metal

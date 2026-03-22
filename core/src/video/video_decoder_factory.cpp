@@ -1,6 +1,7 @@
 #include "video_decoder_factory.h"
 #include "ff_video_decoder.h"
 #include "plaiy/logger.h"
+#include "plaiy/types.h"
 
 #ifdef __APPLE__
 #include "../../platform/apple/vt_video_decoder.h"
@@ -27,6 +28,19 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(const TrackInfo& trac
             break;
         default:
             break;
+    }
+
+    // HDR10+ and DV Profile 8: use FFmpeg SW decoder so per-frame dynamic
+    // metadata (bezier curves, RPU) is available via AVFrame side data.
+    // VideoToolbox strips this metadata from the bitstream.
+    if (vt_candidate && track.hdr_metadata.type == HDRType::HDR10Plus) {
+        PY_LOG_INFO(TAG, "HDR10+ content: using FFmpeg decoder for dynamic metadata");
+        vt_candidate = false;
+    }
+    if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision &&
+        track.dv_profile == 8) {
+        PY_LOG_INFO(TAG, "DV Profile 8: using FFmpeg decoder for RPU metadata");
+        vt_candidate = false;
     }
 
     if (vt_candidate) {

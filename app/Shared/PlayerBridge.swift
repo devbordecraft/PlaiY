@@ -153,6 +153,52 @@ class PlayerBridge {
         py_player_frame_is_hardware(frame)
     }
 
+    // HDR10+ per-frame dynamic metadata
+    static func frameHasHDR10Plus(_ frame: UnsafeMutableRawPointer) -> Bool {
+        py_player_frame_has_hdr10plus(frame)
+    }
+
+    static func frameHDR10PlusTargetMaxLum(_ frame: UnsafeMutableRawPointer) -> Float {
+        py_player_frame_hdr10plus_target_max_lum(frame)
+    }
+
+    static func frameHDR10PlusKneeX(_ frame: UnsafeMutableRawPointer) -> Float {
+        py_player_frame_hdr10plus_knee_x(frame)
+    }
+
+    static func frameHDR10PlusKneeY(_ frame: UnsafeMutableRawPointer) -> Float {
+        py_player_frame_hdr10plus_knee_y(frame)
+    }
+
+    static func frameHDR10PlusAnchors(_ frame: UnsafeMutableRawPointer) -> [Float] {
+        let count = Int(py_player_frame_hdr10plus_num_anchors(frame))
+        guard count > 0 else { return [] }
+        var anchors = [Float](repeating: 0, count: count)
+        py_player_frame_hdr10plus_anchors(frame, &anchors, Int32(count))
+        return anchors
+    }
+
+    static func frameHDR10PlusMaxSCL(_ frame: UnsafeMutableRawPointer) -> (Float, Float, Float) {
+        var rgb: (Float, Float, Float) = (0, 0, 0)
+        withUnsafeMutablePointer(to: &rgb) { ptr in
+            ptr.withMemoryRebound(to: Float.self, capacity: 3) { floatPtr in
+                py_player_frame_hdr10plus_maxscl(frame, floatPtr)
+            }
+        }
+        return rgb
+    }
+
+    // Dolby Vision per-frame RPU metadata
+    static func frameHasDovi(_ frame: UnsafeMutableRawPointer) -> Bool {
+        py_player_frame_has_dovi(frame)
+    }
+
+    static func frameGetDovi(_ frame: UnsafeMutableRawPointer) -> PYDoviMetadata? {
+        var meta = PYDoviMetadata()
+        guard py_player_frame_get_dovi(frame, &meta) else { return nil }
+        return meta
+    }
+
     // Subtitle
     func getSubtitle(at timestamp: Int64) -> SubtitleData? {
         guard let sf = py_player_get_subtitle(handle, timestamp) else { return nil }

@@ -275,6 +275,86 @@ bool py_player_frame_is_hardware(void* frame) {
     return static_cast<py::VideoFrame*>(frame)->hardware_frame;
 }
 
+// ---- HDR10+ per-frame dynamic metadata ----
+
+bool py_player_frame_has_hdr10plus(void* frame) {
+    if (!frame) return false;
+    return static_cast<py::VideoFrame*>(frame)->hdr10plus.present;
+}
+
+float py_player_frame_hdr10plus_target_max_lum(void* frame) {
+    if (!frame) return 0.0f;
+    return static_cast<py::VideoFrame*>(frame)->hdr10plus.targeted_max_luminance;
+}
+
+float py_player_frame_hdr10plus_knee_x(void* frame) {
+    if (!frame) return 0.0f;
+    return static_cast<py::VideoFrame*>(frame)->hdr10plus.knee_point_x;
+}
+
+float py_player_frame_hdr10plus_knee_y(void* frame) {
+    if (!frame) return 0.0f;
+    return static_cast<py::VideoFrame*>(frame)->hdr10plus.knee_point_y;
+}
+
+int py_player_frame_hdr10plus_num_anchors(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->hdr10plus.num_bezier_anchors;
+}
+
+int py_player_frame_hdr10plus_anchors(void* frame, float* anchors, int max_count) {
+    if (!frame || !anchors) return 0;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    int n = vf->hdr10plus.num_bezier_anchors;
+    if (n > max_count) n = max_count;
+    for (int i = 0; i < n; i++) {
+        anchors[i] = vf->hdr10plus.bezier_anchors[i];
+    }
+    return n;
+}
+
+void py_player_frame_hdr10plus_maxscl(void* frame, float* rgb3) {
+    if (!frame || !rgb3) return;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    rgb3[0] = vf->hdr10plus.maxscl[0];
+    rgb3[1] = vf->hdr10plus.maxscl[1];
+    rgb3[2] = vf->hdr10plus.maxscl[2];
+}
+
+// ---- Dolby Vision per-frame RPU metadata ----
+
+bool py_player_frame_has_dovi(void* frame) {
+    if (!frame) return false;
+    return static_cast<py::VideoFrame*>(frame)->dovi.present;
+}
+
+bool py_player_frame_get_dovi(void* frame, PYDoviMetadata* out) {
+    if (!frame || !out) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi.present) return false;
+
+    for (int c = 0; c < 3; c++) {
+        const auto& src = vf->dovi.curves[c];
+        out->curves[c].num_pivots = src.num_pivots;
+        for (int i = 0; i < 9; i++) out->curves[c].pivots[i] = src.pivots[i];
+        for (int i = 0; i < 8; i++) {
+            out->curves[c].poly_order[i] = src.poly_order[i];
+            for (int j = 0; j < 3; j++) out->curves[c].poly_coef[i][j] = src.poly_coef[i][j];
+        }
+    }
+    out->min_pq = vf->dovi.min_pq;
+    out->max_pq = vf->dovi.max_pq;
+    out->avg_pq = vf->dovi.avg_pq;
+    out->source_max_pq = vf->dovi.source_max_pq;
+    out->source_min_pq = vf->dovi.source_min_pq;
+    out->trim_slope = vf->dovi.trim_slope;
+    out->trim_offset = vf->dovi.trim_offset;
+    out->trim_power = vf->dovi.trim_power;
+    out->trim_chroma_weight = vf->dovi.trim_chroma_weight;
+    out->trim_saturation_gain = vf->dovi.trim_saturation_gain;
+    return true;
+}
+
 // ---- Subtitle ----
 
 PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us) {

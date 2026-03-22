@@ -133,6 +133,35 @@ int         py_player_frame_get_color_primaries(void* frame);
 int         py_player_frame_get_color_range(void* frame);  // 0=unspecified, 1=limited, 2=full
 bool        py_player_frame_is_hardware(void* frame);
 
+// ---- HDR10+ per-frame dynamic metadata ----
+bool        py_player_frame_has_hdr10plus(void* frame);
+float       py_player_frame_hdr10plus_target_max_lum(void* frame);
+float       py_player_frame_hdr10plus_knee_x(void* frame);
+float       py_player_frame_hdr10plus_knee_y(void* frame);
+int         py_player_frame_hdr10plus_num_anchors(void* frame);
+// Fills up to max_count floats into anchors[], returns actual count
+int         py_player_frame_hdr10plus_anchors(void* frame, float* anchors, int max_count);
+void        py_player_frame_hdr10plus_maxscl(void* frame, float* rgb3);
+
+// ---- Dolby Vision per-frame RPU metadata ----
+typedef struct {
+    int num_pivots;
+    float pivots[9];
+    int poly_order[8];
+    float poly_coef[8][3];
+} PYDoviCurve;
+
+typedef struct {
+    PYDoviCurve curves[3];  // Y, Cb, Cr
+    float min_pq, max_pq, avg_pq;
+    float source_max_pq, source_min_pq;
+    float trim_slope, trim_offset, trim_power;
+    float trim_chroma_weight, trim_saturation_gain;
+} PYDoviMetadata;
+
+bool        py_player_frame_has_dovi(void* frame);
+bool        py_player_frame_get_dovi(void* frame, PYDoviMetadata* out);
+
 // ---- Subtitle ----
 typedef struct {
     // For text subtitles
