@@ -5,6 +5,8 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/mastering_display_metadata.h>
+#include <libavutil/dovi_meta.h>
 }
 
 static constexpr const char* TAG = "FFDemuxer";
@@ -167,9 +169,23 @@ void FFDemuxer::populate_media_info() {
                 track.color_space = par->color_space;
                 track.color_primaries = par->color_primaries;
                 track.color_trc = par->color_trc;
+                track.color_range = par->color_range;
 
                 if (stream->avg_frame_rate.den > 0) {
                     track.frame_rate = av_q2d(stream->avg_frame_rate);
+                }
+
+                // Sample Aspect Ratio — needed for correct display aspect ratio.
+                // Try codec parameters first, then stream-level SAR.
+                {
+                    AVRational sar = par->sample_aspect_ratio;
+                    if (sar.num <= 0 || sar.den <= 0) {
+                        sar = stream->sample_aspect_ratio;
+                    }
+                    if (sar.num > 0 && sar.den > 0) {
+                        track.sar_num = sar.num;
+                        track.sar_den = sar.den;
+                    }
                 }
 
                 // HDR metadata detection
@@ -185,8 +201,37 @@ void FFDemuxer::populate_media_info() {
                         stream->codecpar->coded_side_data,
                         stream->codecpar->nb_coded_side_data,
                         AV_PKT_DATA_DOVI_CONF);
-                    if (sd) {
+                    if (sd && sd->size >= sizeof(AVDOVIDecoderConfigurationRecord)) {
+                        auto* dovi = reinterpret_cast<const AVDOVIDecoderConfigurationRecord*>(sd->data);
+                        track.dv_profile = dovi->dv_profile;
+                        track.dv_level = dovi->dv_level;
+                        track.dv_bl_signal_compatibility_id = dovi->dv_bl_signal_compatibility_id;
                         track.hdr_metadata.type = HDRType::DolbyVision;
+                        PY_LOG_INFO(TAG, "Stream %d: Dolby Vision profile %d.%d, compat_id=%d",
+                                    i, dovi->dv_profile, dovi->dv_level,
+                                    dovi->dv_bl_signal_compatibility_id);
+
+                        // Profile 8 with bl_signal_compatibility_id 1 or 2:
+                        // Base layer is HDR10-compatible, use HDR10 rendering path
+                        if (dovi->dv_profile == 8 &&
+                            (dovi->dv_bl_signal_compatibility_id == 1 ||
+                             dovi->dv_bl_signal_compatibility_id == 2)) {
+                            PY_LOG_INFO(TAG, "  -> BL compatible with HDR10, using HDR10 rendering path");
+                        }
+                    }
+                }
+
+                // Check for HDR10+ dynamic metadata
+                {
+                    const AVPacketSideData* sd = av_packet_side_data_get(
+                        stream->codecpar->coded_side_data,
+                        stream->codecpar->nb_coded_side_data,
+                        AV_PKT_DATA_DYNAMIC_HDR10_PLUS);
+                    if (sd && track.hdr_metadata.type != HDRType::DolbyVision) {
+                        if (par->color_trc == AVCOL_TRC_SMPTE2084) {
+                            track.hdr_metadata.type = HDRType::HDR10Plus;
+                            PY_LOG_INFO(TAG, "Stream %d: HDR10+ dynamic metadata present", i);
+                        }
                     }
                 }
 
@@ -196,15 +241,40 @@ void FFDemuxer::populate_media_info() {
                         stream->codecpar->coded_side_data,
                         stream->codecpar->nb_coded_side_data,
                         AV_PKT_DATA_MASTERING_DISPLAY_METADATA);
-                    if (sd) {
-                        PY_LOG_DEBUG(TAG, "Stream %d has mastering display metadata", i);
+                    if (sd && sd->size >= sizeof(AVMasteringDisplayMetadata)) {
+                        auto* mdm = reinterpret_cast<const AVMasteringDisplayMetadata*>(sd->data);
+                        if (mdm->has_primaries) {
+                            for (int j = 0; j < 3; j++) {
+                                track.hdr_metadata.display_primaries_x[j] =
+                                    static_cast<uint16_t>(av_q2d(mdm->display_primaries[j][0]) * 50000.0);
+                                track.hdr_metadata.display_primaries_y[j] =
+                                    static_cast<uint16_t>(av_q2d(mdm->display_primaries[j][1]) * 50000.0);
+                            }
+                            track.hdr_metadata.white_point_x =
+                                static_cast<uint16_t>(av_q2d(mdm->white_point[0]) * 50000.0);
+                            track.hdr_metadata.white_point_y =
+                                static_cast<uint16_t>(av_q2d(mdm->white_point[1]) * 50000.0);
+                        }
+                        if (mdm->has_luminance) {
+                            track.hdr_metadata.max_luminance =
+                                static_cast<uint32_t>(av_q2d(mdm->max_luminance) * 10000.0);
+                            track.hdr_metadata.min_luminance =
+                                static_cast<uint32_t>(av_q2d(mdm->min_luminance) * 10000.0);
+                        }
+                        PY_LOG_INFO(TAG, "Stream %d mastering display: max_lum=%.0f cd/m2, min_lum=%.4f cd/m2",
+                                    i, av_q2d(mdm->max_luminance), av_q2d(mdm->min_luminance));
                     }
+
                     sd = av_packet_side_data_get(
                         stream->codecpar->coded_side_data,
                         stream->codecpar->nb_coded_side_data,
                         AV_PKT_DATA_CONTENT_LIGHT_LEVEL);
-                    if (sd) {
-                        PY_LOG_DEBUG(TAG, "Stream %d has content light level metadata", i);
+                    if (sd && sd->size >= sizeof(AVContentLightMetadata)) {
+                        auto* cll = reinterpret_cast<const AVContentLightMetadata*>(sd->data);
+                        track.hdr_metadata.max_content_light_level = static_cast<uint16_t>(cll->MaxCLL);
+                        track.hdr_metadata.max_frame_average_light_level = static_cast<uint16_t>(cll->MaxFALL);
+                        PY_LOG_INFO(TAG, "Stream %d content light: MaxCLL=%u, MaxFALL=%u",
+                                    i, cll->MaxCLL, cll->MaxFALL);
                     }
                 }
                 break;

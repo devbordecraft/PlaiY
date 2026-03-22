@@ -50,8 +50,15 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
 
     auto codec_id = static_cast<AVCodecID>(track.codec_id);
     impl_->is_hevc = (codec_id == AV_CODEC_ID_HEVC);
+
+    // Detect 10-bit: check pixel format, bit depth, and HDR indicators.
+    // par->format is often AV_PIX_FMT_NONE for HEVC in containers,
+    // so pixel_format alone is unreliable.
     impl_->is_10bit = (track.pixel_format == PixelFormat::P010 ||
-                       track.pixel_format == PixelFormat::YUV420P10);
+                       track.pixel_format == PixelFormat::YUV420P10 ||
+                       track.hdr_metadata.type != HDRType::SDR ||
+                       track.color_trc == 16 /* SMPTE2084/PQ */ ||
+                       track.color_trc == 18 /* ARIB_STD_B67/HLG */);
 
     if (track.extradata.empty()) {
         return {ErrorCode::DecoderInitFailed, "No extradata for VideoToolbox"};
@@ -107,6 +114,50 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
         CFRelease(extDict);
         CFRelease(atoms);
         CFRelease(hvcC);
+    } else if (codec_id == AV_CODEC_ID_AV1) {
+        CFDataRef av1C = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        const void* atomKeys[] = { CFSTR("av1C") };
+        const void* atomValues[] = { av1C };
+        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
+            atomKeys, atomValues, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
+            extKeys, (const void*[]){atoms}, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        status = CMVideoFormatDescriptionCreate(
+            kCFAllocatorDefault,
+            kCMVideoCodecType_AV1,
+            track.width, track.height,
+            extDict,
+            &impl_->format_desc);
+
+        CFRelease(extDict);
+        CFRelease(atoms);
+        CFRelease(av1C);
+    } else if (codec_id == AV_CODEC_ID_VP9) {
+        CFDataRef vpcC = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        const void* atomKeys[] = { CFSTR("vpcC") };
+        const void* atomValues[] = { vpcC };
+        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
+            atomKeys, atomValues, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
+            extKeys, (const void*[]){atoms}, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        status = CMVideoFormatDescriptionCreate(
+            kCFAllocatorDefault,
+            kCMVideoCodecType_VP9,
+            track.width, track.height,
+            extDict,
+            &impl_->format_desc);
+
+        CFRelease(extDict);
+        CFRelease(atoms);
+        CFRelease(vpcC);
     } else {
         return {ErrorCode::UnsupportedCodec, "VideoToolbox: unsupported codec"};
     }
@@ -150,8 +201,8 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
                 "VTDecompressionSessionCreate failed: " + std::to_string(status)};
     }
 
-    // Enable HDR metadata propagation for HEVC
-    if (impl_->is_hevc) {
+    // Enable HDR metadata propagation for HDR-capable codecs
+    if (impl_->is_hevc || codec_id == AV_CODEC_ID_AV1) {
         VTSessionSetProperty(impl_->session,
             kVTDecompressionPropertyKey_PropagatePerFrameHDRDisplayMetadata,
             kCFBooleanTrue);
@@ -194,20 +245,30 @@ Error VTVideoDecoder::send_packet(const Packet& pkt) {
         return Error::Ok();
     }
 
-    // Create CMBlockBuffer from packet data
+    // Create CMBlockBuffer with its own copy of the data.
+    // With async decode (kVTDecodeFrame_EnableAsynchronousDecompression),
+    // VT may still be reading the data after send_packet returns.
+    // The Packet can be freed on the next loop iteration, so VT must own the data.
     CMBlockBufferRef block_buffer = nullptr;
     OSStatus status = CMBlockBufferCreateWithMemoryBlock(
         kCFAllocatorDefault,
-        const_cast<uint8_t*>(pkt.data.data()),
+        nullptr,              // Let CoreMedia allocate
         pkt.data.size(),
-        kCFAllocatorNull, // no dealloc (data owned by Packet)
+        kCFAllocatorDefault,  // CoreMedia manages the allocation
         nullptr, 0,
         pkt.data.size(),
-        0,
+        kCMBlockBufferAssureMemoryNowFlag,
         &block_buffer);
 
     if (status != noErr || !block_buffer) {
         return {ErrorCode::DecoderError, "Failed to create block buffer"};
+    }
+
+    status = CMBlockBufferReplaceDataBytes(
+        pkt.data.data(), block_buffer, 0, pkt.data.size());
+    if (status != noErr) {
+        CFRelease(block_buffer);
+        return {ErrorCode::DecoderError, "Failed to copy data to block buffer"};
     }
 
     // Create CMSampleBuffer
@@ -262,11 +323,6 @@ Error VTVideoDecoder::send_packet(const Packet& pkt) {
 }
 
 Error VTVideoDecoder::receive_frame(VideoFrame& out) {
-    // Wait for async decode to produce a frame
-    if (impl_->session) {
-        VTDecompressionSessionWaitForAsynchronousFrames(impl_->session);
-    }
-
     std::lock_guard lock(impl_->frame_mutex);
     if (impl_->decoded_frames.empty()) {
         return {ErrorCode::OutputNotReady};
@@ -319,11 +375,52 @@ void VTVideoDecoder::Impl::decompressionCallback(
     frame.native_buffer = imageBuffer;
     frame.owns_native_buffer = true;
 
-    // Copy HDR metadata from track
+    // Copy metadata from track
     frame.hdr_metadata = self->track_info.hdr_metadata;
     frame.color_space = self->track_info.color_space;
     frame.color_primaries = self->track_info.color_primaries;
     frame.color_trc = self->track_info.color_trc;
+    frame.color_range = self->track_info.color_range;
+    frame.sar_num = self->track_info.sar_num;
+    frame.sar_den = self->track_info.sar_den;
+
+    // Override with per-frame HDR metadata from CVPixelBuffer attachments
+    CFDictionaryRef attachments = CVBufferCopyAttachments(imageBuffer, kCVAttachmentMode_ShouldPropagate);
+    if (attachments) {
+        auto read_u16_be = [](const uint8_t* p) -> uint16_t {
+            return (uint16_t(p[0]) << 8) | p[1];
+        };
+        auto read_u32_be = [](const uint8_t* p) -> uint32_t {
+            return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
+                   (uint32_t(p[2]) << 8) | p[3];
+        };
+
+        // Mastering display color volume (MDCV) - raw HEVC SEI format
+        CFDataRef mdcv = (CFDataRef)CFDictionaryGetValue(attachments,
+            kCVImageBufferMasteringDisplayColorVolumeKey);
+        if (mdcv && CFDataGetLength(mdcv) >= 24) {
+            const uint8_t* bytes = CFDataGetBytePtr(mdcv);
+            for (int j = 0; j < 3; j++) {
+                frame.hdr_metadata.display_primaries_x[j] = read_u16_be(bytes + j * 4);
+                frame.hdr_metadata.display_primaries_y[j] = read_u16_be(bytes + j * 4 + 2);
+            }
+            frame.hdr_metadata.white_point_x = read_u16_be(bytes + 12);
+            frame.hdr_metadata.white_point_y = read_u16_be(bytes + 14);
+            frame.hdr_metadata.max_luminance = read_u32_be(bytes + 16);
+            frame.hdr_metadata.min_luminance = read_u32_be(bytes + 20);
+        }
+
+        // Content light level info (CLLI)
+        CFDataRef clli = (CFDataRef)CFDictionaryGetValue(attachments,
+            kCVImageBufferContentLightLevelInfoKey);
+        if (clli && CFDataGetLength(clli) >= 4) {
+            const uint8_t* bytes = CFDataGetBytePtr(clli);
+            frame.hdr_metadata.max_content_light_level = read_u16_be(bytes);
+            frame.hdr_metadata.max_frame_average_light_level = read_u16_be(bytes + 2);
+        }
+
+        CFRelease(attachments);
+    }
 
     std::lock_guard lock(self->frame_mutex);
     self->decoded_frames.push_back(std::move(frame));

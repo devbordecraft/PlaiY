@@ -15,6 +15,9 @@ public:
     // Push a decoded frame. Blocks if queue is full, unless aborted.
     bool push(VideoFrame frame);
 
+    // Non-blocking push. Returns false immediately if full.
+    bool try_push(VideoFrame frame);
+
     // Peek at the front frame without removing it.
     // Returns nullptr if empty or aborted.
     VideoFrame* peek();

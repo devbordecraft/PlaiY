@@ -120,6 +120,10 @@ void CAAudioOutput::close() {
     impl_->samples_played = 0;
 }
 
+void CAAudioOutput::reset_position() {
+    impl_->samples_played = 0;
+}
+
 void CAAudioOutput::start() {
     if (impl_->audio_unit && !impl_->running) {
         OSStatus status = AudioOutputUnitStart(impl_->audio_unit);

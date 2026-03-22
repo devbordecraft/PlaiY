@@ -16,9 +16,24 @@ int64_t Clock::audio_pts() const {
     return audio_pts_us_;
 }
 
+void Clock::seek_to(int64_t pts_us) {
+    std::lock_guard lock(mutex_);
+    audio_pts_us_ = pts_us;
+    last_update_ = std::chrono::steady_clock::now();
+    frozen_ = true;
+}
+
+void Clock::unfreeze() {
+    std::lock_guard lock(mutex_);
+    if (frozen_) {
+        last_update_ = std::chrono::steady_clock::now();
+        frozen_ = false;
+    }
+}
+
 int64_t Clock::now_us() const {
     std::lock_guard lock(mutex_);
-    if (paused_) return audio_pts_us_;
+    if (paused_ || frozen_) return audio_pts_us_;
 
     auto elapsed = std::chrono::steady_clock::now() - last_update_;
     auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
@@ -59,6 +74,7 @@ void Clock::reset() {
     audio_pts_us_ = 0;
     last_update_ = std::chrono::steady_clock::now();
     paused_ = true;
+    frozen_ = false;
     rate_ = 1.0;
 }
 

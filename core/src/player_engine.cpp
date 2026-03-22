@@ -48,7 +48,7 @@ struct PlayerEngine::Impl {
     // Queues
     PacketQueue video_packet_queue{128};
     PacketQueue audio_packet_queue{128};
-    FrameQueue video_frame_queue{5};
+    FrameQueue video_frame_queue{64};
 
     // Audio ring buffer for the pull callback
     std::mutex audio_buf_mutex;
@@ -57,7 +57,10 @@ struct PlayerEngine::Impl {
     size_t audio_ring_read = 0;
     size_t audio_ring_write = 0;
     size_t audio_ring_size = 0;
-    static constexpr size_t AUDIO_RING_CAPACITY = 48000 * 2 * 4; // ~4 seconds stereo
+    // Computed at open() from actual audio sample rate and output channels.
+    // Holds ~4 seconds of audio.
+    size_t audio_ring_capacity = 0;
+    static constexpr int AUDIO_RING_SECONDS = 4;
 
     int64_t audio_pts_for_ring = 0; // PTS of the audio at ring write position
 
@@ -73,6 +76,10 @@ struct PlayerEngine::Impl {
     // For audio track switching
     std::atomic<bool> audio_track_changed{false};
     int pending_audio_stream = -1; // protected by audio_buf_mutex
+
+    // Hold audio silent until video presents its first frame after play/seek.
+    // Prevents audio from driving the clock ahead of video.
+    std::atomic<bool> waiting_for_first_frame{false};
 
     // Threads
     std::thread demux_thread;
@@ -161,8 +168,10 @@ Error PlayerEngine::open_file(const std::string& path) {
                     PY_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
                     impl_->audio_output.reset();
                 } else {
-                    // Set up ring buffer
-                    impl_->audio_ring_buffer.resize(Impl::AUDIO_RING_CAPACITY);
+                    // Set up ring buffer sized for the actual audio format
+                    impl_->audio_ring_capacity = static_cast<size_t>(
+                        out_rate * out_channels * Impl::AUDIO_RING_SECONDS);
+                    impl_->audio_ring_buffer.resize(impl_->audio_ring_capacity);
                     impl_->audio_ring_read = 0;
                     impl_->audio_ring_write = 0;
                     impl_->audio_ring_size = 0;
@@ -211,6 +220,13 @@ void PlayerEngine::play() {
         impl_->demux_thread = std::thread([this] { impl_->demux_loop(); });
         impl_->video_decode_thread = std::thread([this] { impl_->video_decode_loop(); });
         impl_->audio_decode_thread = std::thread([this] { impl_->audio_decode_loop(); });
+
+        // Freeze clock and hold audio until first video frame is presented,
+        // preventing the clock from running ahead of the video pipeline.
+        if (impl_->active_video_stream >= 0) {
+            impl_->waiting_for_first_frame.store(true);
+            impl_->clock.seek_to(0);
+        }
     }
 
     impl_->clock.set_paused(false);
@@ -230,6 +246,19 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     impl_->seek_target_us = timestamp_us;
     impl_->seeking.store(true);
 
+    // Freeze clock and hold audio until the video renderer presents its first
+    // post-seek frame (prevents the clock from running ahead of video).
+    // For audio-only files, just set the PTS without freezing.
+    if (impl_->active_video_stream >= 0) {
+        impl_->waiting_for_first_frame.store(true);
+        impl_->clock.seek_to(timestamp_us);
+    } else {
+        impl_->clock.set_audio_pts(timestamp_us);
+    }
+
+    // Reset audio output position tracking
+    if (impl_->audio_output) impl_->audio_output->reset_position();
+
     // Flush queues
     impl_->video_packet_queue.flush();
     impl_->audio_packet_queue.flush();
@@ -241,6 +270,7 @@ void PlayerEngine::seek(int64_t timestamp_us) {
         impl_->audio_ring_read = 0;
         impl_->audio_ring_write = 0;
         impl_->audio_ring_size = 0;
+        impl_->audio_pts_for_ring = timestamp_us;
     }
     impl_->audio_buf_not_full.notify_one();
 
@@ -248,11 +278,15 @@ void PlayerEngine::seek(int64_t timestamp_us) {
 }
 
 void PlayerEngine::stop() {
+    // Stop audio output FIRST so CoreAudio stops pulling samples immediately
+    if (impl_->audio_output) {
+        impl_->audio_output->stop();
+    }
+
     impl_->stop_threads();
     impl_->clock.reset();
 
     if (impl_->audio_output) {
-        impl_->audio_output->stop();
         impl_->audio_output->close();
         impl_->audio_output.reset();
     }
@@ -351,9 +385,17 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
     }
 
     int64_t clock_us = impl_->clock.now_us();
-    int64_t threshold_us = 40000; // 40ms tolerance
 
-    if (front->pts_us > clock_us + threshold_us) {
+    // When waiting for the first frame after play/seek, always accept it
+    // regardless of PTS — the clock may not match the stream's start PTS.
+    bool force = impl_->waiting_for_first_frame.load();
+
+    // Pop when the frame's presentation time is within half a frame duration.
+    // This adapts to the content's framerate and avoids presenting a full
+    // vsync too early (which creates uneven frame cadence).
+    int64_t tolerance_us = front->duration_us > 0 ? front->duration_us / 2 : 8000;
+
+    if (!force && front->pts_us > clock_us + tolerance_us) {
         std::lock_guard lock(impl_->presented_frame_mutex);
         return impl_->presented_frame.get();
     }
@@ -370,11 +412,19 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
         return impl_->presented_frame.get();
     }
 
-    // Skip late frames
+    // Video has a frame — release the audio gate and unfreeze the clock.
+    // Audio and clock start together with video, ensuring A-V sync.
+    if (force) {
+        impl_->waiting_for_first_frame.store(false);
+        impl_->clock.unfreeze();
+    }
+
+    // Skip frames that are already late (PTS behind the clock).
+    // This catches up when the decoder falls behind without showing stale frames.
     VideoFrame skip_frame;
     while (true) {
         VideoFrame* next = impl_->video_frame_queue.peek();
-        if (!next || next->pts_us > clock_us + threshold_us) break;
+        if (!next || next->pts_us > clock_us) break;
         impl_->video_frame_queue.try_pop(skip_frame);
         *impl_->presented_frame = std::move(skip_frame);
     }
@@ -408,6 +458,11 @@ void PlayerEngine::Impl::demux_loop() {
         // Handle seek
         if (seeking.load()) {
             demuxer->seek(seek_target_us);
+
+            // Flush subtitles again after demuxer has seeked, to discard any
+            // stale packets that were fed between the main thread's flush and
+            // the demuxer actually repositioning.
+            subtitle_manager->flush();
 
             // Send flush packets
             Packet flush_pkt;
@@ -460,33 +515,69 @@ void PlayerEngine::Impl::video_decode_loop() {
 
     if (!video_decoder) return;
 
-    while (running.load()) {
-        Packet pkt;
-        if (!video_packet_queue.pop(pkt)) break;
+    bool skip_to_target = false;
 
-        if (pkt.is_flush) {
-            video_decoder->flush();
-            video_frame_queue.flush();
-            continue;
-        }
-
-        Error err = video_decoder->send_packet(pkt);
-        if (err && err.code != ErrorCode::NeedMoreInput) {
-            PY_LOG_WARN(TAG, "Video send_packet error: %s", err.message.c_str());
-            continue;
-        }
-
-        // Drain all available frames
+    // Helper: drain completed frames from the decoder into the frame queue.
+    // Uses blocking push — with a 64-frame queue, blocks are brief (~1 frame
+    // time) and the audio pipeline has its own 128-packet + 4-second ring
+    // buffer to survive without the demux thread.
+    // IMPORTANT: try_push was tried before but silently DROPS frames when the
+    // queue is full (the moved-from VideoFrame is destroyed). This caused
+    // periodic stuttering every ~2 seconds.
+    auto drain_frames = [&]() -> bool {
         while (running.load()) {
             VideoFrame frame;
-            err = video_decoder->receive_frame(frame);
+            Error err = video_decoder->receive_frame(frame);
             if (err.code == ErrorCode::OutputNotReady) break;
             if (err.code == ErrorCode::EndOfFile) break;
             if (err) {
                 PY_LOG_WARN(TAG, "Video receive_frame error: %s", err.message.c_str());
                 break;
             }
-            if (!video_frame_queue.push(std::move(frame))) break;
+
+            if (skip_to_target) {
+                if (frame.pts_us < seek_target_us) continue;
+                skip_to_target = false;
+            }
+
+            if (!video_frame_queue.push(std::move(frame))) return false;
+        }
+        return true;
+    };
+
+    while (running.load()) {
+        // Drain any frames completed by the async decoder from previous iterations.
+        // This is critical for VT: after send_packet, the GPU decodes asynchronously
+        // and frames arrive via callback. We must collect them before blocking on
+        // the packet queue, otherwise the frame queue starves.
+        if (!drain_frames()) break;
+
+        Packet pkt;
+        // Use timed wait: if VT has packets in flight, we need to wake up
+        // periodically to drain completed frames even if no new packets arrive.
+        // 2ms balances responsiveness vs CPU usage (well under one vsync).
+        if (!video_packet_queue.try_pop_for(pkt, std::chrono::milliseconds(2))) {
+            continue; // No packet yet — loop back to drain any completed frames
+        }
+
+        if (pkt.is_flush) {
+            video_decoder->flush();
+            video_frame_queue.flush();
+            skip_to_target = true;
+            continue;
+        }
+
+        Error send_err = video_decoder->send_packet(pkt);
+        if (send_err && send_err.code != ErrorCode::NeedMoreInput) {
+            PY_LOG_WARN(TAG, "Video send_packet error: %s", send_err.message.c_str());
+            continue;
+        }
+
+        // Drain frames that may have completed during or after send_packet
+        if (!drain_frames()) break;
+
+        if (send_err.code == ErrorCode::NeedMoreInput) {
+            video_decoder->send_packet(pkt);
         }
     }
 
@@ -537,6 +628,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
     AVPacket* av_pkt = av_packet_alloc();
     bool resampler_initialized = false;
     bool timebase_initialized = false;
+    bool skip_to_target = false;
     std::vector<float> resample_buf; // reused across frames
 
     while (running.load()) {
@@ -598,6 +690,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                             new_stream, new_track.codec_name.c_str());
             } else {
                 avcodec_flush_buffers(ctx);
+                skip_to_target = true;
             }
             continue;
         }
@@ -614,11 +707,12 @@ void PlayerEngine::Impl::audio_decode_loop() {
         av_pkt->dts = pkt.dts;
         av_pkt->duration = pkt.duration;
 
-        int ret = avcodec_send_packet(ctx, av_pkt);
-        if (ret < 0 && ret != AVERROR(EAGAIN)) continue;
+        int send_ret = avcodec_send_packet(ctx, av_pkt);
+        if (send_ret < 0 && send_ret != AVERROR(EAGAIN)) continue;
 
+        // Drain all available decoded frames
         while (running.load()) {
-            ret = avcodec_receive_frame(ctx, av_frame);
+            int ret = avcodec_receive_frame(ctx, av_frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
 
@@ -643,6 +737,16 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 pts_us = av_rescale_q(av_frame->pts, ctx->pkt_timebase, {1, 1000000});
             }
 
+            // After seek, skip audio before the target so the clock
+            // unfreezes at the right position instead of jumping backward.
+            if (skip_to_target) {
+                if (pts_us < seek_target_us) {
+                    av_frame_unref(av_frame);
+                    continue;
+                }
+                skip_to_target = false;
+            }
+
             // Write to ring buffer with proper condition variable wait
             {
                 std::unique_lock lock(audio_buf_mutex);
@@ -664,10 +768,21 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 }
                 audio_ring_write = (audio_ring_write + to_write) % capacity;
                 audio_ring_size += to_write;
-                audio_pts_for_ring = pts_us;
+                // Track PTS at the write position (END of this chunk).
+                // The clock formula is: playback_pos = audio_pts_for_ring - ring_data_duration.
+                // If we stored the START of the chunk here, the clock would be behind
+                // by one chunk duration (~21ms), causing frame timing jitter.
+                int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
+                audio_pts_for_ring = pts_us + chunk_duration_us;
             }
 
             av_frame_unref(av_frame);
+        }
+
+        // If send_packet returned EAGAIN, the packet was NOT consumed.
+        // Retry now that we've drained output frames.
+        if (send_ret == AVERROR(EAGAIN)) {
+            avcodec_send_packet(ctx, av_pkt);
         }
     }
 
@@ -680,7 +795,15 @@ void PlayerEngine::Impl::audio_decode_loop() {
 }
 
 int PlayerEngine::Impl::audio_pull(float* buffer, int frames, int channels) {
-    std::lock_guard lock(audio_buf_mutex);
+    // Hold audio silent until the first video frame is presented.
+    // This prevents the clock from advancing ahead of the video pipeline.
+    if (waiting_for_first_frame.load()) return 0;
+
+    // Use try_lock: this runs on CoreAudio's real-time thread.
+    // Blocking here causes audio glitches and clock discontinuities
+    // that cascade into video stuttering.
+    std::unique_lock lock(audio_buf_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) return 0;
     size_t needed = static_cast<size_t>(frames * channels);
     size_t available = audio_ring_size;
     size_t to_read = std::min(needed, available);
@@ -714,6 +837,9 @@ void PlayerEngine::Impl::stop_threads() {
     video_packet_queue.abort();
     audio_packet_queue.abort();
     video_frame_queue.abort();
+
+    // Wake the audio decode thread if it's blocked waiting for ring buffer space
+    audio_buf_not_full.notify_all();
 
     if (demux_thread.joinable()) demux_thread.join();
     if (video_decode_thread.joinable()) video_decode_thread.join();

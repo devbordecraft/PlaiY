@@ -82,11 +82,19 @@ struct TrackInfo {
     int width = 0;
     int height = 0;
     double frame_rate = 0.0;
+    int sar_num = 1;  // Sample Aspect Ratio numerator
+    int sar_den = 1;  // Sample Aspect Ratio denominator
     PixelFormat pixel_format = PixelFormat::Unknown;
     HDRMetadata hdr_metadata;
     int color_space = 0;
     int color_primaries = 0;
     int color_trc = 0;
+    int color_range = 0; // 0=unspecified, 1=MPEG/limited, 2=JPEG/full
+
+    // Dolby Vision info (populated when DV side data is present)
+    uint8_t dv_profile = 0;
+    uint8_t dv_level = 0;
+    uint8_t dv_bl_signal_compatibility_id = 0;
 
     // Audio-specific
     int sample_rate = 0;
@@ -139,6 +147,8 @@ struct Packet {
 struct VideoFrame {
     int width = 0;
     int height = 0;
+    int sar_num = 1;  // Sample Aspect Ratio
+    int sar_den = 1;
     int64_t pts_us = 0;     // presentation timestamp in microseconds
     int64_t duration_us = 0;
     PixelFormat pixel_format = PixelFormat::Unknown;
@@ -148,6 +158,7 @@ struct VideoFrame {
     int color_space = 0;
     int color_primaries = 0;
     int color_trc = 0;
+    int color_range = 0; // 0=unspecified, 1=MPEG/limited, 2=JPEG/full
 
     // Software decoded frame: plane pointers and strides
     uint8_t* planes[4] = {};

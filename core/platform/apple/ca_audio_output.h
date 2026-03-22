@@ -13,6 +13,7 @@ public:
     void close() override;
     void start() override;
     void stop() override;
+    void reset_position() override;
     void set_pull_callback(PullCallback cb) override;
     void set_pts_callback(PtsCallback cb) override;
     int sample_rate() const override;

@@ -77,7 +77,7 @@ float3 hlgEOTF(float3 hlg) {
     return linear * 1000.0; // HLG reference white ~1000 cd/m2
 }
 
-// sRGB/BT.709 gamma
+// sRGB/BT.709 gamma encode (linear -> gamma)
 float3 srgbGamma(float3 linear) {
     float3 result;
     for (int i = 0; i < 3; i++) {
@@ -91,11 +91,53 @@ float3 srgbGamma(float3 linear) {
     return result;
 }
 
+// sRGB/BT.709 inverse gamma (gamma-encoded -> linear)
+// Needed because CAMetalLayer uses extendedLinearDisplayP3 colorspace,
+// so all shader output must be linear light.
+float3 srgbToLinear(float3 srgb) {
+    float3 result;
+    for (int i = 0; i < 3; i++) {
+        float v = srgb[i];
+        if (v <= 0.04045) {
+            result[i] = v / 12.92;
+        } else {
+            result[i] = pow((v + 0.055) / 1.055, 2.4);
+        }
+    }
+    return result;
+}
+
+// Tone mapping for HDR content: maps linear light (cd/m2) to EDR output [0, edrHeadroom].
+// Preserves SDR range (values at sdrWhite map to 1.0), smoothly compresses highlights
+// above SDR white toward the display's EDR peak using extended Reinhard.
+float3 hdrToneMap(float3 linearCdm2, float sdrWhite, float maxLum, float edrHeadroom) {
+    // Normalize so SDR white = 1.0
+    float3 x = linearCdm2 / sdrWhite;
+    float peak = edrHeadroom;
+
+    float3 mapped;
+    for (int i = 0; i < 3; i++) {
+        float v = x[i];
+        if (v <= 1.0) {
+            // SDR range: pass through linearly (preserves SDR content perfectly)
+            mapped[i] = v;
+        } else {
+            // HDR range: compress [1, inf) -> [1, peak) using Reinhard on the excess
+            float excess = v - 1.0;
+            float headroom = peak - 1.0;
+            mapped[i] = 1.0 + headroom * excess / (excess + headroom);
+        }
+    }
+
+    return clamp(mapped, 0.0, peak);
+}
+
 // ---- Uniforms ----
 
 struct VideoUniforms {
     int colorSpace;     // 0=BT.709, 1=BT.2020
     int transferFunc;   // 0=SDR/BT.709, 1=PQ (HDR10), 2=HLG
+    int colorRange;     // 0=limited/video range, 1=full/JPEG range
     float edrHeadroom;  // Max EDR value (e.g., 2.0 means 2x SDR brightness)
     float maxLuminance; // Max content luminance in cd/m2
     float sdrWhite;     // SDR reference white in cd/m2 (typically 203)
@@ -117,34 +159,55 @@ fragment float4 fragmentBiplanar(
     // YCbCr to RGB
     float3 ycbcr = float3(y, uv.x, uv.y);
 
-    // Subtract offset (video range)
-    ycbcr -= float3(16.0/255.0, 128.0/255.0, 128.0/255.0);
-
     float3 rgb;
-    if (uniforms.colorSpace == 1) {
-        rgb = bt2020Matrix * ycbcr;
+    if (uniforms.colorRange == 1) {
+        // Full/JPEG range: Y [0,255], CbCr [0,255] with 128 center
+        ycbcr -= float3(0.0, 128.0/255.0, 128.0/255.0);
+        // Full-range BT.709 matrix (no 16-235 scaling)
+        if (uniforms.colorSpace == 1) {
+            const float3x3 bt2020Full = float3x3(
+                float3(1.0,  1.0,      1.0),
+                float3(0.0, -0.164553, 1.8814),
+                float3(1.4746, -0.571353, 0.0));
+            rgb = bt2020Full * ycbcr;
+        } else {
+            const float3x3 bt709Full = float3x3(
+                float3(1.0,  1.0,      1.0),
+                float3(0.0, -0.187324, 1.8556),
+                float3(1.5748, -0.468124, 0.0));
+            rgb = bt709Full * ycbcr;
+        }
     } else {
-        rgb = bt709Matrix * ycbcr;
+        // Limited/video range: Y [16,235], CbCr [16,240] with 128 center
+        ycbcr -= float3(16.0/255.0, 128.0/255.0, 128.0/255.0);
+        if (uniforms.colorSpace == 1) {
+            rgb = bt2020Matrix * ycbcr;
+        } else {
+            rgb = bt709Matrix * ycbcr;
+        }
     }
-    rgb = clamp(rgb, 0.0, 1.0);
-
-    // Apply transfer function
+    // Apply transfer function and tone mapping
     if (uniforms.transferFunc == 1) {
-        // PQ HDR10: convert to linear light, then scale for EDR
+        // PQ HDR10: clamp to valid signal range first (chroma overshoot can
+        // produce values outside [0,1] which cause NaN in pow()).
+        rgb = clamp(rgb, 0.0, 1.0);
         float3 linear = pqEOTF(rgb);
-        // Scale: map SDR white (203 cd/m2) to 1.0, HDR highlights go above 1.0
         float sdrWhite = max(uniforms.sdrWhite, 1.0);
-        rgb = linear / sdrWhite;
-        // Clamp to EDR headroom
-        rgb = clamp(rgb, 0.0, uniforms.edrHeadroom);
+        float maxLum = max(uniforms.maxLuminance, 1000.0);
+        rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
     } else if (uniforms.transferFunc == 2) {
-        // HLG
+        // HLG: same clamp needed
+        rgb = clamp(rgb, 0.0, 1.0);
         float3 linear = hlgEOTF(rgb);
         float sdrWhite = max(uniforms.sdrWhite, 1.0);
-        rgb = linear / sdrWhite;
-        rgb = clamp(rgb, 0.0, uniforms.edrHeadroom);
+        float maxLum = max(uniforms.maxLuminance, 1000.0);
+        rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
+    } else {
+        // SDR: YCbCr-to-RGB produces gamma-encoded values. Convert to linear
+        // because CAMetalLayer is configured with extendedLinearDisplayP3.
+        rgb = clamp(rgb, 0.0, 1.0);
+        rgb = srgbToLinear(rgb);
     }
-    // else: SDR, rgb is already in gamma-encoded form (display-ready)
 
     return float4(rgb, 1.0);
 }

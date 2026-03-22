@@ -14,9 +14,17 @@ class Clock {
 public:
     Clock();
 
-    // Set by the audio render callback
+    // Set by the audio render callback. Updates PTS but does NOT
+    // unfreeze a frozen clock — call unfreeze() explicitly.
     void set_audio_pts(int64_t pts_us);
     int64_t audio_pts() const;
+
+    // Set PTS and freeze the clock at that position.
+    // now_us() returns exactly audio_pts_us_ (no extrapolation) while frozen.
+    void seek_to(int64_t pts_us);
+
+    // Unfreeze the clock (call when video presents its first post-seek frame).
+    void unfreeze();
 
     // Get the estimated current playback time, accounting for
     // time elapsed since the last audio PTS update
@@ -35,6 +43,7 @@ private:
     int64_t audio_pts_us_ = 0;
     std::chrono::steady_clock::time_point last_update_;
     bool paused_ = true;
+    bool frozen_ = false;
     double rate_ = 1.0;
 };
 

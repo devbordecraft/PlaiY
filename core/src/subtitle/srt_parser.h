@@ -21,6 +21,12 @@ public:
     // Parse SRT content from a string
     bool parse_string(const std::string& content);
 
+    // Add a single subtitle entry (for embedded SRT packets with known timing)
+    void add_entry(int64_t start_us, int64_t end_us, const std::string& text);
+
+    // Clear all entries (used on seek flush)
+    void clear();
+
     // Get the subtitle text at the given timestamp
     SubtitleFrame get_frame_at(int64_t timestamp_us) const;
 

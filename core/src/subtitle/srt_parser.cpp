@@ -92,6 +92,19 @@ bool SrtParser::parse_string(const std::string& content) {
     return !entries_.empty();
 }
 
+void SrtParser::add_entry(int64_t start_us, int64_t end_us, const std::string& text) {
+    Entry e;
+    e.index = static_cast<int>(entries_.size()) + 1;
+    e.start_us = start_us;
+    e.end_us = end_us;
+    e.text = text;
+    entries_.push_back(std::move(e));
+}
+
+void SrtParser::clear() {
+    entries_.clear();
+}
+
 SubtitleFrame SrtParser::get_frame_at(int64_t timestamp_us) const {
     SubtitleFrame frame;
     if (entries_.empty()) return frame;

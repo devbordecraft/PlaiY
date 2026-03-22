@@ -101,12 +101,40 @@ class PlayerBridge {
         py_player_frame_get_hdr_type(frame)
     }
 
+    static func frameMaxLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
+        py_player_frame_get_max_luminance(frame)
+    }
+
+    static func frameMaxCLL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
+        py_player_frame_get_max_cll(frame)
+    }
+
     static func frameColorTrc(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_trc(frame)
     }
 
     static func frameColorSpace(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_space(frame)
+    }
+
+    static func framePts(_ frame: UnsafeMutableRawPointer) -> Int64 {
+        py_player_frame_get_pts(frame)
+    }
+
+    static func frameSarNum(_ frame: UnsafeMutableRawPointer) -> Int32 {
+        py_player_frame_get_sar_num(frame)
+    }
+
+    static func frameSarDen(_ frame: UnsafeMutableRawPointer) -> Int32 {
+        py_player_frame_get_sar_den(frame)
+    }
+
+    static func frameColorPrimaries(_ frame: UnsafeMutableRawPointer) -> Int32 {
+        py_player_frame_get_color_primaries(frame)
+    }
+
+    static func frameColorRange(_ frame: UnsafeMutableRawPointer) -> Int32 {
+        py_player_frame_get_color_range(frame)
     }
 
     static func frameIsHardware(_ frame: UnsafeMutableRawPointer) -> Bool {

@@ -14,6 +14,15 @@ bool FrameQueue::push(VideoFrame frame) {
     return true;
 }
 
+bool FrameQueue::try_push(VideoFrame frame) {
+    std::lock_guard lock(mutex_);
+    if (aborted_ || queue_.size() >= max_size_) return false;
+
+    queue_.push_back(std::move(frame));
+    not_empty_.notify_one();
+    return true;
+}
+
 VideoFrame* FrameQueue::peek() {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) return nullptr;

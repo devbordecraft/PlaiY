@@ -102,15 +102,12 @@ void SubtitleManager::feed_packet(const Packet& pkt) {
 
     switch (impl_->active_format) {
         case SubtitleFormat::SRT:
-            // Embedded SRT: packet data is the text
+            // Embedded SRT: each packet is one subtitle event with PTS + duration
             if (impl_->srt_parser) {
                 std::string text(reinterpret_cast<const char*>(pkt.data.data()), pkt.data.size());
-                // Build a mini SRT entry
-                // For embedded SRT, each packet is one subtitle event
-                impl_->srt_parser->parse_string(
-                    "1\n00:00:00,000 --> 99:59:59,999\n" + text);
-                // Actually, for embedded SRT we should accumulate entries properly
-                // For now, just feed as-is
+                int64_t start_us = pkt.pts_us();
+                int64_t duration_us = pkt.duration * 1000000LL * pkt.time_base_num / pkt.time_base_den;
+                impl_->srt_parser->add_entry(start_us, start_us + duration_us, text);
             }
             break;
 
@@ -183,7 +180,10 @@ void SubtitleManager::set_video_size(int width, int height) {
 
 void SubtitleManager::flush() {
     std::lock_guard lock(impl_->mutex);
-    if (impl_->ass_renderer) impl_->ass_renderer->flush();
+    // Clear accumulated embedded SRT entries (they'll be re-fed from the new position)
+    if (impl_->srt_parser) impl_->srt_parser->clear();
+    // Do NOT flush ASS events: libass renders by timestamp, so existing events
+    // remain valid and events spanning the seek point won't be lost.
     if (impl_->pgs_decoder) impl_->pgs_decoder->flush();
     impl_->pgs_frames.clear();
 }

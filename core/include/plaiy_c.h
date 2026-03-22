@@ -77,8 +77,15 @@ void*       py_player_frame_get_pixel_buffer(void* frame);   // CVPixelBufferRef
 int         py_player_frame_get_width(void* frame);
 int         py_player_frame_get_height(void* frame);
 int         py_player_frame_get_hdr_type(void* frame);
+uint32_t    py_player_frame_get_max_luminance(void* frame); // in 0.0001 cd/m2 units
+uint16_t    py_player_frame_get_max_cll(void* frame);       // MaxCLL in cd/m2
 int         py_player_frame_get_color_space(void* frame);
 int         py_player_frame_get_color_trc(void* frame);
+int64_t     py_player_frame_get_pts(void* frame);          // PTS in microseconds
+int         py_player_frame_get_sar_num(void* frame);
+int         py_player_frame_get_sar_den(void* frame);
+int         py_player_frame_get_color_primaries(void* frame);
+int         py_player_frame_get_color_range(void* frame);  // 0=unspecified, 1=limited, 2=full
 bool        py_player_frame_is_hardware(void* frame);
 
 // ---- Subtitle ----

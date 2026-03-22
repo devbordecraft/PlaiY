@@ -14,10 +14,14 @@ struct MetalPlayerView: NSViewRepresentable {
         mtkView.framebufferOnly = false
         mtkView.isPaused = false
         mtkView.enableSetNeedsDisplay = false
-        mtkView.preferredFramesPerSecond = 60
+
+        // Render at the display's native refresh rate (e.g. 120Hz ProMotion).
+        // The system caps this at the actual display maximum.
+        mtkView.preferredFramesPerSecond = NSScreen.main?.maximumFramesPerSecond ?? 120
 
         if let layer = mtkView.layer as? CAMetalLayer {
             layer.wantsExtendedDynamicRangeContent = true
+            layer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
         }
 
         let coordinator = MetalViewCoordinator(playerBridge: playerBridge, mtkView: mtkView)
@@ -56,10 +60,13 @@ struct MetalPlayerView: UIViewRepresentable {
         mtkView.framebufferOnly = false
         mtkView.isPaused = false
         mtkView.enableSetNeedsDisplay = false
-        mtkView.preferredFramesPerSecond = 60
+
+        // Render at the display's native refresh rate (e.g. 120Hz ProMotion).
+        mtkView.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond
 
         if let layer = mtkView.layer as? CAMetalLayer {
             layer.wantsExtendedDynamicRangeContent = true
+            layer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
         }
 
         let coordinator = MetalViewCoordinator(playerBridge: playerBridge, mtkView: mtkView)

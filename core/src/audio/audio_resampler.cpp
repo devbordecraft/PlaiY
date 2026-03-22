@@ -25,7 +25,8 @@ Error AudioResampler::open(AVCodecContext* codec_ctx, int out_sample_rate, int o
     out_sample_rate_ = out_sample_rate;
     out_channels_ = out_channels;
 
-    AVChannelLayout out_layout = AV_CHANNEL_LAYOUT_STEREO;
+    AVChannelLayout out_layout{};
+    av_channel_layout_default(&out_layout, out_channels);
     int ret = swr_alloc_set_opts2(&swr_ctx_,
         &out_layout,
         AV_SAMPLE_FMT_FLT,
@@ -34,17 +35,10 @@ Error AudioResampler::open(AVCodecContext* codec_ctx, int out_sample_rate, int o
         codec_ctx->sample_fmt,
         codec_ctx->sample_rate,
         0, nullptr);
+    av_channel_layout_uninit(&out_layout);
 
     if (ret < 0 || !swr_ctx_) {
         return {ErrorCode::AudioOutputError, "Failed to allocate resampler"};
-    }
-
-    // For multi-channel output, adjust
-    if (out_channels > 2) {
-        AVChannelLayout out_layout;
-        av_channel_layout_default(&out_layout, out_channels);
-        av_opt_set_chlayout(swr_ctx_, "out_chlayout", &out_layout, 0);
-        av_channel_layout_uninit(&out_layout);
     }
 
     ret = swr_init(swr_ctx_);

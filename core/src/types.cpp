@@ -27,6 +27,7 @@ VideoFrame& VideoFrame::operator=(VideoFrame&& other) noexcept {
         color_space = other.color_space;
         color_primaries = other.color_primaries;
         color_trc = other.color_trc;
+        color_range = other.color_range;
         hardware_frame = other.hardware_frame;
         plane_data = std::move(other.plane_data);
 

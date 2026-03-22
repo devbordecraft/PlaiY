@@ -178,6 +178,16 @@ int py_player_frame_get_hdr_type(void* frame) {
     return static_cast<int>(static_cast<py::VideoFrame*>(frame)->hdr_metadata.type);
 }
 
+uint32_t py_player_frame_get_max_luminance(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->hdr_metadata.max_luminance;
+}
+
+uint16_t py_player_frame_get_max_cll(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->hdr_metadata.max_content_light_level;
+}
+
 int py_player_frame_get_color_space(void* frame) {
     if (!frame) return 0;
     return static_cast<py::VideoFrame*>(frame)->color_space;
@@ -186,6 +196,33 @@ int py_player_frame_get_color_space(void* frame) {
 int py_player_frame_get_color_trc(void* frame) {
     if (!frame) return 0;
     return static_cast<py::VideoFrame*>(frame)->color_trc;
+}
+
+int64_t py_player_frame_get_pts(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->pts_us;
+}
+
+int py_player_frame_get_sar_num(void* frame) {
+    if (!frame) return 1;
+    int v = static_cast<py::VideoFrame*>(frame)->sar_num;
+    return v > 0 ? v : 1;
+}
+
+int py_player_frame_get_sar_den(void* frame) {
+    if (!frame) return 1;
+    int v = static_cast<py::VideoFrame*>(frame)->sar_den;
+    return v > 0 ? v : 1;
+}
+
+int py_player_frame_get_color_primaries(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->color_primaries;
+}
+
+int py_player_frame_get_color_range(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->color_range;
 }
 
 bool py_player_frame_is_hardware(void* frame) {

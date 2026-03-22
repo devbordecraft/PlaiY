@@ -17,6 +17,9 @@ public:
     virtual void start() = 0;
     virtual void stop() = 0;
 
+    // Reset internal position tracking (call on seek)
+    virtual void reset_position() = 0;
+
     // Set the callback that the audio output calls to pull PCM samples.
     // The callback fills the buffer and returns the number of frames written.
     // buffer: interleaved float32, frames * channels floats
