@@ -10,7 +10,7 @@ namespace py {
 
 class PacketQueue {
 public:
-    explicit PacketQueue(size_t max_size = 256);
+    explicit PacketQueue(size_t max_size = 256, int64_t max_bytes = 0);
     ~PacketQueue() = default;
 
     // Push a packet. Blocks if queue is full, unless aborted.
@@ -52,6 +52,7 @@ private:
     std::condition_variable not_full_;
     std::deque<Packet> queue_;
     size_t max_size_;
+    int64_t max_bytes_ = 0;   // 0 = unlimited
     int64_t total_bytes_ = 0;
     bool aborted_ = false;
 };

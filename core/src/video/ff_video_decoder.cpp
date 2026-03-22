@@ -87,6 +87,16 @@ void FFVideoDecoder::close() {
         avcodec_free_context(&codec_ctx_);
         codec_ctx_ = nullptr;
     }
+    if (sws_ctx_) {
+        sws_freeContext(sws_ctx_);
+        sws_ctx_ = nullptr;
+    }
+#ifdef __APPLE__
+    if (cv_pool_) {
+        CVPixelBufferPoolRelease(static_cast<CVPixelBufferPoolRef>(cv_pool_));
+        cv_pool_ = nullptr;
+    }
+#endif
 }
 
 void FFVideoDecoder::flush() {
@@ -274,38 +284,65 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
 
     CVPixelBufferRef pixel_buffer = nullptr;
 
-    // Build attributes dictionary using CoreFoundation (no Obj-C in .cpp)
-    CFDictionaryRef empty_dict = CFDictionaryCreate(
-        kCFAllocatorDefault, nullptr, nullptr, 0,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    CFBooleanRef yes_val = kCFBooleanTrue;
-    const void* attr_keys[] = {
-        kCVPixelBufferIOSurfacePropertiesKey,
-        kCVPixelBufferMetalCompatibilityKey,
-    };
-    const void* attr_vals[] = { empty_dict, yes_val };
-    CFDictionaryRef attrs = CFDictionaryCreate(
-        kCFAllocatorDefault, attr_keys, attr_vals, 2,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    // Lazily create or recreate the CVPixelBufferPool when format changes.
+    // The pool reuses IOSurface-backed buffers, avoiding per-frame allocation.
+    if (!cv_pool_ || pool_width_ != av_frame->width ||
+        pool_height_ != av_frame->height || pool_format_ != cv_pix_fmt) {
+        if (cv_pool_) CVPixelBufferPoolRelease(static_cast<CVPixelBufferPoolRef>(cv_pool_));
 
-    CVReturn cvret = CVPixelBufferCreate(
-        kCFAllocatorDefault,
-        av_frame->width, av_frame->height,
-        cv_pix_fmt,
-        attrs,
-        &pixel_buffer);
+        CFDictionaryRef empty_dict = CFDictionaryCreate(
+            kCFAllocatorDefault, nullptr, nullptr, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
-    CFRelease(attrs);
-    CFRelease(empty_dict);
+        const void* px_keys[] = {
+            kCVPixelBufferWidthKey,
+            kCVPixelBufferHeightKey,
+            kCVPixelBufferPixelFormatTypeKey,
+            kCVPixelBufferIOSurfacePropertiesKey,
+            kCVPixelBufferMetalCompatibilityKey,
+        };
+        int w = av_frame->width, h = av_frame->height;
+        CFNumberRef cf_w = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &w);
+        CFNumberRef cf_h = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &h);
+        int fmt_int = static_cast<int>(cv_pix_fmt);
+        CFNumberRef cf_fmt = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &fmt_int);
+        const void* px_vals[] = { cf_w, cf_h, cf_fmt, empty_dict, kCFBooleanTrue };
+        CFDictionaryRef px_attrs = CFDictionaryCreate(
+            kCFAllocatorDefault, px_keys, px_vals, 5,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        CVPixelBufferPoolRef pool = nullptr;
+        CVReturn ret = CVPixelBufferPoolCreate(kCFAllocatorDefault, nullptr, px_attrs, &pool);
+
+        CFRelease(px_attrs);
+        CFRelease(cf_fmt);
+        CFRelease(cf_h);
+        CFRelease(cf_w);
+        CFRelease(empty_dict);
+
+        if (ret != kCVReturnSuccess || !pool) {
+            PY_LOG_ERROR(TAG, "CVPixelBufferPoolCreate failed: %d", ret);
+            cv_pool_ = nullptr;
+            return;
+        }
+        cv_pool_ = pool;
+        pool_width_ = av_frame->width;
+        pool_height_ = av_frame->height;
+        pool_format_ = cv_pix_fmt;
+    }
+
+    CVReturn cvret = CVPixelBufferPoolCreatePixelBuffer(
+        kCFAllocatorDefault, static_cast<CVPixelBufferPoolRef>(cv_pool_), &pixel_buffer);
 
     if (cvret != kCVReturnSuccess || !pixel_buffer) {
-        PY_LOG_ERROR(TAG, "CVPixelBufferCreate failed: %d", cvret);
+        PY_LOG_ERROR(TAG, "CVPixelBufferPoolCreatePixelBuffer failed: %d", cvret);
         return;
     }
 
     CVPixelBufferLockBaseAddress(pixel_buffer, 0);
 
-    // Convert from any FFmpeg format to NV12 or P010 using swscale
+    // Convert from any FFmpeg format to NV12 or P010 using swscale.
+    // Cache the SwsContext — only recreate when format/resolution changes.
     uint8_t* dst_data[2];
     int dst_linesize[2];
     dst_data[0] = static_cast<uint8_t*>(CVPixelBufferGetBaseAddressOfPlane(pixel_buffer, 0));
@@ -313,15 +350,24 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     dst_linesize[0] = static_cast<int>(CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, 0));
     dst_linesize[1] = static_cast<int>(CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, 1));
 
-    SwsContext* sws = sws_getContext(
-        av_frame->width, av_frame->height, static_cast<AVPixelFormat>(av_frame->format),
-        av_frame->width, av_frame->height, target_av_fmt,
-        SWS_BILINEAR, nullptr, nullptr, nullptr);
+    int src_fmt = av_frame->format;
+    int dst_fmt = static_cast<int>(target_av_fmt);
+    if (!sws_ctx_ || sws_src_w_ != av_frame->width || sws_src_h_ != av_frame->height ||
+        sws_src_fmt_ != src_fmt || sws_dst_fmt_ != dst_fmt) {
+        if (sws_ctx_) sws_freeContext(sws_ctx_);
+        sws_ctx_ = sws_getContext(
+            av_frame->width, av_frame->height, static_cast<AVPixelFormat>(av_frame->format),
+            av_frame->width, av_frame->height, target_av_fmt,
+            SWS_BILINEAR, nullptr, nullptr, nullptr);
+        sws_src_w_ = av_frame->width;
+        sws_src_h_ = av_frame->height;
+        sws_src_fmt_ = src_fmt;
+        sws_dst_fmt_ = dst_fmt;
+    }
 
-    if (sws) {
-        sws_scale(sws, av_frame->data, av_frame->linesize, 0, av_frame->height,
+    if (sws_ctx_) {
+        sws_scale(sws_ctx_, av_frame->data, av_frame->linesize, 0, av_frame->height,
                   dst_data, dst_linesize);
-        sws_freeContext(sws);
     }
 
     CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);

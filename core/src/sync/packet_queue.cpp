@@ -2,11 +2,15 @@
 
 namespace py {
 
-PacketQueue::PacketQueue(size_t max_size) : max_size_(max_size) {}
+PacketQueue::PacketQueue(size_t max_size, int64_t max_bytes)
+    : max_size_(max_size), max_bytes_(max_bytes) {}
 
 bool PacketQueue::push(Packet packet) {
     std::unique_lock lock(mutex_);
-    not_full_.wait(lock, [this] { return aborted_ || queue_.size() < max_size_; });
+    not_full_.wait(lock, [this] {
+        return aborted_ || (queue_.size() < max_size_ &&
+               (max_bytes_ <= 0 || total_bytes_ < max_bytes_));
+    });
     if (aborted_) return false;
 
     total_bytes_ += static_cast<int64_t>(packet.data.size());

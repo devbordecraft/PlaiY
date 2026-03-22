@@ -43,6 +43,10 @@ private:
     ASS_Track* track_ = nullptr;
     int video_width_ = 1920;
     int video_height_ = 1080;
+
+    // Cache last render to avoid redundant bitmap conversion
+    SubtitleFrame cached_frame_;
+    bool cache_valid_ = false;
 };
 
 } // namespace py

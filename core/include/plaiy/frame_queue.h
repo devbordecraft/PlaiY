@@ -22,6 +22,15 @@ public:
     // Returns nullptr if empty or aborted.
     VideoFrame* peek();
 
+    // Copy PTS and duration from the front frame under lock.
+    // Safe alternative to peek() when only timing fields are needed.
+    struct FrameFields {
+        int64_t pts_us = 0;
+        int64_t duration_us = 0;
+        bool valid = false;
+    };
+    FrameFields peek_fields() const;
+
     // Remove the front frame.
     void pop();
 

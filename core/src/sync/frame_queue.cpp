@@ -29,6 +29,12 @@ VideoFrame* FrameQueue::peek() {
     return &queue_.front();
 }
 
+FrameQueue::FrameFields FrameQueue::peek_fields() const {
+    std::lock_guard lock(mutex_);
+    if (queue_.empty()) return {};
+    return {queue_.front().pts_us, queue_.front().duration_us, true};
+}
+
 void FrameQueue::pop() {
     std::lock_guard lock(mutex_);
     if (!queue_.empty()) {

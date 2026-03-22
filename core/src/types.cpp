@@ -28,6 +28,10 @@ VideoFrame& VideoFrame::operator=(VideoFrame&& other) noexcept {
         color_primaries = other.color_primaries;
         color_trc = other.color_trc;
         color_range = other.color_range;
+        sar_num = other.sar_num;
+        sar_den = other.sar_den;
+        hdr10plus = other.hdr10plus;
+        dovi = other.dovi;
         hardware_frame = other.hardware_frame;
         plane_data = std::move(other.plane_data);
 

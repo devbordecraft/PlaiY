@@ -3,6 +3,14 @@ import SwiftUI
 struct SubtitleOverlayView: View {
     let subtitle: SubtitleData?
 
+    // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
+    private static var cachedDataCount: Int = 0
+    #if os(macOS)
+    private static var cachedImage: NSImage?
+    #else
+    private static var cachedImage: UIImage?
+    #endif
+
     var body: some View {
         VStack {
             Spacer()
@@ -24,7 +32,7 @@ struct SubtitleOverlayView: View {
                         .multilineTextAlignment(.center)
 
                 case .bitmap(let data, let width, let height, _, _):
-                    if let image = bitmapImage(data: data, width: width, height: height) {
+                    if let image = cachedBitmapImage(data: data, width: width, height: height) {
                         #if os(macOS)
                         Image(nsImage: image)
                             .resizable()
@@ -44,6 +52,16 @@ struct SubtitleOverlayView: View {
     }
 
     #if os(macOS)
+    private func cachedBitmapImage(data: Data, width: Int, height: Int) -> NSImage? {
+        if data.count == Self.cachedDataCount, let cached = Self.cachedImage {
+            return cached
+        }
+        let image = bitmapImage(data: data, width: width, height: height)
+        Self.cachedDataCount = data.count
+        Self.cachedImage = image
+        return image
+    }
+
     private func bitmapImage(data: Data, width: Int, height: Int) -> NSImage? {
         guard width > 0, height > 0 else { return nil }
         guard let rep = NSBitmapImageRep(
@@ -70,6 +88,16 @@ struct SubtitleOverlayView: View {
         return image
     }
     #else
+    private func cachedBitmapImage(data: Data, width: Int, height: Int) -> UIImage? {
+        if data.count == Self.cachedDataCount, let cached = Self.cachedImage {
+            return cached
+        }
+        let image = bitmapImage(data: data, width: width, height: height)
+        Self.cachedDataCount = data.count
+        Self.cachedImage = image
+        return image
+    }
+
     private func bitmapImage(data: Data, width: Int, height: Int) -> UIImage? {
         guard width > 0, height > 0 else { return nil }
         let colorSpace = CGColorSpaceCreateDeviceRGB()
