@@ -48,6 +48,7 @@ private:
     std::thread worker_;
     std::mutex data_mutex_;
     std::vector<uint8_t> last_bgra_data_;
+    int last_index_{-1};
 };
 
 } // namespace py

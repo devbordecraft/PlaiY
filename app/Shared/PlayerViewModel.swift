@@ -22,12 +22,20 @@ class PlayerViewModel: ObservableObject {
     @Published var playbackEnded = false
 
     // Timeline interaction state
-    @Published var isHoveringTimeline = false
-    @Published var isDraggingTimeline = false
-    @Published var hoverFraction: Double = 0
-    @Published var seekPreviewImage: CGImage?
+    var isHoveringTimeline = false
+    var isDraggingTimeline = false
+    var hoverFraction: Double = 0
+    var seekPreviewImage: CGImage?
 
     private var positionTimer: Timer?
+
+    // Thumbnail async loading
+    private let thumbQueue = DispatchQueue(label: "com.plaiy.seekthumb", qos: .userInitiated)
+    private var thumbRequestId: UInt64 = 0
+    private var lastThumbIndex: Int = -1
+
+    private var pendingSeekFraction: Double?
+    private var hoverEndWork: DispatchWorkItem?
 
     func open(path: String, settings: AppSettings) {
         playbackEnded = false
@@ -146,6 +154,10 @@ class PlayerViewModel: ObservableObject {
         positionTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self else { return }
 
+            // Skip @Published updates during timeline interaction to avoid
+            // objectWillChange churn that competes with Metal draw(in:)
+            if self.isHoveringTimeline || self.isDraggingTimeline { return }
+
             // Detect end-of-stream (C++ engine sets Stopped on EOF)
             if self.bridge.state == PY_STATE_STOPPED.rawValue {
                 self.isPlaying = false
@@ -198,15 +210,26 @@ class PlayerViewModel: ObservableObject {
     // MARK: - Timeline interaction
 
     func timelineHoverChanged(_ hovering: Bool) {
-        isHoveringTimeline = hovering
-        if !hovering {
-            seekPreviewImage = nil
+        hoverEndWork?.cancel()
+        hoverEndWork = nil
+        if hovering {
+            isHoveringTimeline = true
+        } else {
+            // Delay hover-end so the position timer doesn't resume during quick re-entry
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.isHoveringTimeline = false
+                self.seekPreviewImage = nil
+                self.lastThumbIndex = -1
+            }
+            hoverEndWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
         }
     }
 
     func timelineHoverMoved(fraction: Double) {
         hoverFraction = max(0, min(1, fraction))
-        updateSeekPreview()
+        updateSeekPreview(fraction: hoverFraction)
     }
 
     func timelineDragStarted() {
@@ -216,19 +239,43 @@ class PlayerViewModel: ObservableObject {
     func timelineDragChanged(fraction: Double) {
         let clamped = max(0, min(1, fraction))
         hoverFraction = clamped
-        seek(to: clamped)
-        updateSeekPreview()
+        updateSeekPreview(fraction: clamped)
+        pendingSeekFraction = clamped
     }
 
     func timelineDragEnded() {
+        if let fraction = pendingSeekFraction {
+            seek(to: fraction)
+        }
+        pendingSeekFraction = nil
+
         isDraggingTimeline = false
         seekPreviewImage = nil
+        lastThumbIndex = -1
     }
 
-    private func updateSeekPreview() {
+    private func updateSeekPreview(fraction: Double) {
         guard duration > 0 else { return }
-        let timestampUs = Int64(hoverFraction * Double(duration))
-        seekPreviewImage = bridge.seekThumbnail(at: timestampUs)
+        let timestampUs = Int64(fraction * Double(duration))
+
+        // Skip dispatch if quantized thumbnail index hasn't changed
+        let intervalSec = duration > 7_200_000_000 ? 30 : 10
+        let index = Int(timestampUs / 1_000_000) / intervalSec
+        guard index != lastThumbIndex else { return }
+        lastThumbIndex = index
+
+        thumbRequestId &+= 1
+        let requestId = thumbRequestId
+        let bridge = self.bridge
+
+        thumbQueue.async { [weak self] in
+            guard let self, self.thumbRequestId == requestId else { return }
+            let image = bridge.seekThumbnail(at: timestampUs)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.thumbRequestId == requestId else { return }
+                self.seekPreviewImage = image
+            }
+        }
     }
 
     func timeText(for fraction: Double) -> String {

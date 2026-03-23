@@ -1,13 +1,17 @@
 import SwiftUI
+import QuartzCore
 
 struct PlayerControlsView: View {
     @ObservedObject var viewModel: PlayerViewModel
 
     @State private var isHovering = false
+    @State private var isDragging = false
     @State private var hoverX: CGFloat = 0
+    @State private var lastHoverTime: CFTimeInterval = 0
+    private let minHoverInterval: CFTimeInterval = 1.0 / 120.0
 
     private var isActive: Bool {
-        isHovering || viewModel.isDraggingTimeline
+        isHovering || isDragging
     }
 
     private var barHeight: CGFloat {
@@ -56,12 +60,18 @@ struct PlayerControlsView: View {
                     .onContinuousHover { phase in
                         switch phase {
                         case .active(let location):
-                            isHovering = true
+                            if !isHovering {
+                                withAnimation(.easeInOut(duration: 0.15)) { isHovering = true }
+                                viewModel.timelineHoverChanged(true)
+                                lastHoverTime = 0
+                            }
+                            let now = CACurrentMediaTime()
+                            guard now - lastHoverTime >= minHoverInterval else { break }
+                            lastHoverTime = now
                             hoverX = max(0, min(width, location.x))
-                            viewModel.timelineHoverChanged(true)
                             viewModel.timelineHoverMoved(fraction: hoverX / width)
                         case .ended:
-                            isHovering = false
+                            withAnimation(.easeInOut(duration: 0.15)) { isHovering = false }
                             viewModel.timelineHoverChanged(false)
                         @unknown default:
                             break
@@ -70,14 +80,21 @@ struct PlayerControlsView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                let now = CACurrentMediaTime()
+                                guard now - lastHoverTime >= minHoverInterval else { return }
+                                lastHoverTime = now
                                 hoverX = max(0, min(width, value.location.x))
-                                if !viewModel.isDraggingTimeline {
+                                if !isDragging {
+                                    isDragging = true
                                     viewModel.timelineDragStarted()
                                 }
                                 viewModel.timelineDragChanged(fraction: hoverX / width)
                             }
-                            .onEnded { _ in
+                            .onEnded { value in
+                                hoverX = max(0, min(width, value.location.x))
+                                viewModel.timelineDragChanged(fraction: hoverX / width)
                                 viewModel.timelineDragEnded()
+                                isDragging = false
                             }
                     )
 
@@ -104,23 +121,21 @@ struct PlayerControlsView: View {
 
                     // Time tooltip
                     if isActive {
-                        let tooltipText = viewModel.timeText(for: viewModel.hoverFraction)
+                        let tooltipText = viewModel.timeText(for: hoverX / width)
                         Text(tooltipText)
                             .font(.caption)
                             .fontWeight(.medium)
                             .monospacedDigit()
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+                            .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
                             .foregroundStyle(.white)
                             .position(x: max(30, min(width - 30, clampedActiveX)),
                                       y: viewModel.seekPreviewImage != nil ? -10 : -16)
-                            .transition(.opacity.combined(with: .scale(scale: 0.8, anchor: .bottom)))
+                            .transition(.opacity)
                     }
                 }
                 .frame(height: 24)
-                .animation(.easeInOut(duration: 0.15), value: isActive)
-                .animation(.easeInOut(duration: 0.12), value: cursorSize)
 
                 // Time labels
                 HStack {

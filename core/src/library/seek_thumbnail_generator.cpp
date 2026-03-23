@@ -35,6 +35,7 @@ void SeekThumbnailGenerator::start(const std::string& video_path,
     total_count_.store(0);
     interval_seconds_ = interval_seconds;
     cache_dir_ = cache_dir;
+    last_index_ = -1;
 
     // Create cache directory
     std::filesystem::create_directories(cache_dir);
@@ -60,6 +61,17 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
     int max_index = generated_count_.load() - 1;
     if (index > max_index) index = max_index;
     if (index < 0) index = 0;
+
+    // Fast path: same index as last request
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        if (index == last_index_ && !last_bgra_data_.empty()) {
+            *out_data = last_bgra_data_.data();
+            *out_width = thumb_width_;
+            *out_height = thumb_height_;
+            return true;
+        }
+    }
 
     // Build path
     char filename[64];
@@ -136,6 +148,7 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
 
     std::lock_guard<std::mutex> lock(data_mutex_);
     last_bgra_data_ = std::move(bgra);
+    last_index_ = index;
     thumb_width_ = w;
     thumb_height_ = h;
 
