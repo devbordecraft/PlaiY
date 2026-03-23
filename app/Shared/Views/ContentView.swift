@@ -14,27 +14,25 @@ struct ContentView: View {
             switch screen {
             case .player:
                 if let path = selectedFilePath {
-                    PlayerView(viewModel: playerVM, onBack: {
-                        if settings.resumePlayback {
-                            ResumeStore.save(
-                                path: path,
-                                positionUs: playerVM.currentPosition,
-                                durationUs: playerVM.duration
-                            )
+                    PlayerView(
+                        viewModel: playerVM,
+                        resumePosition: settings.resumePlayback ? ResumeStore.position(for: path) : nil,
+                        autoplay: settings.autoplayOnOpen,
+                        onBack: {
+                            if settings.resumePlayback {
+                                ResumeStore.save(
+                                    path: path,
+                                    positionUs: playerVM.currentPosition,
+                                    durationUs: playerVM.duration
+                                )
+                            }
+                            playerVM.stop()
+                            screen = .library
+                            selectedFilePath = nil
                         }
-                        playerVM.stop()
-                        screen = .library
-                        selectedFilePath = nil
-                    })
+                    )
                     .onAppear {
                         playerVM.open(path: path, settings: settings)
-                        if settings.resumePlayback,
-                           let saved = ResumeStore.position(for: path) {
-                            playerVM.bridge.seek(to: saved)
-                        }
-                        if settings.autoplayOnOpen {
-                            playerVM.play()
-                        }
                     }
                     .onChange(of: playerVM.playbackEnded) { ended in
                         if ended {

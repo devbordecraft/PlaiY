@@ -24,8 +24,8 @@ struct MediaItemView: View {
                         .foregroundStyle(.white.opacity(0.7))
                 }
 
-                // Duration badge
-                VStack {
+                // Duration badge + progress bar
+                VStack(spacing: 0) {
                     Spacer()
                     HStack {
                         Spacer()
@@ -38,8 +38,22 @@ struct MediaItemView: View {
                             .foregroundStyle(.white)
                             .cornerRadius(4)
                     }
+                    .padding(8)
+
+                    if let pos = ResumeStore.position(for: item.filePath),
+                       item.durationUs > 0 {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(.white.opacity(0.2))
+                                Rectangle()
+                                    .fill(.red)
+                                    .frame(width: geo.size.width * min(Double(pos) / Double(item.durationUs), 1.0))
+                            }
+                        }
+                        .frame(height: 3)
+                    }
                 }
-                .padding(8)
             }
             .task {
                 thumbnail = await ThumbnailManager.shared.loadThumbnail(for: item.filePath)

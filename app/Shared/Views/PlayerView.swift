@@ -2,11 +2,15 @@ import SwiftUI
 
 struct PlayerView: View {
     @ObservedObject var viewModel: PlayerViewModel
+    let resumePosition: Int64?
+    let autoplay: Bool
     let onBack: () -> Void
 
     @State private var showControls = true
     @State private var showSettings = false
+    @State private var showResumePrompt = false
     @State private var hideControlsTask: Task<Void, Never>?
+    @State private var resumeDismissTask: Task<Void, Never>?
     @FocusState private var isPlayerFocused: Bool
 
     var body: some View {
@@ -109,6 +113,42 @@ struct PlayerView: View {
                     isPresented: $showSettings
                 )
             }
+
+            // Resume prompt overlay
+            if showResumePrompt, let pos = resumePosition {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 16) {
+                        Button {
+                            dismissResumePrompt()
+                            viewModel.bridge.seek(to: pos)
+                            viewModel.play()
+                        } label: {
+                            Label("Resume from \(formatTime(pos))", systemImage: "play.fill")
+                                .fontWeight(.semibold)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.white.opacity(0.2))
+
+                        Button {
+                            dismissResumePrompt()
+                            viewModel.play()
+                        } label: {
+                            Text("Start from Beginning")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.white.opacity(0.3))
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.white)
+                    .padding(20)
+                    .background(.ultraThinMaterial.opacity(0.8))
+                    .background(.black.opacity(0.4))
+                    .cornerRadius(14)
+                    .padding(.bottom, 100)
+                }
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .background(.black)
         .onTapGesture {
@@ -129,6 +169,25 @@ struct PlayerView: View {
         .onAppear {
             isPlayerFocused = true
             scheduleHideControls()
+            if resumePosition != nil {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showResumePrompt = true
+                }
+                resumeDismissTask = Task {
+                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    if !Task.isCancelled {
+                        await MainActor.run {
+                            dismissResumePrompt()
+                            if let pos = resumePosition {
+                                viewModel.bridge.seek(to: pos)
+                            }
+                            viewModel.play()
+                        }
+                    }
+                }
+            } else if autoplay {
+                viewModel.play()
+            }
         }
         .onKeyPress(.space) {
             handleKeyAction { viewModel.togglePlayPause() }
@@ -175,6 +234,24 @@ struct PlayerView: View {
         NSApp.keyWindow?.toggleFullScreen(nil)
     }
     #endif
+
+    private func dismissResumePrompt() {
+        resumeDismissTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showResumePrompt = false
+        }
+    }
+
+    private func formatTime(_ us: Int64) -> String {
+        let totalSeconds = Int(us / 1_000_000)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
+    }
 
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
