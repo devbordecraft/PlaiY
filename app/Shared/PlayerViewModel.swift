@@ -14,6 +14,7 @@ class PlayerViewModel: ObservableObject {
     @Published var subtitleTracks: [TrackInfo] = []
     @Published var activeAudioStream: Int = -1
     @Published var activeSubtitleStream: Int = -1
+    @Published var isMuted = false
     @Published var passthroughEnabled = false
     @Published var passthroughActive = false
     @Published var showDebugOverlay = false
@@ -73,6 +74,11 @@ class PlayerViewModel: ObservableObject {
         // Start background seek thumbnail generation
         let interval: Int32 = duration > 7_200_000_000 ? 30 : 10
         bridge.startSeekThumbnails(interval: interval)
+
+        // Set up media key handling
+        NowPlayingManager.shared.setup(onPlayPause: { [weak self] in
+            self?.togglePlayPause()
+        })
     }
 
     func play() {
@@ -101,6 +107,18 @@ class PlayerViewModel: ObservableObject {
         currentPosition = target
     }
 
+    func seekRelative(seconds: Double) {
+        let offsetUs = Int64(seconds * 1_000_000)
+        let target = max(0, min(duration, currentPosition + offsetUs))
+        bridge.seek(to: target)
+        currentPosition = target
+    }
+
+    func toggleMute() {
+        isMuted.toggle()
+        bridge.setMuted(isMuted)
+    }
+
     func stop() {
         bridge.cancelSeekThumbnails()
         bridge.stop()
@@ -108,6 +126,7 @@ class PlayerViewModel: ObservableObject {
         currentPosition = 0
         seekPreviewImage = nil
         stopPositionUpdates()
+        NowPlayingManager.shared.clearNowPlaying()
     }
 
     var positionFraction: Double {
@@ -141,6 +160,13 @@ class PlayerViewModel: ObservableObject {
             if self.showDebugOverlay {
                 self.playbackStats = self.bridge.getPlaybackStats()
             }
+
+            NowPlayingManager.shared.updateNowPlaying(
+                title: self.mediaTitle,
+                position: Double(self.currentPosition) / 1_000_000.0,
+                duration: Double(self.duration) / 1_000_000.0,
+                isPlaying: self.isPlaying
+            )
         }
     }
 

@@ -139,8 +139,7 @@ struct PlayerControlsView: View {
             // Playback controls
             HStack(spacing: 32) {
                 Button {
-                    let target = max(0, viewModel.currentPosition - 10_000_000)
-                    viewModel.bridge.seek(to: target)
+                    viewModel.seekRelative(seconds: -10)
                 } label: {
                     Image(systemName: "gobackward.10")
                         .font(.title2)
@@ -158,8 +157,7 @@ struct PlayerControlsView: View {
                 .foregroundStyle(.white)
 
                 Button {
-                    let target = min(viewModel.duration, viewModel.currentPosition + 10_000_000)
-                    viewModel.bridge.seek(to: target)
+                    viewModel.seekRelative(seconds: 10)
                 } label: {
                     Image(systemName: "goforward.10")
                         .font(.title2)

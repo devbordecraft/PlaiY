@@ -4,6 +4,7 @@
 #include "ca_audio_output.h"
 #include "plaiy/logger.h"
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
@@ -28,6 +29,7 @@ struct CAAudioOutput::Impl {
     IAudioOutput::PtsCallback pts_callback;
     IAudioOutput::BitstreamPullCallback bitstream_pull_callback;
 
+    std::atomic<bool> muted{false};
     int64_t samples_played = 0;
 
     // For HDMI passthrough: the device and stream we configured
@@ -594,6 +596,9 @@ void CAAudioOutput::set_pts_callback(PtsCallback cb) {
 int CAAudioOutput::sample_rate() const { return impl_->sample_rate; }
 int CAAudioOutput::channels() const { return impl_->channels; }
 
+void CAAudioOutput::set_muted(bool muted) { impl_->muted.store(muted, std::memory_order_relaxed); }
+bool CAAudioOutput::is_muted() const { return impl_->muted.load(std::memory_order_relaxed); }
+
 // ---- PCM render callback ----
 
 OSStatus CAAudioOutput::Impl::renderCallback(
@@ -621,6 +626,11 @@ OSStatus CAAudioOutput::Impl::renderCallback(
     if (written < frames) {
         memset(buffer + written * channels, 0,
                (frames - written) * channels * sizeof(float));
+    }
+
+    // Mute: zero the entire buffer (after pull so ring buffer doesn't back up)
+    if (self->muted.load(std::memory_order_relaxed)) {
+        memset(buffer, 0, frames * channels * sizeof(float));
     }
 
     // Update samples played and report PTS
@@ -656,6 +666,11 @@ OSStatus CAAudioOutput::Impl::passthroughRenderCallback(
     // Zero-fill any remainder
     if (written < bytes) {
         memset(buffer + written, 0, bytes - written);
+    }
+
+    // Mute: zero the entire buffer (after pull so ring buffer doesn't back up)
+    if (self->muted.load(std::memory_order_relaxed)) {
+        memset(buffer, 0, bytes);
     }
 
     // Update samples played for clock sync

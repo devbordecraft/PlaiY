@@ -79,6 +79,10 @@ int         py_player_get_active_subtitle_stream(PYPlayer* p);
 void        py_player_set_audio_passthrough(PYPlayer* p, bool enabled);
 bool        py_player_is_passthrough_active(PYPlayer* p);
 
+// ---- Mute ----
+void        py_player_set_muted(PYPlayer* p, bool muted);
+bool        py_player_is_muted(PYPlayer* p);
+
 // ---- Playback stats (debug overlay) ----
 typedef struct {
     // Video

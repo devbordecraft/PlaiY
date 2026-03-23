@@ -94,6 +94,7 @@ struct PlayerEngine::Impl {
 
     // Settings
     HWDecodePreference hw_decode_pref = HWDecodePreference::Auto;
+    bool muted = false;
 
     // Byte ring buffer for passthrough mode
     std::vector<uint8_t> passthrough_ring_buffer;
@@ -218,6 +219,7 @@ Error PlayerEngine::open_file(const std::string& path) {
                     impl_->passthrough_ring_write = 0;
                     impl_->passthrough_ring_size = 0;
 
+                    impl_->audio_output->set_muted(impl_->muted);
                     impl_->audio_output->set_bitstream_pull_callback(
                         [this](uint8_t* buf, int bytes) {
                             return impl_->bitstream_pull(buf, bytes);
@@ -265,6 +267,7 @@ Error PlayerEngine::open_file(const std::string& path) {
 
                         // PTS callback for clock sync (ring buffer PTS tracking handles this)
                         impl_->audio_output->set_pts_callback([](int64_t) {});
+                        impl_->audio_output->set_muted(impl_->muted);
                     }
                 }
             }
@@ -469,6 +472,15 @@ void PlayerEngine::set_audio_passthrough(bool enabled) {
 
 bool PlayerEngine::is_passthrough_active() const {
     return impl_->audio_output_mode == AudioOutputMode::Passthrough;
+}
+
+void PlayerEngine::set_muted(bool muted) {
+    impl_->muted = muted;
+    if (impl_->audio_output) impl_->audio_output->set_muted(muted);
+}
+
+bool PlayerEngine::is_muted() const {
+    return impl_->muted;
 }
 
 void PlayerEngine::set_hw_decode_preference(HWDecodePreference pref) {
@@ -858,6 +870,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                             return audio_pull(buf, frames, ch);
                         });
                     audio_output->set_pts_callback([](int64_t) {});
+                    audio_output->set_muted(muted);
                     audio_output->start();
                     PY_LOG_INFO(TAG, "Audio output reconfigured: %d Hz, %d ch", out_rate, out_channels);
                 }

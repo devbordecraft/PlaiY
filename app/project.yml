@@ -64,6 +64,7 @@ targets:
           - -framework MetalKit
           - -framework QuartzCore
           - -framework IOSurface
+          - -framework MediaPlayer
           - -framework Security
         ENABLE_HARDENED_RUNTIME: NO
         CODE_SIGN_IDENTITY: "-"

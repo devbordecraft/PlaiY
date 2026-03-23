@@ -34,16 +34,14 @@ PlaiY - Feature TODO
    - Optionally support gapless transition (pre-open next file)
    - Effort: Medium | Impact: Medium
 
-6. Keyboard Shortcuts & Media Keys
+6. Keyboard Shortcuts & Media Keys [DONE]
    - Space: play/pause
-   - Left/Right arrows: seek +/-5s
+   - Left/Right arrows: seek +/-10s
    - Shift+Left/Right: seek +/-30s
-   - [ / ]: decrease/increase speed
    - F: toggle fullscreen
-   - M: mute/unmute
-   - Media keys: play/pause/next/prev
-   - Pure SwiftUI work, no core changes needed
-   - Effort: Low | Impact: High
+   - M: mute/unmute (full stack: CoreAudio mute via atomic flag)
+   - Media keys: play/pause via MPRemoteCommandCenter + Now Playing info
+   - Remaining: [ / ] speed shortcuts (depends on #1), media key next/prev (depends on #5)
 
 8. Subtitle Styling & Timing Adjustment
    - Expose font size, color, position offset in UI

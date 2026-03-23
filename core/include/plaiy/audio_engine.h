@@ -43,6 +43,9 @@ public:
         return {ErrorCode::AudioOutputError, "Passthrough not supported"};
     }
 
+    virtual void set_muted(bool muted) = 0;
+    virtual bool is_muted() const = 0;
+
     virtual bool is_passthrough() const { return false; }
 
     // Callback for passthrough mode: pulls raw compressed bytes.

@@ -111,6 +111,15 @@ bool py_player_is_passthrough_active(PYPlayer* p) {
     return p->engine.is_passthrough_active();
 }
 
+void py_player_set_muted(PYPlayer* p, bool muted) {
+    if (p) p->engine.set_muted(muted);
+}
+
+bool py_player_is_muted(PYPlayer* p) {
+    if (!p) return false;
+    return p->engine.is_muted();
+}
+
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     PYPlaybackStats out = {};
     if (!p) return out;

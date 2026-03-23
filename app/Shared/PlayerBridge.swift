@@ -87,6 +87,14 @@ class PlayerBridge {
         py_player_is_passthrough_active(handle)
     }
 
+    func setMuted(_ muted: Bool) {
+        py_player_set_muted(handle, muted)
+    }
+
+    var isMuted: Bool {
+        py_player_is_muted(handle)
+    }
+
     func getPlaybackStats() -> PYPlaybackStats {
         py_player_get_playback_stats(handle)
     }

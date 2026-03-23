@@ -28,6 +28,7 @@
 		DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
 		F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
+		F29C5021A7BA1EBF91C32B92 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
 		89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailManager.swift; sourceTree = "<group>"; };
+		8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingManager.swift; sourceTree = "<group>"; };
 		91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
 		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
@@ -62,6 +64,7 @@
 			children = (
 				91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */,
 				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
+				8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */,
 				07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */,
 				19D4B941118178244122189A /* PlayerBridge.swift */,
 				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
@@ -198,6 +201,7 @@
 				67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */,
 				DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */,
 				C4FD58DB467D65B3843D9A7F /* MetalViewCoordinator.swift in Sources */,
+				F29C5021A7BA1EBF91C32B92 /* NowPlayingManager.swift in Sources */,
 				7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */,
 				98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */,
 				08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */,
@@ -266,6 +270,7 @@
 					"-framework MetalKit",
 					"-framework QuartzCore",
 					"-framework IOSurface",
+					"-framework MediaPlayer",
 					"-framework Security",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
@@ -443,6 +448,7 @@
 					"-framework MetalKit",
 					"-framework QuartzCore",
 					"-framework IOSurface",
+					"-framework MediaPlayer",
 					"-framework Security",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;

@@ -7,6 +7,7 @@ struct PlayerView: View {
     @State private var showControls = true
     @State private var showSettings = false
     @State private var hideControlsTask: Task<Void, Never>?
+    @FocusState private var isPlayerFocused: Bool
 
     var body: some View {
         ZStack {
@@ -123,9 +124,50 @@ struct PlayerView: View {
                 scheduleHideControls()
             }
         }
+        .focusable()
+        .focused($isPlayerFocused)
         .onAppear {
+            isPlayerFocused = true
             scheduleHideControls()
         }
+        .onKeyPress(.space) {
+            handleKeyAction { viewModel.togglePlayPause() }
+            return .handled
+        }
+        .onKeyPress(.leftArrow, phases: .down) { press in
+            if press.modifiers.contains(.shift) {
+                handleKeyAction { viewModel.seekRelative(seconds: -30) }
+            } else {
+                handleKeyAction { viewModel.seekRelative(seconds: -10) }
+            }
+            return .handled
+        }
+        .onKeyPress(.rightArrow, phases: .down) { press in
+            if press.modifiers.contains(.shift) {
+                handleKeyAction { viewModel.seekRelative(seconds: 30) }
+            } else {
+                handleKeyAction { viewModel.seekRelative(seconds: 10) }
+            }
+            return .handled
+        }
+        #if os(macOS)
+        .onKeyPress(KeyEquivalent("f")) {
+            handleKeyAction { toggleFullScreen() }
+            return .handled
+        }
+        #endif
+        .onKeyPress(KeyEquivalent("m")) {
+            handleKeyAction { viewModel.toggleMute() }
+            return .handled
+        }
+    }
+
+    private func handleKeyAction(_ action: () -> Void) {
+        action()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showControls = true
+        }
+        scheduleHideControls()
     }
 
     #if os(macOS)
