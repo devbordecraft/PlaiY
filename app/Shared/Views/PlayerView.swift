@@ -219,6 +219,14 @@ struct PlayerView: View {
             handleKeyAction { viewModel.toggleMute() }
             return .handled
         }
+        .onKeyPress(KeyEquivalent("]")) {
+            handleKeyAction { viewModel.cycleSpeedUp() }
+            return .handled
+        }
+        .onKeyPress(KeyEquivalent("[")) {
+            handleKeyAction { viewModel.cycleSpeedDown() }
+            return .handled
+        }
     }
 
     private func handleKeyAction(_ action: () -> Void) {

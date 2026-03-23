@@ -1,5 +1,5 @@
 find_package(PkgConfig REQUIRED)
-find_package(FFmpeg COMPONENTS avformat avcodec avutil swresample swscale QUIET)
+find_package(FFmpeg COMPONENTS avformat avcodec avutil swresample swscale avfilter QUIET)
 
 if(NOT FFmpeg_FOUND)
     pkg_check_modules(AVFORMAT REQUIRED IMPORTED_TARGET libavformat)
@@ -7,6 +7,7 @@ if(NOT FFmpeg_FOUND)
     pkg_check_modules(AVUTIL REQUIRED IMPORTED_TARGET libavutil)
     pkg_check_modules(SWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
     pkg_check_modules(SWSCALE REQUIRED IMPORTED_TARGET libswscale)
+    pkg_check_modules(AVFILTER REQUIRED IMPORTED_TARGET libavfilter)
 endif()
 
 pkg_check_modules(LIBASS REQUIRED IMPORTED_TARGET libass)
@@ -22,6 +23,7 @@ set(CORE_SOURCES
     src/video/ff_video_decoder.cpp
     src/audio/audio_decoder.cpp
     src/audio/audio_resampler.cpp
+    src/audio/audio_tempo_filter.cpp
     src/audio/audio_passthrough.cpp
     src/subtitle/subtitle_manager.cpp
     src/subtitle/srt_parser.cpp
@@ -57,12 +59,12 @@ target_include_directories(plaiy_core
 if(FFmpeg_FOUND)
     target_link_libraries(plaiy_core PRIVATE
         FFmpeg::avformat FFmpeg::avcodec FFmpeg::avutil
-        FFmpeg::swresample FFmpeg::swscale
+        FFmpeg::swresample FFmpeg::swscale FFmpeg::avfilter
     )
 else()
     target_link_libraries(plaiy_core PRIVATE
         PkgConfig::AVFORMAT PkgConfig::AVCODEC PkgConfig::AVUTIL
-        PkgConfig::SWRESAMPLE PkgConfig::SWSCALE
+        PkgConfig::SWRESAMPLE PkgConfig::SWSCALE PkgConfig::AVFILTER
     )
 endif()
 

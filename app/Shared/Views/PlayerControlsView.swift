@@ -14,6 +14,13 @@ struct PlayerControlsView: View {
         isHovering || isDragging
     }
 
+    private func speedLabel(_ speed: Double) -> String {
+        if speed == Double(Int(speed)) {
+            return "\(Int(speed))x"
+        }
+        return String(format: "%.2gx", speed)
+    }
+
     private var barHeight: CGFloat {
         isActive ? 8 : 4
     }
@@ -176,6 +183,31 @@ struct PlayerControlsView: View {
                 } label: {
                     Image(systemName: "goforward.10")
                         .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+
+                Menu {
+                    ForEach([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0], id: \.self) { speed in
+                        Button {
+                            viewModel.setPlaybackSpeed(speed)
+                        } label: {
+                            HStack {
+                                Text(speedLabel(speed))
+                                if abs(viewModel.playbackSpeed - speed) < 0.01 {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(speedLabel(viewModel.playbackSpeed))
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)

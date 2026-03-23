@@ -95,6 +95,14 @@ class PlayerBridge {
         py_player_is_muted(handle)
     }
 
+    func setPlaybackSpeed(_ speed: Double) {
+        py_player_set_playback_speed(handle, speed)
+    }
+
+    var playbackSpeed: Double {
+        py_player_get_playback_speed(handle)
+    }
+
     func getPlaybackStats() -> PYPlaybackStats {
         py_player_get_playback_stats(handle)
     }

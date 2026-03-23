@@ -83,6 +83,10 @@ bool        py_player_is_passthrough_active(PYPlayer* p);
 void        py_player_set_muted(PYPlayer* p, bool muted);
 bool        py_player_is_muted(PYPlayer* p);
 
+// ---- Playback speed ----
+void        py_player_set_playback_speed(PYPlayer* p, double speed);
+double      py_player_get_playback_speed(PYPlayer* p);
+
 // ---- Playback stats (debug overlay) ----
 typedef struct {
     // Video
@@ -111,6 +115,7 @@ typedef struct {
     int64_t audio_pts_us;
     int64_t video_pts_us;
     int64_t av_drift_us;
+    double playback_speed;
 
     // Container
     char container_format[32];

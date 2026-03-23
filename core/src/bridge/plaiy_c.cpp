@@ -120,6 +120,15 @@ bool py_player_is_muted(PYPlayer* p) {
     return p->engine.is_muted();
 }
 
+void py_player_set_playback_speed(PYPlayer* p, double speed) {
+    if (p) p->engine.set_playback_speed(speed);
+}
+
+double py_player_get_playback_speed(PYPlayer* p) {
+    if (!p) return 1.0;
+    return p->engine.playback_speed();
+}
+
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     PYPlaybackStats out = {};
     if (!p) return out;
@@ -145,6 +154,7 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     out.audio_pts_us = s.audio_pts_us;
     out.video_pts_us = s.video_pts_us;
     out.av_drift_us = s.av_drift_us;
+    out.playback_speed = s.playback_speed;
     memcpy(out.container_format, s.container_format, sizeof(out.container_format));
     out.bitrate = s.bitrate;
     out.hdr_type = s.hdr_type;

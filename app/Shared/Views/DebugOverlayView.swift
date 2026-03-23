@@ -31,6 +31,7 @@ struct DebugOverlayView: View {
                 row("A-V Drift", String(format: "%+.1f ms", Double(stats.av_drift_us) / 1000.0))
                 row("Audio PTS", formatTime(stats.audio_pts_us))
                 row("Video PTS", formatTime(stats.video_pts_us))
+                row("Speed", String(format: "%.2gx", stats.playback_speed))
             }
 
             section("Container") {

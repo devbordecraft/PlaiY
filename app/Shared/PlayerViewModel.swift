@@ -15,6 +15,7 @@ class PlayerViewModel: ObservableObject {
     @Published var activeAudioStream: Int = -1
     @Published var activeSubtitleStream: Int = -1
     @Published var isMuted = false
+    @Published var playbackSpeed: Double = 1.0
     @Published var passthroughEnabled = false
     @Published var passthroughActive = false
     @Published var showDebugOverlay = false
@@ -39,6 +40,7 @@ class PlayerViewModel: ObservableObject {
 
     func open(path: String, settings: AppSettings) {
         playbackEnded = false
+        playbackSpeed = 1.0
 
         // Apply settings before opening
         bridge.setHWDecodePref(Int32(settings.hwDecodePref))
@@ -127,11 +129,31 @@ class PlayerViewModel: ObservableObject {
         bridge.setMuted(isMuted)
     }
 
+    private static let speedPresets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
+
+    func setPlaybackSpeed(_ speed: Double) {
+        playbackSpeed = speed
+        bridge.setPlaybackSpeed(speed)
+    }
+
+    func cycleSpeedUp() {
+        if let idx = Self.speedPresets.firstIndex(where: { $0 > playbackSpeed + 0.01 }) {
+            setPlaybackSpeed(Self.speedPresets[idx])
+        }
+    }
+
+    func cycleSpeedDown() {
+        if let idx = Self.speedPresets.lastIndex(where: { $0 < playbackSpeed - 0.01 }) {
+            setPlaybackSpeed(Self.speedPresets[idx])
+        }
+    }
+
     func stop() {
         bridge.cancelSeekThumbnails()
         bridge.stop()
         isPlaying = false
         currentPosition = 0
+        playbackSpeed = 1.0
         seekPreviewImage = nil
         stopPositionUpdates()
         NowPlayingManager.shared.clearNowPlaying()

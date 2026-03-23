@@ -10,6 +10,7 @@
 #include "video/video_decoder_factory.h"
 #include "audio/audio_decoder.h"
 #include "audio/audio_resampler.h"
+#include "audio/audio_tempo_filter.h"
 #include "audio/audio_passthrough.h"
 
 #ifdef __APPLE__
@@ -95,6 +96,10 @@ struct PlayerEngine::Impl {
     // Settings
     HWDecodePreference hw_decode_pref = HWDecodePreference::Auto;
     bool muted = false;
+
+    // Playback speed
+    std::atomic<double> playback_speed{1.0};
+    std::atomic<bool> speed_changed{false};
 
     // Byte ring buffer for passthrough mode
     std::vector<uint8_t> passthrough_ring_buffer;
@@ -370,6 +375,8 @@ void PlayerEngine::stop() {
 
     impl_->stop_threads();
     impl_->clock.reset();
+    impl_->playback_speed.store(1.0);
+    impl_->speed_changed.store(false);
 
     if (impl_->audio_output) {
         impl_->audio_output->close();
@@ -483,6 +490,35 @@ bool PlayerEngine::is_muted() const {
     return impl_->muted;
 }
 
+void PlayerEngine::set_playback_speed(double speed) {
+    speed = std::max(0.25, std::min(4.0, speed));
+
+    impl_->clock.set_rate(speed);
+    impl_->playback_speed.store(speed);
+    impl_->speed_changed.store(true);
+
+    // Flush audio ring buffer so stale-speed samples clear immediately
+    {
+        std::lock_guard lock(impl_->audio_ring_flush_mutex);
+        if (impl_->audio_output_mode == AudioOutputMode::Passthrough) {
+            // Can't tempo-filter compressed bitstreams — mute audio at non-1x
+            if (impl_->audio_output) {
+                impl_->audio_output->set_muted(
+                    std::abs(speed - 1.0) > 0.001 || impl_->muted);
+            }
+        } else {
+            impl_->audio_ring.reset();
+        }
+    }
+    impl_->audio_ring_not_full.notify_one();
+
+    PY_LOG_INFO(TAG, "Playback speed set to %.2fx", speed);
+}
+
+double PlayerEngine::playback_speed() const {
+    return impl_->playback_speed.load();
+}
+
 void PlayerEngine::set_hw_decode_preference(HWDecodePreference pref) {
     impl_->hw_decode_pref = pref;
 }
@@ -561,6 +597,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     snprintf(s.container_format, sizeof(s.container_format), "%s",
              impl_->media_info.container_format.c_str());
     s.bitrate = impl_->media_info.bit_rate;
+    s.playback_speed = impl_->playback_speed.load();
 
     return s;
 }
@@ -809,21 +846,34 @@ void PlayerEngine::Impl::audio_decode_loop() {
     // We'll init the resampler after first frame decode when we know the actual format
 
     AVFrame* av_frame = av_frame_alloc();
+    AVFrame* tempo_frame = av_frame_alloc();
     AVPacket* av_pkt = av_packet_alloc();
     bool resampler_initialized = false;
     bool timebase_initialized = false;
     bool skip_to_target = false;
     std::vector<float> resample_buf; // reused across frames
+    AudioTempoFilter tempo_filter;
 
     while (running.load()) {
         Packet pkt;
         if (!audio_packet_queue.pop(pkt)) break;
+
+        // Handle speed change from the main thread
+        if (speed_changed.load()) {
+            speed_changed.store(false);
+            double new_speed = playback_speed.load();
+            tempo_filter.close();
+            if (std::abs(new_speed - 1.0) > 0.001 && resampler_initialized) {
+                tempo_filter.open(ctx, new_speed);
+            }
+        }
 
         if (pkt.is_flush) {
             {
                 std::lock_guard lock(audio_ring_flush_mutex);
                 audio_ring.reset();
             }
+            tempo_filter.flush();
 
             if (audio_track_changed.load()) {
                 audio_track_changed.store(false);
@@ -913,12 +963,12 @@ void PlayerEngine::Impl::audio_decode_loop() {
                     break;
                 }
                 resampler_initialized = true;
+                // Init tempo filter if speed != 1.0
+                double spd = playback_speed.load();
+                if (std::abs(spd - 1.0) > 0.001) {
+                    tempo_filter.open(ctx, spd);
+                }
             }
-
-            // Resample to float32 interleaved (reuse buffer)
-            int num_samples = 0;
-            Error err = resampler.convert(av_frame, resample_buf, num_samples);
-            if (err) continue;
 
             // Calculate PTS for this audio chunk
             int64_t pts_us = 0;
@@ -936,9 +986,12 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 skip_to_target = false;
             }
 
-            // Write to lock-free ring buffer.
-            // Back-pressure: wait if ring is too full for this chunk.
-            {
+            // Lambda to resample a frame and write to ring buffer
+            auto resample_and_write = [&](AVFrame* frame, int64_t frame_pts_us) {
+                int num_samples = 0;
+                Error err = resampler.convert(frame, resample_buf, num_samples);
+                if (err) return;
+
                 size_t to_write = resample_buf.size();
                 {
                     std::unique_lock lock(audio_ring_flush_mutex);
@@ -946,14 +999,30 @@ void PlayerEngine::Impl::audio_decode_loop() {
                         return audio_ring.available_write() >= to_write || !running.load();
                     });
                 }
-                if (!running.load()) break;
+                if (!running.load()) return;
 
                 audio_ring.write(resample_buf.data(), to_write);
 
-                // Track PTS at the write position (END of this chunk).
-                // The clock formula is: playback_pos = audio_pts_for_ring - ring_data_duration.
                 int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
-                audio_pts_for_ring.store(pts_us + chunk_duration_us, std::memory_order_release);
+                audio_pts_for_ring.store(frame_pts_us + chunk_duration_us, std::memory_order_release);
+            };
+
+            // Route through tempo filter if active, otherwise direct resample
+            if (tempo_filter.tempo() != 1.0) {
+                tempo_filter.send_frame(av_frame);
+                while (running.load()) {
+                    int tret = tempo_filter.receive_frame(tempo_frame);
+                    if (tret < 0) break;
+
+                    int64_t tempo_pts_us = 0;
+                    if (tempo_frame->pts != AV_NOPTS_VALUE && ctx->pkt_timebase.den > 0) {
+                        tempo_pts_us = av_rescale_q(tempo_frame->pts, ctx->pkt_timebase, {1, 1000000});
+                    }
+                    resample_and_write(tempo_frame, tempo_pts_us);
+                    av_frame_unref(tempo_frame);
+                }
+            } else {
+                resample_and_write(av_frame, pts_us);
             }
 
             av_frame_unref(av_frame);
@@ -967,7 +1036,9 @@ void PlayerEngine::Impl::audio_decode_loop() {
     }
 
     av_frame_free(&av_frame);
+    av_frame_free(&tempo_frame);
     av_packet_free(&av_pkt);
+    tempo_filter.close();
     resampler.close();
     avcodec_free_context(&ctx);
 

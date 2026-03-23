@@ -44,6 +44,7 @@ targets:
           - -lavutil
           - -lswresample
           - -lswscale
+          - -lavfilter
           - -lass
           - -lfreetype
           - -lharfbuzz

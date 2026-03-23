@@ -316,6 +316,7 @@ struct PlaybackStats {
     int64_t audio_pts_us = 0;
     int64_t video_pts_us = 0;
     int64_t av_drift_us = 0;       // Audio PTS - Video PTS
+    double playback_speed = 1.0;
 
     // Container
     char container_format[32] = {};

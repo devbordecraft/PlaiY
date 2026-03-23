@@ -53,6 +53,20 @@ struct TrackSelectionView: View {
                         }
                     }
 
+                    // Speed section
+                    trackSection(title: "Speed") {
+                        ForEach([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0], id: \.self) { speed in
+                            trackRow(
+                                label: speed == Double(Int(speed))
+                                    ? "\(Int(speed))x"
+                                    : String(format: "%.2gx", speed),
+                                isSelected: abs(viewModel.playbackSpeed - speed) < 0.01
+                            ) {
+                                viewModel.setPlaybackSpeed(speed)
+                            }
+                        }
+                    }
+
                     // Output section
                     trackSection(title: "Output") {
                         HStack {

@@ -1,34 +1,27 @@
 PlaiY - Feature TODO
 ====================
 
-1. Variable Speed Playback (0.25x - 4x)
-   - Clock already has unused set_rate() method
-   - Integrate clock rate into playback loop
-   - Add audio pitch correction via libswresample tempo filter
-   - Add speed picker UI in settings panel
-   - Effort: Low | Impact: High
-
-2. Chapter Navigation
+1. Chapter Navigation
    - Extract chapter metadata from AVFormatContext->chapters in ff_demuxer.cpp
    - Add chapter list to MediaInfo and expose through C bridge
    - Add chapter list UI in settings panel with seek-on-tap
    - Effort: Low | Impact: High (MKV/MP4 files commonly have chapters)
 
-3. Network Sources (SMB / NFS / HTTP)
+2. Network Sources (SMB / NFS / HTTP)
    - FFmpeg avformat_open_input already supports smb://, nfs://, http:// URIs
    - Allow demuxer to accept URIs, not just local paths
    - Add "Connect to Server" dialog in library UI
    - Handle buffering states and network errors gracefully
    - Effort: Medium | Impact: High (NAS playback)
 
-4. Playlist / Play Queue
+3. Playlist / Play Queue
    - Add playlist model (ordered list of file paths)
    - Implement next/previous controls in PlayerControlsView
    - Auto-advance to next file on playback completion
    - Optionally support gapless transition (pre-open next file)
    - Effort: Medium | Impact: Medium
 
-5. Subtitle Timing Adjustment
+4. Subtitle Timing Adjustment
    - Add subtitle delay adjustment (+/- offset applied to PTS)
    - Styling already implemented (font size, color, background, ASS scale)
    - Effort: Low | Impact: Medium
