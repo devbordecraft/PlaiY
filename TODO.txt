@@ -34,14 +34,7 @@ PlaiY - Feature TODO
    - Optionally support gapless transition (pre-open next file)
    - Effort: Medium | Impact: Medium
 
-6. Thumbnail Generation for Library
-   - Seek to ~10% duration and decode one frame per file
-   - Cache thumbnails as JPEG on disk
-   - Display in MediaItemView instead of gray placeholder
-   - Run generation async during library scan
-   - Effort: Medium | Impact: Medium (visual polish)
-
-7. Keyboard Shortcuts & Media Keys
+6. Keyboard Shortcuts & Media Keys
    - Space: play/pause
    - Left/Right arrows: seek +/-5s
    - Shift+Left/Right: seek +/-30s

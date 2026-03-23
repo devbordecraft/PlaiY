@@ -13,6 +13,7 @@
 		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
+		46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
 		67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
 		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
@@ -40,6 +41,7 @@
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
+		89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailManager.swift; sourceTree = "<group>"; };
 		91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
 		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
@@ -65,6 +67,7 @@
 				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
 				EBCE734B22E27E48EA38CB20 /* PYLog.swift */,
 				175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */,
+				89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */,
 				A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */,
 				39C2695F72D1983380708E99 /* Metal */,
 				2A62C07F0B88288C0B50475D /* Views */,
@@ -204,6 +207,7 @@
 				AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */,
 				C5BFB243D1153CBA63F184AD /* SettingsView.swift in Sources */,
 				D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */,
+				46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */,
 				215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */,
 				8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */,
 				34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */,
