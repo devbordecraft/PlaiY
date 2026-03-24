@@ -22,6 +22,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 }
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -96,6 +97,7 @@ struct PlayerEngine::Impl {
     // Settings
     HWDecodePreference hw_decode_pref = HWDecodePreference::Auto;
     bool muted = false;
+    float volume = 1.0f;
 
     // Playback speed
     std::atomic<double> playback_speed{1.0};
@@ -225,6 +227,7 @@ Error PlayerEngine::open_file(const std::string& path) {
                     impl_->passthrough_ring_size = 0;
 
                     impl_->audio_output->set_muted(impl_->muted);
+                    impl_->audio_output->set_volume(impl_->volume);
                     impl_->audio_output->set_bitstream_pull_callback(
                         [this](uint8_t* buf, int bytes) {
                             return impl_->bitstream_pull(buf, bytes);
@@ -273,6 +276,7 @@ Error PlayerEngine::open_file(const std::string& path) {
                         // PTS callback for clock sync (ring buffer PTS tracking handles this)
                         impl_->audio_output->set_pts_callback([](int64_t) {});
                         impl_->audio_output->set_muted(impl_->muted);
+                        impl_->audio_output->set_volume(impl_->volume);
                     }
                 }
             }
@@ -488,6 +492,15 @@ void PlayerEngine::set_muted(bool muted) {
 
 bool PlayerEngine::is_muted() const {
     return impl_->muted;
+}
+
+void PlayerEngine::set_volume(float v) {
+    impl_->volume = std::clamp(v, 0.0f, 1.0f);
+    if (impl_->audio_output) impl_->audio_output->set_volume(impl_->volume);
+}
+
+float PlayerEngine::volume() const {
+    return impl_->volume;
 }
 
 void PlayerEngine::set_playback_speed(double speed) {
@@ -921,6 +934,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                         });
                     audio_output->set_pts_callback([](int64_t) {});
                     audio_output->set_muted(muted);
+                    audio_output->set_volume(volume);
                     audio_output->start();
                     PY_LOG_INFO(TAG, "Audio output reconfigured: %d Hz, %d ch", out_rate, out_channels);
                 }

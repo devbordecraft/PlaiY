@@ -12,6 +12,7 @@ class AppSettings: ObservableObject {
     // MARK: - Audio
     @AppStorage("preferredAudioLanguage") var preferredAudioLanguage: String = ""
     @AppStorage("audioPassthrough") var audioPassthrough: Bool = false
+    @AppStorage("volume") var volume: Double = 1.0
 
     // MARK: - Subtitles
     @AppStorage("preferredSubtitleLanguage") var preferredSubtitleLanguage: String = ""

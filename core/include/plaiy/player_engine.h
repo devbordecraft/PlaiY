@@ -38,6 +38,9 @@ public:
     void set_muted(bool muted);
     bool is_muted() const;
 
+    void set_volume(float v);
+    float volume() const;
+
     void set_playback_speed(double speed);
     double playback_speed() const;
 

@@ -10,7 +10,7 @@ struct TrackSelectionView: View {
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    withAnimation(.easeInOut(duration: 0.25)) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         isPresented = false
                     }
                 }
@@ -79,7 +79,7 @@ struct TrackSelectionView: View {
                         }
                         .padding(.vertical, 4)
 
-                        if viewModel.passthroughActive {
+                        if viewModel.transport.passthroughActive {
                             Text("Bitstream active")
                                 .font(.caption)
                                 .foregroundStyle(.green.opacity(0.8))

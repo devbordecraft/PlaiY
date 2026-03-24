@@ -95,6 +95,14 @@ class PlayerBridge {
         py_player_is_muted(handle)
     }
 
+    func setVolume(_ volume: Float) {
+        py_player_set_volume(handle, volume)
+    }
+
+    var volume: Float {
+        py_player_get_volume(handle)
+    }
+
     func setPlaybackSpeed(_ speed: Double) {
         py_player_set_playback_speed(handle, speed)
     }

@@ -23,6 +23,9 @@ public:
     void set_muted(bool muted) override;
     bool is_muted() const override;
 
+    void set_volume(float v) override;
+    float volume() const override;
+
     Error open_passthrough(int codec_id, int sample_rate, int channels) override;
     bool is_passthrough() const override;
     void set_bitstream_pull_callback(BitstreamPullCallback cb) override;

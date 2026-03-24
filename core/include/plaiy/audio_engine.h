@@ -46,6 +46,9 @@ public:
     virtual void set_muted(bool muted) = 0;
     virtual bool is_muted() const = 0;
 
+    virtual void set_volume(float v) = 0;
+    virtual float volume() const = 0;
+
     virtual bool is_passthrough() const { return false; }
 
     // Callback for passthrough mode: pulls raw compressed bytes.

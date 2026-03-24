@@ -4,6 +4,7 @@
 #include "ca_audio_output.h"
 #include "plaiy/logger.h"
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <vector>
@@ -30,6 +31,7 @@ struct CAAudioOutput::Impl {
     IAudioOutput::BitstreamPullCallback bitstream_pull_callback;
 
     std::atomic<bool> muted{false};
+    std::atomic<float> volume{1.0f};
     int64_t samples_played = 0;
 
     // For HDMI passthrough: the device and stream we configured
@@ -599,6 +601,13 @@ int CAAudioOutput::channels() const { return impl_->channels; }
 void CAAudioOutput::set_muted(bool muted) { impl_->muted.store(muted, std::memory_order_relaxed); }
 bool CAAudioOutput::is_muted() const { return impl_->muted.load(std::memory_order_relaxed); }
 
+void CAAudioOutput::set_volume(float v) {
+    impl_->volume.store(std::clamp(v, 0.0f, 1.0f), std::memory_order_relaxed);
+}
+float CAAudioOutput::volume() const {
+    return impl_->volume.load(std::memory_order_relaxed);
+}
+
 // ---- PCM render callback ----
 
 OSStatus CAAudioOutput::Impl::renderCallback(
@@ -626,6 +635,13 @@ OSStatus CAAudioOutput::Impl::renderCallback(
     if (written < frames) {
         memset(buffer + written * channels, 0,
                (frames - written) * channels * sizeof(float));
+    }
+
+    // Volume: scale the buffer (after pull, before mute)
+    float vol = self->volume.load(std::memory_order_relaxed);
+    if (vol < 0.999f) {
+        int total = frames * channels;
+        for (int i = 0; i < total; ++i) buffer[i] *= vol;
     }
 
     // Mute: zero the entire buffer (after pull so ring buffer doesn't back up)

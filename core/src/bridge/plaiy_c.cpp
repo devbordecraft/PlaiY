@@ -120,6 +120,15 @@ bool py_player_is_muted(PYPlayer* p) {
     return p->engine.is_muted();
 }
 
+void py_player_set_volume(PYPlayer* p, float volume) {
+    if (p) p->engine.set_volume(volume);
+}
+
+float py_player_get_volume(PYPlayer* p) {
+    if (!p) return 1.0f;
+    return p->engine.volume();
+}
+
 void py_player_set_playback_speed(PYPlayer* p, double speed) {
     if (p) p->engine.set_playback_speed(speed);
 }

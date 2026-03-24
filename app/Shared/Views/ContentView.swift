@@ -26,6 +26,7 @@ struct ContentView: View {
                                     durationUs: playerVM.duration
                                 )
                             }
+                            settings.volume = Double(playerVM.volume)
                             playerVM.stop()
                             screen = .library
                             selectedFilePath = nil
@@ -39,6 +40,7 @@ struct ContentView: View {
                             if settings.resumePlayback {
                                 ResumeStore.clear(path: path)
                             }
+                            settings.volume = Double(playerVM.volume)
                             playerVM.stop()
                             screen = .library
                             selectedFilePath = nil

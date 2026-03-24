@@ -83,6 +83,10 @@ bool        py_player_is_passthrough_active(PYPlayer* p);
 void        py_player_set_muted(PYPlayer* p, bool muted);
 bool        py_player_is_muted(PYPlayer* p);
 
+// ---- Volume ----
+void        py_player_set_volume(PYPlayer* p, float volume);
+float       py_player_get_volume(PYPlayer* p);
+
 // ---- Playback speed ----
 void        py_player_set_playback_speed(PYPlayer* p, double speed);
 double      py_player_get_playback_speed(PYPlayer* p);
