@@ -137,8 +137,10 @@ class MetalViewCoordinator {
 
         // Acquire a video frame from the player BEFORE requesting a drawable.
         // This avoids wasting drawables when we have no new content.
-        let clockUs = playerBridge.position
-        guard let framePtr = playerBridge.acquireVideoFrame(targetPts: clockUs) else {
+        // Note: targetPts is unused by the C++ implementation — it reads the
+        // internal clock directly. Passing 0 avoids a redundant Clock mutex
+        // acquisition on every display-link tick (120Hz).
+        guard let framePtr = playerBridge.acquireVideoFrame(targetPts: 0) else {
             guard let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor else { return }
             drawBlack(descriptor: descriptor, drawable: drawable)

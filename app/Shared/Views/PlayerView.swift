@@ -1,4 +1,5 @@
 import SwiftUI
+import QuartzCore
 
 struct PlayerView: View {
     @ObservedObject var viewModel: PlayerViewModel
@@ -19,52 +20,32 @@ struct PlayerView: View {
             MetalPlayerView(playerBridge: viewModel.bridge)
                 .ignoresSafeArea()
 
-            // Subtitle overlay
-            SubtitleOverlayView(subtitle: viewModel.currentSubtitle)
+            // ── Display-link tick + subtitle ──
+            // Lightweight TimelineView: only runs tick() and subtitle overlay.
+            // Buttons, menus, gradients are NOT inside — they don't re-evaluate
+            // at 120Hz, only on @Published changes.
+            TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
+                let _ = viewModel.tick()
+                SubtitleOverlayView(transport: viewModel.transport)
+            }
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Controls overlay
+            // ── Controls overlay ──
+            // NOT inside TimelineView — only rebuilt on @Published / @State changes.
+            // .drawingGroup() rasterizes the entire overlay into a single Metal
+            // texture, so the WindowServer composites 1 layer over the video
+            // instead of ~20 individual CA layers.
             if showControls {
                 VStack {
-                    // Top bar
-                    HStack {
-                        Button(action: onBack) {
-                            Image(systemName: "chevron.left")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-
-                        Text(viewModel.mediaTitle)
-                            .font(.headline)
-                            .foregroundStyle(.white)
-
-                        Spacer()
-
-                        #if os(macOS)
-                        Button {
-                            toggleFullScreen()
-                        } label: {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                        #endif
-
-                        Button {
-                            viewModel.showDebugOverlay.toggle()
-                        } label: {
-                            Image(systemName: "ant")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(viewModel.showDebugOverlay ? .green : .white)
-
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.25)) {
+                    TopBarView(
+                        mediaTitle: viewModel.mediaTitle,
+                        showDebugOverlay: viewModel.showDebugOverlay,
+                        onBack: onBack,
+                        onToggleFullScreen: { toggleFullScreen() },
+                        onToggleDebug: { viewModel.showDebugOverlay.toggle() },
+                        onToggleSettings: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                                 showSettings.toggle()
                             }
                             if showSettings {
@@ -72,38 +53,33 @@ struct PlayerView: View {
                             } else {
                                 scheduleHideControls()
                             }
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .font(.title2)
-                                .fontWeight(.semibold)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.white)
-                    }
-                    .padding()
-                    .background(
-                        LinearGradient(colors: [.black.opacity(0.6), .clear],
-                                       startPoint: .top, endPoint: .bottom)
                     )
 
                     Spacer()
 
-                    // Bottom controls
-                    PlayerControlsView(viewModel: viewModel)
+                    // Bottom controls: timeline (120Hz) + buttons (static)
+                    BottomControlsView(
+                        viewModel: viewModel,
+                        onSeekRelative: { viewModel.seekRelative(seconds: $0) },
+                        onTogglePlayPause: { viewModel.togglePlayPause() },
+                        onToggleMute: { viewModel.toggleMute() },
+                        onSetVolume: { viewModel.setVolume($0) },
+                        onSetSpeed: { viewModel.setPlaybackSpeed($0) },
+                        onTimelineHoverChanged: { viewModel.timelineHoverChanged($0) },
+                        onTimelineHoverMoved: { viewModel.timelineHoverMoved(fraction: $0) },
+                        onTimelineDragStarted: { viewModel.timelineDragStarted() },
+                        onTimelineDragChanged: { viewModel.timelineDragChanged(fraction: $0) },
+                        onTimelineDragEnded: { viewModel.timelineDragEnded() },
+                        onTimeText: { viewModel.timeText(for: $0) }
+                    )
                 }
+                .compositingGroup()
             }
 
             // Debug overlay (top-left, always visible when toggled)
-            if viewModel.showDebugOverlay, let stats = viewModel.playbackStats {
-                VStack {
-                    HStack {
-                        DebugOverlayView(stats: stats)
-                            .padding(8)
-                        Spacer()
-                    }
-                    Spacer()
-                }
-                .allowsHitTesting(false)
+            if viewModel.showDebugOverlay {
+                DebugOverlayWrapper(bridge: viewModel.bridge)
             }
 
             // Settings panel overlay
@@ -114,7 +90,7 @@ struct PlayerView: View {
                 )
             }
 
-            // Resume prompt overlay
+            // Resume prompt overlay (outside drawingGroup — uses .ultraThinMaterial)
             if showResumePrompt, let pos = resumePosition {
                 VStack {
                     Spacer()
@@ -153,12 +129,12 @@ struct PlayerView: View {
         .background(.black)
         .onTapGesture {
             if showSettings {
-                withAnimation(.easeInOut(duration: 0.25)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     showSettings = false
                 }
                 scheduleHideControls()
             } else {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                     showControls.toggle()
                 }
                 scheduleHideControls()
@@ -166,11 +142,12 @@ struct PlayerView: View {
         }
         .focusable()
         .focused($isPlayerFocused)
+        .focusEffectDisabled()
         .onAppear {
             isPlayerFocused = true
             scheduleHideControls()
             if resumePosition != nil {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                     showResumePrompt = true
                 }
                 resumeDismissTask = Task {
@@ -227,11 +204,19 @@ struct PlayerView: View {
             handleKeyAction { viewModel.cycleSpeedDown() }
             return .handled
         }
+        .onKeyPress(.upArrow, phases: .down) { _ in
+            handleKeyAction { viewModel.setVolume(viewModel.volume + 0.05) }
+            return .handled
+        }
+        .onKeyPress(.downArrow, phases: .down) { _ in
+            handleKeyAction { viewModel.setVolume(viewModel.volume - 0.05) }
+            return .handled
+        }
     }
 
     private func handleKeyAction(_ action: () -> Void) {
         action()
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             showControls = true
         }
         scheduleHideControls()
@@ -245,7 +230,7 @@ struct PlayerView: View {
 
     private func dismissResumePrompt() {
         resumeDismissTask?.cancel()
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
             showResumePrompt = false
         }
     }
@@ -263,16 +248,185 @@ struct PlayerView: View {
 
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
-        guard !showSettings && !viewModel.isHoveringTimeline && !viewModel.isDraggingTimeline else { return }
+        guard !showSettings else { return }
         hideControlsTask = Task {
             try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
             if !Task.isCancelled {
                 await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.3)) {
+                    // Don't hide while user is interacting — reschedule instead
+                    if showSettings || viewModel.transport.isUserInteracting {
+                        scheduleHideControls()
+                        return
+                    }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showControls = false
                     }
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TopBarView: extracted so SwiftUI can skip its body when inputs don't change.
+// NOT inside any TimelineView — never re-evaluated at 120Hz.
+// ---------------------------------------------------------------------------
+private struct TopBarView: View {
+    let mediaTitle: String
+    let showDebugOverlay: Bool
+    let onBack: () -> Void
+    let onToggleFullScreen: () -> Void
+    let onToggleDebug: () -> Void
+    let onToggleSettings: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(PlayerButtonStyle())
+            .foregroundStyle(.white)
+
+            Text(mediaTitle)
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            #if os(macOS)
+            Button(action: onToggleFullScreen) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(PlayerButtonStyle())
+            .foregroundStyle(.white)
+            #endif
+
+            Button(action: onToggleDebug) {
+                Image(systemName: "ant")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(PlayerButtonStyle())
+            .foregroundStyle(showDebugOverlay ? .green : .white)
+
+            Button(action: onToggleSettings) {
+                Image(systemName: "gearshape")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
+            .buttonStyle(PlayerButtonStyle())
+            .foregroundStyle(.white)
+        }
+        .padding()
+        .background(
+            LinearGradient(colors: [.black.opacity(0.6), .clear],
+                           startPoint: .top, endPoint: .bottom)
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BottomControlsView: wraps timeline + buttons. The timeline gets its own
+// TimelineView for 120Hz updates; buttons are static and never re-evaluate
+// at display rate.
+// ---------------------------------------------------------------------------
+private struct BottomControlsView: View {
+    let viewModel: PlayerViewModel
+    let onSeekRelative: (Double) -> Void
+    let onTogglePlayPause: () -> Void
+    let onToggleMute: () -> Void
+    let onSetVolume: (Float) -> Void
+    let onSetSpeed: (Double) -> Void
+    let onTimelineHoverChanged: (Bool) -> Void
+    let onTimelineHoverMoved: (Double) -> Void
+    let onTimelineDragStarted: () -> Void
+    let onTimelineDragChanged: (Double) -> Void
+    let onTimelineDragEnded: () -> Void
+    let onTimeText: (Double) -> String
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Timeline: its own TimelineView for 120Hz Canvas updates
+            TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
+                TimelineSectionView(
+                    transport: viewModel.transport,
+                    onHoverChanged: onTimelineHoverChanged,
+                    onHoverMoved: onTimelineHoverMoved,
+                    onDragStarted: onTimelineDragStarted,
+                    onDragChanged: onTimelineDragChanged,
+                    onDragEnded: onTimelineDragEnded,
+                    onTimeText: onTimeText
+                )
+            }
+
+            // Buttons: static, NOT in TimelineView
+            PlaybackButtonsView(
+                isPlaying: viewModel.isPlaying,
+                isMuted: viewModel.isMuted,
+                volume: viewModel.volume,
+                playbackSpeed: viewModel.playbackSpeed,
+                passthroughActive: viewModel.transport.passthroughActive,
+                bridge: viewModel.bridge,
+                transport: viewModel.transport,
+                onSeekRelative: onSeekRelative,
+                onTogglePlayPause: onTogglePlayPause,
+                onToggleMute: onToggleMute,
+                onSetVolume: onSetVolume,
+                onSetSpeed: onSetSpeed
+            )
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 20)
+        .background(
+            LinearGradient(colors: [.clear, .black.opacity(0.7)],
+                           startPoint: .top, endPoint: .bottom)
+        )
+    }
+}
+
+struct DebugOverlayWrapper: View {
+    let bridge: PlayerBridge
+    @State private var stats: PYPlaybackStats?
+    @State private var timer: Timer?
+
+    var body: some View {
+        VStack {
+            HStack {
+                if let stats {
+                    DebugOverlayView(stats: stats)
+                        .padding(8)
+                }
+                Spacer()
+            }
+            Spacer()
+        }
+        .allowsHitTesting(false)
+        .onAppear {
+            stats = bridge.getPlaybackStats()
+            timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+                stats = bridge.getPlaybackStats()
+            }
+        }
+        .onDisappear {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+}
+
+struct PlayerButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.85 : isHovering ? 1.1 : 1.0)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovering)
+            .onHover { isHovering = $0 }
     }
 }
