@@ -203,7 +203,7 @@ Error PlayerEngine::open_file(const std::string& path) {
 
     // Open video decoder
     if (impl_->active_video_stream >= 0) {
-        const auto& track = impl_->media_info.tracks[impl_->active_video_stream];
+        const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_video_stream)];
         impl_->video_decoder = VideoDecoderFactory::create(track, impl_->hw_decode_pref);
         if (!impl_->video_decoder) {
             return {ErrorCode::DecoderInitFailed, "No video decoder available"};
@@ -213,12 +213,12 @@ Error PlayerEngine::open_file(const std::string& path) {
 
     // Open audio decoder + resampler + output
     if (impl_->active_audio_stream >= 0) {
-        setup_audio_output(impl_->media_info.tracks[impl_->active_audio_stream]);
+        setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)]);
     }
 
     // Open subtitle track
     if (impl_->active_subtitle_stream >= 0) {
-        const auto& track = impl_->media_info.tracks[impl_->active_subtitle_stream];
+        const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_subtitle_stream)];
         impl_->subtitle_manager->set_embedded_track(track);
     }
 
@@ -358,7 +358,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
     // Validate it's a valid audio track
     if (stream_index >= 0 &&
         (stream_index >= static_cast<int>(impl_->media_info.tracks.size()) ||
-         impl_->media_info.tracks[stream_index].type != MediaType::Audio)) {
+         impl_->media_info.tracks[static_cast<size_t>(stream_index)].type != MediaType::Audio)) {
         PY_LOG_WARN(TAG, "Invalid audio stream index: %d", stream_index);
         return;
     }
@@ -372,7 +372,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
     if (is_playing && impl_->audio_output_mode == AudioOutputMode::Passthrough) {
         needs_restart = true;  // Always restart when leaving passthrough
     } else if (is_playing && impl_->passthrough_preferred && stream_index >= 0) {
-        const auto& new_track = impl_->media_info.tracks[stream_index];
+        const auto& new_track = impl_->media_info.tracks[static_cast<size_t>(stream_index)];
         if (is_passthrough_eligible(new_track.codec_id, new_track.codec_profile)) {
             needs_restart = true;  // Need to switch from PCM to passthrough
         }
@@ -402,7 +402,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
 void PlayerEngine::select_subtitle_track(int stream_index) {
     impl_->active_subtitle_stream = stream_index;
     if (stream_index >= 0 && stream_index < static_cast<int>(impl_->media_info.tracks.size())) {
-        impl_->subtitle_manager->set_embedded_track(impl_->media_info.tracks[stream_index]);
+        impl_->subtitle_manager->set_embedded_track(impl_->media_info.tracks[static_cast<size_t>(stream_index)]);
     } else {
         impl_->subtitle_manager->close();
     }
@@ -598,7 +598,7 @@ void PlayerEngine::restart_audio_pipeline() {
     impl_->passthrough_ring_size = 0;
 
     // 5. Re-open in the new mode
-    const auto& track = impl_->media_info.tracks[impl_->active_audio_stream];
+    const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)];
     setup_audio_output(track);
 
     // 6. Re-enable packet queue and start new audio decode thread
@@ -752,7 +752,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     // Video info
     if (impl_->active_video_stream >= 0 &&
         impl_->active_video_stream < static_cast<int>(impl_->media_info.tracks.size())) {
-        const auto& vt = impl_->media_info.tracks[impl_->active_video_stream];
+        const auto& vt = impl_->media_info.tracks[static_cast<size_t>(impl_->active_video_stream)];
         s.video_width = vt.width;
         s.video_height = vt.height;
         s.video_codec_id = vt.codec_id;
@@ -766,7 +766,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     // Audio info
     if (impl_->active_audio_stream >= 0 &&
         impl_->active_audio_stream < static_cast<int>(impl_->media_info.tracks.size())) {
-        const auto& at = impl_->media_info.tracks[impl_->active_audio_stream];
+        const auto& at = impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)];
         s.audio_codec_id = at.codec_id;
         snprintf(s.audio_codec_name, sizeof(s.audio_codec_name), "%s", at.codec_name.c_str());
         s.audio_sample_rate = at.sample_rate;
@@ -784,7 +784,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
 
     if (impl_->active_audio_stream >= 0 &&
         impl_->active_audio_stream < static_cast<int>(impl_->media_info.tracks.size())) {
-        const auto& at = impl_->media_info.tracks[impl_->active_audio_stream];
+        const auto& at = impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)];
         s.audio_codec_profile = at.codec_profile;
         s.audio_atmos = is_atmos_stream(at.codec_id, at.codec_profile);
         s.audio_dts_hd = is_dts_hd_stream(at.codec_id, at.codec_profile);
@@ -833,7 +833,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     return s;
 }
 
-VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
+VideoFrame* PlayerEngine::acquire_video_frame(int64_t /*target_pts_us*/) {
     // Use peek_fields() to read PTS/duration under lock without holding a raw
     // pointer that could be invalidated by a concurrent pop().
     auto fields = impl_->video_frame_queue.peek_fields();
@@ -1067,7 +1067,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
     if (!audio_decoder || !audio_output) return;
 
-    AVCodecContext* ctx = open_audio_codec(media_info.tracks[active_audio_stream]);
+    AVCodecContext* ctx = open_audio_codec(media_info.tracks[static_cast<size_t>(active_audio_stream)]);
     if (!ctx) return;
 
     // Set up resampler
@@ -1122,7 +1122,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 timebase_initialized = false;
 
                 // Open new decoder
-                const auto& new_track = media_info.tracks[new_stream];
+                const auto& new_track = media_info.tracks[static_cast<size_t>(new_stream)];
                 ctx = open_audio_codec(new_track);
                 if (!ctx) {
                     PY_LOG_ERROR(TAG, "Failed to open new audio decoder");
@@ -1224,7 +1224,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 Error err = resampler.convert(frame, resample_buf, num_samples);
                 if (err) return;
 
-                size_t to_write = resample_buf.size();
+                size_t to_write = static_cast<size_t>(num_samples) * static_cast<size_t>(out_channels);
                 {
                     std::unique_lock lock(audio_ring_flush_mutex);
                     audio_ring_not_full.wait(lock, [&] {
@@ -1297,7 +1297,7 @@ int PlayerEngine::Impl::audio_pull(float* buffer, int frames, int channels) {
         clock.set_audio_pts(audio_pts_for_ring.load(std::memory_order_acquire) - offset_us);
     }
 
-    return static_cast<int>(to_read / channels);
+    return static_cast<int>(to_read / static_cast<size_t>(channels));
 }
 
 void PlayerEngine::Impl::passthrough_write_loop() {

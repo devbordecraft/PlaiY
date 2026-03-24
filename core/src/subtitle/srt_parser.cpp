@@ -129,7 +129,6 @@ SubtitleFrame SrtParser::get_frame_at(int64_t timestamp_us) const {
 int64_t SrtParser::parse_timestamp(const std::string& ts) {
     // Format: HH:MM:SS,mmm or HH:MM:SS.mmm
     int h = 0, m = 0, s = 0, ms = 0;
-    char sep;
 
     std::string cleaned = ts;
     // Replace comma with dot for consistent parsing

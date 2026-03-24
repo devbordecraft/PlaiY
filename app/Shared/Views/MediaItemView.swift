@@ -55,7 +55,7 @@ struct MediaItemView: View {
                     }
                 }
             }
-            .task {
+            .task(id: item.filePath) {
                 thumbnail = await ThumbnailManager.shared.loadThumbnail(for: item.filePath)
             }
 

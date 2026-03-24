@@ -83,15 +83,16 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
 
     if (codec_id == AV_CODEC_ID_H264) {
         // Build format description from raw avcC extradata
-        CFDataRef avcC = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        CFDataRef avcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
         const void* atomKeys[] = { CFSTR("avcC") };
         const void* atomValues[] = { avcC };
         CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
             atomKeys, atomValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+        const void* extValues[] = { atoms };
         CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, (const void*[]){atoms}, 1,
+            extKeys, extValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
         status = CMVideoFormatDescriptionCreate(
@@ -106,14 +107,15 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
         CFRelease(avcC);
     } else if (codec_id == AV_CODEC_ID_HEVC) {
         const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
-        CFDataRef hvcC = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        CFDataRef hvcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
         const void* atomKeys[] = { CFSTR("hvcC") };
         const void* atomValues[] = { hvcC };
         CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
             atomKeys, atomValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        const void* extValues[] = { atoms };
         CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, (const void*[]){atoms}, 1,
+            extKeys, extValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
         status = CMVideoFormatDescriptionCreate(
@@ -127,15 +129,16 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
         CFRelease(atoms);
         CFRelease(hvcC);
     } else if (codec_id == AV_CODEC_ID_AV1) {
-        CFDataRef av1C = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        CFDataRef av1C = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
         const void* atomKeys[] = { CFSTR("av1C") };
         const void* atomValues[] = { av1C };
         CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
             atomKeys, atomValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+        const void* extValues[] = { atoms };
         CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, (const void*[]){atoms}, 1,
+            extKeys, extValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
         status = CMVideoFormatDescriptionCreate(
@@ -149,15 +152,16 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
         CFRelease(atoms);
         CFRelease(av1C);
     } else if (codec_id == AV_CODEC_ID_VP9) {
-        CFDataRef vpcC = CFDataCreate(kCFAllocatorDefault, extra, extra_size);
+        CFDataRef vpcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
         const void* atomKeys[] = { CFSTR("vpcC") };
         const void* atomValues[] = { vpcC };
         CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
             atomKeys, atomValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+        const void* extValues[] = { atoms };
         CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, (const void*[]){atoms}, 1,
+            extKeys, extValues, 1,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
         status = CMVideoFormatDescriptionCreate(
@@ -372,15 +376,15 @@ void VTVideoDecoder::Impl::decompressionCallback(
     void* decompressionOutputRefCon,
     void* sourceFrameRefCon,
     OSStatus status,
-    VTDecodeInfoFlags infoFlags,
+    VTDecodeInfoFlags /*infoFlags*/,
     CVImageBufferRef imageBuffer,
-    CMTime presentationTimeStamp,
+    CMTime /*presentationTimeStamp*/,
     CMTime presentationDuration)
 {
     auto* self = static_cast<Impl*>(decompressionOutputRefCon);
 
     if (status != noErr || !imageBuffer) {
-        PY_LOG_WARN(TAG, "VT decode callback error: %d", (int)status);
+        PY_LOG_WARN(TAG, "VT decode callback error: %d", static_cast<int>(status));
         return;
     }
 
@@ -423,7 +427,7 @@ void VTVideoDecoder::Impl::decompressionCallback(
     CFDictionaryRef attachments = CVBufferCopyAttachments(imageBuffer, kCVAttachmentMode_ShouldPropagate);
     if (attachments) {
         auto read_u16_be = [](const uint8_t* p) -> uint16_t {
-            return (uint16_t(p[0]) << 8) | p[1];
+            return static_cast<uint16_t>((uint16_t(p[0]) << 8) | p[1]);
         };
         auto read_u32_be = [](const uint8_t* p) -> uint32_t {
             return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |

@@ -13,7 +13,9 @@ class ThumbnailManager {
     private let maxHeight: Int32 = 270
 
     private init() {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            fatalError("Cannot locate caches directory")
+        }
         cacheDir = caches.appendingPathComponent("PlaiY/thumbnails", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
 

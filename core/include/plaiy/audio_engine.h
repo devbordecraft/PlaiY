@@ -39,7 +39,7 @@ public:
 
     // Open in passthrough mode for compressed bitstream output.
     // Returns an error if the output device doesn't support the format.
-    virtual Error open_passthrough(int codec_id, int codec_profile, int sample_rate, int channels) {
+    virtual Error open_passthrough(int /*codec_id*/, int /*codec_profile*/, int /*sample_rate*/, int /*channels*/) {
         return {ErrorCode::AudioOutputError, "Passthrough not supported"};
     }
 
@@ -54,7 +54,7 @@ public:
     // Callback for passthrough mode: pulls raw compressed bytes.
     // Returns the number of bytes written to buffer.
     using BitstreamPullCallback = std::function<int(uint8_t* buffer, int bytes)>;
-    virtual void set_bitstream_pull_callback(BitstreamPullCallback cb) {}
+    virtual void set_bitstream_pull_callback(BitstreamPullCallback /*cb*/) {}
 
     // Probe which passthrough codecs the current output device supports.
     struct PassthroughCapability {
@@ -68,10 +68,10 @@ public:
 
     // Callback invoked when the audio output device changes (HDMI plug/unplug).
     using DeviceChangeCallback = std::function<void()>;
-    virtual void set_device_change_callback(DeviceChangeCallback cb) {}
+    virtual void set_device_change_callback(DeviceChangeCallback /*cb*/) {}
 
     // Spatial audio support (optional, override in spatial implementation)
-    virtual void set_head_tracking_enabled(bool enabled) {}
+    virtual void set_head_tracking_enabled(bool /*enabled*/) {}
     virtual bool is_head_tracking_enabled() const { return false; }
     virtual bool is_spatial() const { return false; }
 };

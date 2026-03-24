@@ -110,38 +110,14 @@ struct PlayerView: View {
 
             // Resume prompt overlay (outside drawingGroup — uses .ultraThinMaterial)
             if showResumePrompt, let pos = resumePosition {
-                VStack {
-                    Spacer()
-                    HStack(spacing: 16) {
-                        Button {
-                            dismissResumePrompt()
-                            viewModel.bridge.seek(to: pos)
-                            viewModel.play()
-                        } label: {
-                            Label("Resume from \(formatTime(pos))", systemImage: "play.fill")
-                                .fontWeight(.semibold)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.white.opacity(0.2))
-
-                        Button {
-                            dismissResumePrompt()
-                            viewModel.play()
-                        } label: {
-                            Text("Start from Beginning")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.white.opacity(0.3))
-                    }
-                    .font(.callout)
-                    .foregroundStyle(.white)
-                    .padding(20)
-                    .background(.ultraThinMaterial.opacity(0.8))
-                    .background(.black.opacity(0.4))
-                    .cornerRadius(14)
-                    .padding(.bottom, 100)
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                ResumePromptView(position: pos, onResume: {
+                    dismissResumePrompt()
+                    viewModel.bridge.seek(to: pos)
+                    viewModel.play()
+                }, onStartOver: {
+                    dismissResumePrompt()
+                    viewModel.play()
+                })
             }
         }
         .background(.black)
@@ -290,14 +266,7 @@ struct PlayerView: View {
     }
 
     private func formatTime(_ us: Int64) -> String {
-        let totalSeconds = Int(us / 1_000_000)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let seconds = totalSeconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
+        TimeFormatting.display(us)
     }
 
     private func scheduleHideControls() {
@@ -318,6 +287,47 @@ struct PlayerView: View {
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ResumePromptView: resume/start-over overlay shown when a file has a saved position.
+// ---------------------------------------------------------------------------
+private struct ResumePromptView: View {
+    let position: Int64
+    let onResume: () -> Void
+    let onStartOver: () -> Void
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 16) {
+                Button {
+                    onResume()
+                } label: {
+                    Label("Resume from \(TimeFormatting.display(position))", systemImage: "play.fill")
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.white.opacity(0.2))
+
+                Button {
+                    onStartOver()
+                } label: {
+                    Text("Start from Beginning")
+                }
+                .buttonStyle(.bordered)
+                .tint(.white.opacity(0.3))
+            }
+            .font(.callout)
+            .foregroundStyle(.white)
+            .padding(20)
+            .background(.ultraThinMaterial.opacity(0.8))
+            .background(.black.opacity(0.4))
+            .cornerRadius(14)
+            .padding(.bottom, 100)
+        }
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 }
 

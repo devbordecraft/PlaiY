@@ -5,7 +5,7 @@ struct SubtitleOverlayView: View {
     let transport: PlaybackTransport
 
     // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
-    private static var cachedDataCount: Int = 0
+    private static var cachedDataHash: Int = 0
     #if os(macOS)
     private static var cachedImage: NSImage?
     #else
@@ -54,11 +54,12 @@ struct SubtitleOverlayView: View {
 
     #if os(macOS)
     private func cachedBitmapImage(data: Data, width: Int, height: Int) -> NSImage? {
-        if data.count == Self.cachedDataCount, let cached = Self.cachedImage {
+        let hash = data.hashValue
+        if hash == Self.cachedDataHash, let cached = Self.cachedImage {
             return cached
         }
         let image = bitmapImage(data: data, width: width, height: height)
-        Self.cachedDataCount = data.count
+        Self.cachedDataHash = hash
         Self.cachedImage = image
         return image
     }
@@ -76,11 +77,11 @@ struct SubtitleOverlayView: View {
             colorSpaceName: .deviceRGB,
             bytesPerRow: width * 4,
             bitsPerPixel: 32
-        ) else { return nil }
+        ), let bitmapData = rep.bitmapData else { return nil }
 
         data.withUnsafeBytes { ptr in
             if let src = ptr.baseAddress {
-                memcpy(rep.bitmapData!, src, min(data.count, width * height * 4))
+                memcpy(bitmapData, src, min(data.count, width * height * 4))
             }
         }
 
@@ -90,11 +91,12 @@ struct SubtitleOverlayView: View {
     }
     #else
     private func cachedBitmapImage(data: Data, width: Int, height: Int) -> UIImage? {
-        if data.count == Self.cachedDataCount, let cached = Self.cachedImage {
+        let hash = data.hashValue
+        if hash == Self.cachedDataHash, let cached = Self.cachedImage {
             return cached
         }
         let image = bitmapImage(data: data, width: width, height: height)
-        Self.cachedDataCount = data.count
+        Self.cachedDataHash = hash
         Self.cachedImage = image
         return image
     }

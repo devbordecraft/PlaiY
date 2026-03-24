@@ -189,7 +189,7 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     if (ret == 0) {
         FILE* f = fopen(output_path.c_str(), "wb");
         if (f) {
-            fwrite(pkt->data, 1, pkt->size, f);
+            fwrite(pkt->data, 1, static_cast<size_t>(pkt->size), f);
             fclose(f);
             success = true;
             PY_LOG_DEBUG(TAG, "generated %dx%d (%d bytes): %s",

@@ -3,7 +3,7 @@ import CoreVideo
 import CoreGraphics
 
 /// Swift wrapper around the C bridge API (plaiy_c.h)
-class PlayerBridge {
+class PlayerBridge: @unchecked Sendable {
     private let handle: OpaquePointer
 
     init() {
@@ -95,7 +95,7 @@ class PlayerBridge {
         let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
         py_player_set_device_change_callback(handle, { userdata in
             guard let userdata else { return }
-            let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as! () -> Void
+            guard let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? () -> Void else { return }
             cb()
         }, context)
     }
@@ -326,7 +326,7 @@ enum SubtitleData {
 }
 
 /// Library bridge
-class LibraryBridge {
+class LibraryBridge: @unchecked Sendable {
     private let handle: OpaquePointer
 
     init() {

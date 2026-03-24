@@ -94,10 +94,14 @@ class MetalViewCoordinator {
     private var currentHDRMode: Int32 = -1 // -1 = unset, 0 = SDR, 1 = PQ, 2 = HLG
 
     init(playerBridge: PlayerBridge, transport: PlaybackTransport, mtkView: MTKView) {
+        guard let device = mtkView.device,
+              let commandQueue = device.makeCommandQueue() else {
+            fatalError("Metal device or command queue unavailable")
+        }
         self.playerBridge = playerBridge
         self.transport = transport
-        self.device = mtkView.device!
-        self.commandQueue = device.makeCommandQueue()!
+        self.device = device
+        self.commandQueue = commandQueue
 
         // Create texture cache for zero-copy CVPixelBuffer -> MTLTexture
         var cache: CVMetalTextureCache?

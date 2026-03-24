@@ -31,9 +31,7 @@ SubtitleManager::SubtitleManager() : impl_(std::make_unique<Impl>()) {}
 SubtitleManager::~SubtitleManager() = default;
 
 Error SubtitleManager::load_external(const std::string& path) {
-    std::lock_guard lock(impl_->mutex);
-
-    // Detect format from extension
+    // Detect format from extension (no lock needed)
     std::string ext;
     auto dot = path.rfind('.');
     if (dot != std::string::npos) {
@@ -41,25 +39,29 @@ Error SubtitleManager::load_external(const std::string& path) {
         for (auto& c : ext) c = static_cast<char>(tolower(c));
     }
 
+    // Parse/load outside the lock to avoid blocking rendering
     if (ext == "srt") {
-        impl_->srt_parser = std::make_unique<SrtParser>();
-        if (!impl_->srt_parser->parse_file(path)) {
+        auto parser = std::make_unique<SrtParser>();
+        if (!parser->parse_file(path)) {
             return {ErrorCode::SubtitleError, "Failed to parse SRT: " + path};
         }
+        std::lock_guard lock(impl_->mutex);
+        impl_->srt_parser = std::move(parser);
         impl_->active_format = SubtitleFormat::SRT;
-        PY_LOG_INFO(TAG, "Loaded external SRT: %s", path.c_str());
     } else if (ext == "ass" || ext == "ssa") {
-        impl_->ass_renderer = std::make_unique<AssRenderer>();
-        impl_->ass_renderer->set_video_size(impl_->video_width, impl_->video_height);
-        impl_->ass_renderer->set_font_scale(impl_->ass_font_scale);
-        Error err = impl_->ass_renderer->load_file(path);
+        auto renderer = std::make_unique<AssRenderer>();
+        renderer->set_video_size(impl_->video_width, impl_->video_height);
+        renderer->set_font_scale(impl_->ass_font_scale);
+        Error err = renderer->load_file(path);
         if (err) return err;
+        std::lock_guard lock(impl_->mutex);
+        impl_->ass_renderer = std::move(renderer);
         impl_->active_format = SubtitleFormat::ASS;
-        PY_LOG_INFO(TAG, "Loaded external ASS: %s", path.c_str());
     } else {
         return {ErrorCode::UnsupportedFormat, "Unknown subtitle format: " + ext};
     }
 
+    PY_LOG_INFO(TAG, "Loaded external subtitle: %s", path.c_str());
     return Error::Ok();
 }
 

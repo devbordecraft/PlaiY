@@ -86,8 +86,8 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    std::vector<uint8_t> jpeg_data(size);
-    fread(jpeg_data.data(), 1, size, f);
+    std::vector<uint8_t> jpeg_data(static_cast<size_t>(size));
+    fread(jpeg_data.data(), 1, static_cast<size_t>(size), f);
     fclose(f);
 
     // Decode JPEG to BGRA using FFmpeg
@@ -137,7 +137,7 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
     }
 
     int bgra_stride = w * 4;
-    std::vector<uint8_t> bgra(bgra_stride * h);
+    std::vector<uint8_t> bgra(static_cast<size_t>(bgra_stride) * static_cast<size_t>(h));
     uint8_t* dst_data[1] = { bgra.data() };
     int dst_linesize[1] = { bgra_stride };
 
@@ -322,7 +322,7 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
 
             FILE* f = fopen(path.c_str(), "wb");
             if (f) {
-                fwrite(enc_pkt->data, 1, enc_pkt->size, f);
+                fwrite(enc_pkt->data, 1, static_cast<size_t>(enc_pkt->size), f);
                 fclose(f);
             }
         }

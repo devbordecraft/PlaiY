@@ -69,7 +69,7 @@ int MediaLibrary::item_count() const {
 
 const MediaItem* MediaLibrary::item_at(int index) const {
     if (index < 0 || index >= static_cast<int>(impl_->items.size())) return nullptr;
-    return &impl_->items[index];
+    return &impl_->items[static_cast<size_t>(index)];
 }
 
 int MediaLibrary::folder_count() const {
@@ -79,7 +79,7 @@ int MediaLibrary::folder_count() const {
 const std::string& MediaLibrary::folder_at(int index) const {
     static const std::string empty;
     if (index < 0 || index >= static_cast<int>(impl_->folders.size())) return empty;
-    return impl_->folders[index];
+    return impl_->folders[static_cast<size_t>(index)];
 }
 
 void MediaLibrary::remove_folder(int index) {
@@ -88,9 +88,8 @@ void MediaLibrary::remove_folder(int index) {
 
     // Re-scan remaining folders
     impl_->items.clear();
-    auto folders_copy = impl_->folders;
-    impl_->folders.clear();
-    for (const auto& folder : folders_copy) {
+    auto folders = std::move(impl_->folders);
+    for (const auto& folder : folders) {
         add_folder(folder);
     }
 }

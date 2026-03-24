@@ -141,80 +141,7 @@ struct TrackSelectionView: View {
                     }
 
                     // Output section
-                    trackSection(title: "Output") {
-                        HStack {
-                            Toggle("Audio Passthrough", isOn: Binding(
-                                get: { viewModel.passthroughEnabled },
-                                set: { viewModel.setPassthrough($0) }
-                            ))
-                            .toggleStyle(.switch)
-                            .foregroundStyle(.white)
-                        }
-                        .padding(.vertical, 4)
-
-                        if viewModel.transport.passthroughActive {
-                            Text("Bitstream active")
-                                .font(.caption)
-                                .foregroundStyle(.green.opacity(0.8))
-                                .padding(.leading, 4)
-                        }
-
-                        // Device capability summary
-                        let caps = viewModel.passthroughCaps
-                        let supported = [
-                            caps.ac3 ? "AC3" : nil,
-                            caps.eac3 ? "E-AC3" : nil,
-                            caps.dts ? "DTS" : nil,
-                            caps.dts_hd_ma ? "DTS-HD" : nil,
-                            caps.truehd ? "TrueHD" : nil,
-                        ].compactMap { $0 }
-                        if supported.isEmpty {
-                            Text("No passthrough formats detected")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.4))
-                                .padding(.leading, 4)
-                        } else {
-                            Text("Device supports: \(supported.joined(separator: ", "))")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.5))
-                                .padding(.leading, 4)
-                        }
-
-                        Divider().padding(.vertical, 4)
-
-                        // Spatial Audio
-                        HStack {
-                            Text("Spatial Audio")
-                                .foregroundStyle(.white)
-                            Spacer()
-                            Picker("", selection: Binding(
-                                get: { viewModel.bridge.spatialAudioMode },
-                                set: { viewModel.setSpatialMode(Int($0)) }
-                            )) {
-                                Text("Auto").tag(Int32(0))
-                                Text("Off").tag(Int32(1))
-                                Text("Force").tag(Int32(2))
-                            }
-                            .pickerStyle(.segmented)
-                            .frame(width: 160)
-                        }
-                        .padding(.vertical, 2)
-
-                        if viewModel.transport.spatialActive {
-                            Text("Spatial audio active (HRTF)")
-                                .font(.caption)
-                                .foregroundStyle(.blue.opacity(0.8))
-                                .padding(.leading, 4)
-                        }
-
-                        Toggle("Head Tracking", isOn: Binding(
-                            get: { viewModel.headTrackingEnabled },
-                            set: { viewModel.setHeadTracking($0) }
-                        ))
-                        .toggleStyle(.switch)
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 2)
-                    }
+                    OutputSectionView(viewModel: viewModel)
                 }
                 .padding(20)
             }
@@ -259,5 +186,94 @@ struct TrackSelectionView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OutputSectionView: passthrough, spatial audio, and head tracking controls.
+// ---------------------------------------------------------------------------
+private struct OutputSectionView: View {
+    @ObservedObject var viewModel: PlayerViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("OUTPUT")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.white.opacity(0.6))
+
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Toggle("Audio Passthrough", isOn: Binding(
+                        get: { viewModel.passthroughEnabled },
+                        set: { viewModel.setPassthrough($0) }
+                    ))
+                    .toggleStyle(.switch)
+                    .foregroundStyle(.white)
+                }
+                .padding(.vertical, 4)
+
+                if viewModel.transport.passthroughActive {
+                    Text("Bitstream active")
+                        .font(.caption)
+                        .foregroundStyle(.green.opacity(0.8))
+                        .padding(.leading, 4)
+                }
+
+                let caps = viewModel.passthroughCaps
+                let supported = [
+                    caps.ac3 ? "AC3" : nil,
+                    caps.eac3 ? "E-AC3" : nil,
+                    caps.dts ? "DTS" : nil,
+                    caps.dts_hd_ma ? "DTS-HD" : nil,
+                    caps.truehd ? "TrueHD" : nil,
+                ].compactMap { $0 }
+                if supported.isEmpty {
+                    Text("No passthrough formats detected")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.4))
+                        .padding(.leading, 4)
+                } else {
+                    Text("Device supports: \(supported.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.5))
+                        .padding(.leading, 4)
+                }
+
+                Divider().padding(.vertical, 4)
+
+                HStack {
+                    Text("Spatial Audio")
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Picker("", selection: Binding(
+                        get: { viewModel.bridge.spatialAudioMode },
+                        set: { viewModel.setSpatialMode(Int($0)) }
+                    )) {
+                        Text("Auto").tag(Int32(0))
+                        Text("Off").tag(Int32(1))
+                        Text("Force").tag(Int32(2))
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 160)
+                }
+                .padding(.vertical, 2)
+
+                if viewModel.transport.spatialActive {
+                    Text("Spatial audio active (HRTF)")
+                        .font(.caption)
+                        .foregroundStyle(.blue.opacity(0.8))
+                        .padding(.leading, 4)
+                }
+
+                Toggle("Head Tracking", isOn: Binding(
+                    get: { viewModel.headTrackingEnabled },
+                    set: { viewModel.setHeadTracking($0) }
+                ))
+                .toggleStyle(.switch)
+                .foregroundStyle(.white)
+                .padding(.vertical, 2)
+            }
+        }
     }
 }

@@ -28,7 +28,11 @@ Error AudioTempoFilter::open(AVCodecContext* codec_ctx, double tempo) {
     close();
     tempo_ = tempo;
 
-    if (std::abs(tempo - 1.0) < 0.001) {
+    static constexpr double kAtempoMin = 0.5;
+    static constexpr double kAtempoMax = 2.0;
+    static constexpr double kAtempoEpsilon = 0.001;
+
+    if (std::abs(tempo - 1.0) < kAtempoEpsilon) {
         return Error::Ok(); // No filter needed at 1.0x
     }
 
@@ -93,8 +97,8 @@ Error AudioTempoFilter::open(AVCodecContext* codec_ctx, double tempo) {
     double remaining = tempo;
     int filter_idx = 0;
 
-    while (remaining < 0.5 - 0.001 || remaining > 2.0 + 0.001) {
-        double this_tempo = (remaining < 1.0) ? 0.5 : 2.0;
+    while (remaining < kAtempoMin - kAtempoEpsilon || remaining > kAtempoMax + kAtempoEpsilon) {
+        double this_tempo = (remaining < 1.0) ? kAtempoMin : kAtempoMax;
         char tempo_str[32];
         snprintf(tempo_str, sizeof(tempo_str), "%.4f", this_tempo);
 

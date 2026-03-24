@@ -8,8 +8,6 @@ extern "C" {
 
 #include <sys/stat.h>
 
-static constexpr const char* TAG = "MetadataReader";
-
 namespace py {
 
 bool MetadataReader::read(const std::string& path, MediaItem& out) {

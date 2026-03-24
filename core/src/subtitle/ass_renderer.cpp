@@ -130,7 +130,7 @@ SubtitleFrame AssRenderer::render(int64_t timestamp_us) {
 
             // Convert ASS bitmap (alpha map + color) to RGBA
             int pixel_count = img->w * img->h;
-            region.rgba_data.resize(pixel_count * 4);
+            region.rgba_data.resize(static_cast<size_t>(pixel_count) * 4);
             uint8_t r = (img->color >> 24) & 0xFF;
             uint8_t g = (img->color >> 16) & 0xFF;
             uint8_t b = (img->color >> 8) & 0xFF;

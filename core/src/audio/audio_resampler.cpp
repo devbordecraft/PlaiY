@@ -71,7 +71,7 @@ Error AudioResampler::convert(AVFrame* frame, std::vector<float>& out_samples, i
         frame->sample_rate,
         AV_ROUND_UP));
 
-    out_samples.resize(out_count * out_channels_);
+    out_samples.resize(static_cast<size_t>(out_count * out_channels_));
     uint8_t* out_buf = reinterpret_cast<uint8_t*>(out_samples.data());
 
     int converted = swr_convert(swr_ctx_,
@@ -84,7 +84,6 @@ Error AudioResampler::convert(AVFrame* frame, std::vector<float>& out_samples, i
     }
 
     out_num_samples = converted;
-    out_samples.resize(converted * out_channels_);
     return Error::Ok();
 }
 

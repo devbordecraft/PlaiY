@@ -87,7 +87,7 @@ Error PgsDecoder::decode(const Packet& pkt, SubtitleFrame& out, bool& has_output
         region.y = rect->y;
 
         // Convert paletted bitmap to RGBA
-        region.rgba_data.resize(rect->w * rect->h * 4);
+        region.rgba_data.resize(static_cast<size_t>(rect->w) * static_cast<size_t>(rect->h) * 4);
         const uint32_t* palette = reinterpret_cast<const uint32_t*>(rect->data[1]);
 
         for (int y = 0; y < rect->h; y++) {
@@ -98,7 +98,7 @@ Error PgsDecoder::decode(const Packet& pkt, SubtitleFrame& out, bool& has_output
                 uint8_t r = (color >> 16) & 0xFF;
                 uint8_t g = (color >> 8) & 0xFF;
                 uint8_t b = color & 0xFF;
-                int dst = (y * rect->w + x) * 4;
+                size_t dst = static_cast<size_t>((y * rect->w + x) * 4);
                 region.rgba_data[dst + 0] = r;
                 region.rgba_data[dst + 1] = g;
                 region.rgba_data[dst + 2] = b;

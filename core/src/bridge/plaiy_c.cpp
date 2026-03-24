@@ -19,6 +19,8 @@ struct PYPlayer {
     std::string last_error_msg;
     py::SeekThumbnailGenerator seek_thumbs;
     std::string video_path;
+    PYDeviceChangeCallback device_cb = nullptr;
+    void* device_ud = nullptr;
 };
 
 PYPlayer* py_player_create(void) {
@@ -123,17 +125,14 @@ PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p) {
     return out;
 }
 
-static PYDeviceChangeCallback g_device_cb = nullptr;
-static void* g_device_ud = nullptr;
-
 void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata) {
     if (!p) return;
-    g_device_cb = cb;
-    g_device_ud = userdata;
+    p->device_cb = cb;
+    p->device_ud = userdata;
 
     if (cb) {
-        p->engine.set_device_change_callback([]{
-            if (g_device_cb) g_device_cb(g_device_ud);
+        p->engine.set_device_change_callback([p]{
+            if (p->device_cb) p->device_cb(p->device_ud);
         });
     } else {
         p->engine.set_device_change_callback(nullptr);
@@ -191,6 +190,8 @@ double py_player_get_playback_speed(PYPlayer* p) {
 }
 
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
+    static_assert(sizeof(PYPlaybackStats) == sizeof(py::PlaybackStats),
+                  "PYPlaybackStats and py::PlaybackStats size mismatch — update bridge");
     PYPlaybackStats out = {};
     if (!p) return out;
     py::PlaybackStats s = p->engine.get_playback_stats();

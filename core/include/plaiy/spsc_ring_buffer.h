@@ -22,7 +22,7 @@ public:
     }
 
     // Producer: write up to count items. Returns number actually written.
-    size_t write(const T* data, size_t count) {
+    size_t write(const T* data, size_t count) noexcept {
         size_t w = write_idx_.load(std::memory_order_relaxed);
         size_t r = read_idx_.load(std::memory_order_acquire);
         size_t avail = capacity_ - (w - r);
@@ -43,7 +43,7 @@ public:
     }
 
     // Consumer: read up to count items. Returns number actually read.
-    size_t read(T* data, size_t count) {
+    size_t read(T* data, size_t count) noexcept {
         size_t r = read_idx_.load(std::memory_order_relaxed);
         size_t w = write_idx_.load(std::memory_order_acquire);
         size_t avail = w - r;
@@ -63,19 +63,19 @@ public:
         return to_read;
     }
 
-    size_t available_read() const {
+    size_t available_read() const noexcept {
         size_t w = write_idx_.load(std::memory_order_acquire);
         size_t r = read_idx_.load(std::memory_order_relaxed);
         return w - r;
     }
 
-    size_t available_write() const {
+    size_t available_write() const noexcept {
         size_t w = write_idx_.load(std::memory_order_relaxed);
         size_t r = read_idx_.load(std::memory_order_acquire);
         return capacity_ - (w - r);
     }
 
-    size_t capacity() const { return capacity_; }
+    size_t capacity() const noexcept { return capacity_; }
 
     // Reset indices. Only safe when neither thread is reading/writing.
     void reset() {

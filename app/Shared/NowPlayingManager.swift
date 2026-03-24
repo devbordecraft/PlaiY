@@ -48,12 +48,4 @@ class NowPlayingManager {
         MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
 
-    func teardown() {
-        let center = MPRemoteCommandCenter.shared()
-        center.playCommand.removeTarget(nil)
-        center.pauseCommand.removeTarget(nil)
-        center.togglePlayPauseCommand.removeTarget(nil)
-        clearNowPlaying()
-        playPauseHandler = nil
-    }
 }

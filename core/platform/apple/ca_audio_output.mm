@@ -180,7 +180,7 @@ Error CAAudioOutput::open(int sample_rate, int channels) {
             0,
             &layout, sizeof(layout));
         if (status != noErr) {
-            PY_LOG_WARN(TAG, "Failed to set channel layout (status %d), continuing anyway", (int)status);
+            PY_LOG_WARN(TAG, "Failed to set channel layout (status %d), continuing anyway", static_cast<int>(status));
         }
     }
 
@@ -226,7 +226,7 @@ static bool find_hdmi_device(AudioDeviceID& out_device) {
         kAudioObjectSystemObject, &addr, 0, nullptr, &size);
     if (status != noErr || size == 0) return false;
 
-    int count = static_cast<int>(size / sizeof(AudioDeviceID));
+    size_t count = static_cast<size_t>(size / sizeof(AudioDeviceID));
     std::vector<AudioDeviceID> devices(count);
     status = AudioObjectGetPropertyData(
         kAudioObjectSystemObject, &addr, 0, nullptr, &size, devices.data());
@@ -265,18 +265,10 @@ static bool find_hdmi_stream_format(AudioDeviceID device, int codec_id,
     if (AudioObjectGetPropertyDataSize(device, &addr, 0, nullptr, &size) != noErr || size == 0)
         return false;
 
-    int count = static_cast<int>(size / sizeof(AudioStreamID));
+    size_t count = static_cast<size_t>(size / sizeof(AudioStreamID));
     std::vector<AudioStreamID> streams(count);
     if (AudioObjectGetPropertyData(device, &addr, 0, nullptr, &size, streams.data()) != noErr)
         return false;
-
-    // Determine which format IDs to look for
-    UInt32 target_format_id = 0;
-    if (codec_id == AV_CODEC_ID_TRUEHD) {
-        target_format_id = kAudioFormatMPEGLayer3; // Placeholder — see note below
-    } else if (codec_id == AV_CODEC_ID_DTS) {
-        target_format_id = 'dtsh'; // DTS-HD
-    }
 
     for (auto stream : streams) {
         // Save current physical format for restoration later
@@ -298,7 +290,7 @@ static bool find_hdmi_stream_format(AudioDeviceID device, int codec_id,
         if (AudioObjectGetPropertyDataSize(stream, &avail_addr, 0, nullptr, &avail_size) != noErr)
             continue;
 
-        int fmt_count = static_cast<int>(avail_size / sizeof(AudioStreamRangedDescription));
+        size_t fmt_count = static_cast<size_t>(avail_size / sizeof(AudioStreamRangedDescription));
         std::vector<AudioStreamRangedDescription> formats(fmt_count);
         if (AudioObjectGetPropertyData(stream, &avail_addr, 0, nullptr, &avail_size, formats.data()) != noErr)
             continue;
@@ -328,7 +320,7 @@ static bool find_hdmi_stream_format(AudioDeviceID device, int codec_id,
 
 #endif // TARGET_OS_OSX
 
-Error CAAudioOutput::open_passthrough(int codec_id, int codec_profile, int sample_rate, int channels) {
+Error CAAudioOutput::open_passthrough(int codec_id, int codec_profile, int sample_rate, int /*channels*/) {
     close();
     impl_->passthrough_mode = true;
     impl_->passthrough_codec_id = codec_id;
@@ -391,7 +383,7 @@ Error CAAudioOutput::open_passthrough(int codec_id, int codec_profile, int sampl
             &format, sizeof(format));
 
         if (status != noErr) {
-            PY_LOG_WARN(TAG, "Device doesn't support passthrough format (status %d)", (int)status);
+            PY_LOG_WARN(TAG, "Device doesn't support passthrough format (status %d)", static_cast<int>(status));
             close();
             impl_->passthrough_mode = false;
             return {ErrorCode::AudioOutputError, "Device doesn't support passthrough for this codec"};
@@ -494,7 +486,7 @@ Error CAAudioOutput::open_passthrough(int codec_id, int codec_profile, int sampl
             kAudioUnitScope_Input, 0,
             &target_format, sizeof(target_format));
         if (status != noErr) {
-            PY_LOG_WARN(TAG, "Failed to set HDMI stream format on audio unit (status %d)", (int)status);
+            PY_LOG_WARN(TAG, "Failed to set HDMI stream format on audio unit (status %d)", static_cast<int>(status));
         }
 
         AURenderCallbackStruct callback;
@@ -615,9 +607,9 @@ float CAAudioOutput::volume() const {
 
 OSStatus CAAudioOutput::Impl::renderCallback(
     void* inRefCon,
-    AudioUnitRenderActionFlags* ioActionFlags,
-    const AudioTimeStamp* inTimeStamp,
-    UInt32 inBusNumber,
+    AudioUnitRenderActionFlags* /*ioActionFlags*/,
+    const AudioTimeStamp* /*inTimeStamp*/,
+    UInt32 /*inBusNumber*/,
     UInt32 inNumberFrames,
     AudioBufferList* ioData)
 {
@@ -637,7 +629,7 @@ OSStatus CAAudioOutput::Impl::renderCallback(
     // Silence any remaining frames
     if (written < frames) {
         memset(buffer + written * channels, 0,
-               (frames - written) * channels * sizeof(float));
+               static_cast<size_t>(frames - written) * static_cast<size_t>(channels) * sizeof(float));
     }
 
     // Volume: scale the buffer (after pull, before mute)
@@ -649,7 +641,7 @@ OSStatus CAAudioOutput::Impl::renderCallback(
 
     // Mute: zero the entire buffer (after pull so ring buffer doesn't back up)
     if (self->muted.load(std::memory_order_relaxed)) {
-        memset(buffer, 0, frames * channels * sizeof(float));
+        memset(buffer, 0, static_cast<size_t>(frames) * static_cast<size_t>(channels) * sizeof(float));
     }
 
     // Update samples played and report PTS
@@ -666,9 +658,9 @@ OSStatus CAAudioOutput::Impl::renderCallback(
 
 OSStatus CAAudioOutput::Impl::passthroughRenderCallback(
     void* inRefCon,
-    AudioUnitRenderActionFlags* ioActionFlags,
-    const AudioTimeStamp* inTimeStamp,
-    UInt32 inBusNumber,
+    AudioUnitRenderActionFlags* /*ioActionFlags*/,
+    const AudioTimeStamp* /*inTimeStamp*/,
+    UInt32 /*inBusNumber*/,
     UInt32 inNumberFrames,
     AudioBufferList* ioData)
 {
@@ -684,12 +676,12 @@ OSStatus CAAudioOutput::Impl::passthroughRenderCallback(
 
     // Zero-fill any remainder
     if (written < bytes) {
-        memset(buffer + written, 0, bytes - written);
+        memset(buffer + written, 0, static_cast<size_t>(bytes - written));
     }
 
     // Mute: zero the entire buffer (after pull so ring buffer doesn't back up)
     if (self->muted.load(std::memory_order_relaxed)) {
-        memset(buffer, 0, bytes);
+        memset(buffer, 0, static_cast<size_t>(bytes));
     }
 
     // Update samples played for clock sync
@@ -750,7 +742,7 @@ IAudioOutput::PassthroughCapability CAAudioOutput::query_passthrough_support() c
 
         UInt32 size = 0;
         if (AudioObjectGetPropertyDataSize(hdmi_dev, &addr, 0, nullptr, &size) == noErr && size > 0) {
-            int count = static_cast<int>(size / sizeof(AudioStreamID));
+            size_t count = static_cast<size_t>(size / sizeof(AudioStreamID));
             std::vector<AudioStreamID> streams(count);
             if (AudioObjectGetPropertyData(hdmi_dev, &addr, 0, nullptr, &size, streams.data()) == noErr) {
                 for (auto stream : streams) {
@@ -763,7 +755,7 @@ IAudioOutput::PassthroughCapability CAAudioOutput::query_passthrough_support() c
                     if (AudioObjectGetPropertyDataSize(stream, &avail_addr, 0, nullptr, &avail_size) != noErr)
                         continue;
 
-                    int fmt_count = static_cast<int>(avail_size / sizeof(AudioStreamRangedDescription));
+                    size_t fmt_count = static_cast<size_t>(avail_size / sizeof(AudioStreamRangedDescription));
                     std::vector<AudioStreamRangedDescription> formats(fmt_count);
                     if (AudioObjectGetPropertyData(stream, &avail_addr, 0, nullptr, &avail_size, formats.data()) != noErr)
                         continue;

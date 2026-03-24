@@ -100,9 +100,6 @@ struct DebugOverlayView: View {
     }
 
     private func formatTime(_ us: Int64) -> String {
-        let totalSeconds = Double(us) / 1_000_000.0
-        let minutes = Int(totalSeconds) / 60
-        let seconds = totalSeconds - Double(minutes * 60)
-        return String(format: "%d:%06.3f", minutes, seconds)
+        TimeFormatting.debug(us)
     }
 }

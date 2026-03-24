@@ -53,7 +53,7 @@ struct SpatialAudioOutput::Impl {
     float *interleavedBuf = nullptr;
 
     void allocate_buffers() {
-        interleavedBuf = new float[kMaxFramesPerBlock * channels_];
+        interleavedBuf = new float[kMaxFramesPerBlock * static_cast<size_t>(channels_)];
     }
 
     void free_buffers() {
@@ -158,8 +158,8 @@ Error SpatialAudioOutput::open(int sample_rate, int channels) {
 
         // Deinterleave into AVAudioEngine's non-interleaved output buffers.
         // outputData has one buffer per channel (non-interleaved format).
-        for (int ch = 0; ch < numCh && ch < (int)outputData->mNumberBuffers; ch++) {
-            float *dst = (float *)outputData->mBuffers[ch].mData;
+        for (int ch = 0; ch < numCh && ch < static_cast<int>(outputData->mNumberBuffers); ch++) {
+            auto *dst = static_cast<float *>(outputData->mBuffers[ch].mData);
             // Copy this channel from interleaved source
             for (int f = 0; f < pulled; f++) {
                 dst[f] = pImpl->interleavedBuf[f * numCh + ch];
@@ -180,7 +180,7 @@ Error SpatialAudioOutput::open(int sample_rate, int channels) {
 
         // Apply mute
         if (pImpl->muted.load(std::memory_order_relaxed)) {
-            for (int ch = 0; ch < (int)outputData->mNumberBuffers; ch++) {
+            for (int ch = 0; ch < static_cast<int>(outputData->mNumberBuffers); ch++) {
                 memset(outputData->mBuffers[ch].mData, 0,
                        static_cast<size_t>(frames) * sizeof(float));
             }
@@ -205,7 +205,7 @@ Error SpatialAudioOutput::open(int sample_rate, int channels) {
     [impl_->engine prepare];
 
     PY_LOG_INFO(TAG, "Spatial audio opened: %d Hz, %d ch (layout tag 0x%x)",
-                sample_rate, channels, (unsigned)layoutTag);
+                sample_rate, channels, static_cast<unsigned>(layoutTag));
     return {};
 }
 
