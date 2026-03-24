@@ -67,14 +67,7 @@ PlaiY - Feature TODO
     - Add audio compressor option for night-mode listening
     - Effort: Medium | Impact: Medium
 
-11. Aspect Ratio and Crop Controls
-    - Allow manual aspect ratio override (16:9, 4:3, 21:9, custom)
-    - Add crop mode to remove black bars (auto-detect via pixel analysis)
-    - Support pan & zoom on cropped content
-    - Persist per-file aspect ratio preference
-    - Effort: Low | Impact: Medium
-
-12. Frame Capture / Screenshot
+11. Frame Capture / Screenshot
     - Capture current displayed frame as PNG/JPEG
     - Render subtitles onto capture optionally
     - Copy to clipboard or save to configurable output folder
