@@ -285,6 +285,7 @@ void FFDemuxer::populate_media_info() {
                 track.channels = par->ch_layout.nb_channels;
                 track.channel_layout = par->ch_layout.u.mask;
                 track.bits_per_sample = par->bits_per_raw_sample;
+                track.codec_profile = par->profile;
                 break;
 
             case AVMEDIA_TYPE_SUBTITLE:

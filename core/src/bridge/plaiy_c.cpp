@@ -111,6 +111,35 @@ bool py_player_is_passthrough_active(PYPlayer* p) {
     return p->engine.is_passthrough_active();
 }
 
+PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p) {
+    PYPassthroughCapabilities out = {};
+    if (!p) return out;
+    auto caps = p->engine.query_passthrough_support();
+    out.ac3 = caps.ac3;
+    out.eac3 = caps.eac3;
+    out.dts = caps.dts;
+    out.dts_hd_ma = caps.dts_hd_ma;
+    out.truehd = caps.truehd;
+    return out;
+}
+
+static PYDeviceChangeCallback g_device_cb = nullptr;
+static void* g_device_ud = nullptr;
+
+void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata) {
+    if (!p) return;
+    g_device_cb = cb;
+    g_device_ud = userdata;
+
+    if (cb) {
+        p->engine.set_device_change_callback([]{
+            if (g_device_cb) g_device_cb(g_device_ud);
+        });
+    } else {
+        p->engine.set_device_change_callback(nullptr);
+    }
+}
+
 void py_player_set_muted(PYPlayer* p, bool muted) {
     if (p) p->engine.set_muted(muted);
 }
@@ -158,6 +187,9 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     out.audio_channels = s.audio_channels;
     out.audio_output_channels = s.audio_output_channels;
     out.audio_passthrough = s.audio_passthrough;
+    out.audio_codec_profile = s.audio_codec_profile;
+    out.audio_atmos = s.audio_atmos;
+    out.audio_dts_hd = s.audio_dts_hd;
     out.audio_packet_queue_size = s.audio_packet_queue_size;
     out.audio_ring_fill_pct = s.audio_ring_fill_pct;
     out.audio_pts_us = s.audio_pts_us;
@@ -201,6 +233,7 @@ const char* py_player_get_media_info_json(PYPlayer* p) {
             tj["sample_rate"] = t.sample_rate;
             tj["channels"] = t.channels;
             tj["codec_id"] = t.codec_id;
+            tj["codec_profile"] = t.codec_profile;
             tj["channel_layout"] = t.channel_layout;
             tj["bits_per_sample"] = t.bits_per_sample;
         } else if (t.type == py::MediaType::Subtitle) {

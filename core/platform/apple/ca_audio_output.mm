@@ -2,6 +2,7 @@
 #import <CoreAudio/CoreAudio.h>
 
 #include "ca_audio_output.h"
+#include "audio/audio_passthrough.h"
 #include "plaiy/logger.h"
 
 #include <algorithm>
@@ -38,6 +39,10 @@ struct CAAudioOutput::Impl {
     AudioDeviceID hdmi_device = kAudioObjectUnknown;
     AudioStreamID hdmi_stream = kAudioObjectUnknown;
     AudioStreamBasicDescription hdmi_original_format = {};
+
+    // Device change listener
+    IAudioOutput::DeviceChangeCallback device_change_callback;
+    bool device_listener_installed = false;
 
     static OSStatus renderCallback(
         void* inRefCon,
@@ -323,7 +328,7 @@ static bool find_hdmi_stream_format(AudioDeviceID device, int codec_id,
 
 #endif // TARGET_OS_OSX
 
-Error CAAudioOutput::open_passthrough(int codec_id, int sample_rate, int channels) {
+Error CAAudioOutput::open_passthrough(int codec_id, int codec_profile, int sample_rate, int channels) {
     close();
     impl_->passthrough_mode = true;
     impl_->passthrough_codec_id = codec_id;
@@ -334,10 +339,8 @@ Error CAAudioOutput::open_passthrough(int codec_id, int sample_rate, int channel
     return {ErrorCode::AudioOutputError, "Passthrough not supported on this platform"};
 #else
 
-    bool is_spdif = (codec_id == AV_CODEC_ID_AC3 ||
-                     codec_id == AV_CODEC_ID_EAC3 ||
-                     codec_id == AV_CODEC_ID_DTS);
-    bool is_hdmi_only = (codec_id == AV_CODEC_ID_TRUEHD);
+    bool is_hdmi_only = requires_hdmi(codec_id, codec_profile);
+    bool is_spdif = !is_hdmi_only && is_passthrough_eligible(codec_id, codec_profile);
 
     // For SPDIF-compatible codecs, try the default output device
     if (is_spdif) {
@@ -697,6 +700,137 @@ OSStatus CAAudioOutput::Impl::passthroughRenderCallback(
     }
 
     return noErr;
+}
+
+// ---- Device capability probing ----
+
+IAudioOutput::PassthroughCapability CAAudioOutput::query_passthrough_support() const {
+    PassthroughCapability caps;
+
+#if TARGET_OS_OSX
+    // Probe SPDIF codecs by trying to set compressed formats on a temp AudioUnit
+    auto probe_spdif = [&](UInt32 format_id) -> bool {
+        AudioComponentDescription desc = {};
+        desc.componentType = kAudioUnitType_Output;
+        desc.componentSubType = kAudioUnitSubType_DefaultOutput;
+        desc.componentManufacturer = kAudioUnitManufacturer_Apple;
+
+        AudioComponent component = AudioComponentFindNext(nullptr, &desc);
+        if (!component) return false;
+
+        AudioComponentInstance unit = nullptr;
+        if (AudioComponentInstanceNew(component, &unit) != noErr) return false;
+
+        AudioStreamBasicDescription format = {};
+        format.mSampleRate = 48000;
+        format.mChannelsPerFrame = 2;
+        format.mFormatID = format_id;
+
+        OSStatus status = AudioUnitSetProperty(unit,
+            kAudioUnitProperty_StreamFormat,
+            kAudioUnitScope_Input, 0,
+            &format, sizeof(format));
+
+        AudioComponentInstanceDispose(unit);
+        return status == noErr;
+    };
+
+    caps.ac3 = probe_spdif(kAudioFormatAC3);
+    caps.eac3 = probe_spdif(kAudioFormatEnhancedAC3);
+    caps.dts = probe_spdif('DTS ');
+
+    // Probe HDMI for high-bitrate formats (TrueHD, DTS-HD)
+    AudioDeviceID hdmi_dev = kAudioObjectUnknown;
+    if (find_hdmi_device(hdmi_dev)) {
+        AudioObjectPropertyAddress addr = {
+            kAudioDevicePropertyStreams,
+            kAudioDevicePropertyScopeOutput,
+            kAudioObjectPropertyElementMain
+        };
+
+        UInt32 size = 0;
+        if (AudioObjectGetPropertyDataSize(hdmi_dev, &addr, 0, nullptr, &size) == noErr && size > 0) {
+            int count = static_cast<int>(size / sizeof(AudioStreamID));
+            std::vector<AudioStreamID> streams(count);
+            if (AudioObjectGetPropertyData(hdmi_dev, &addr, 0, nullptr, &size, streams.data()) == noErr) {
+                for (auto stream : streams) {
+                    AudioObjectPropertyAddress avail_addr = {
+                        kAudioStreamPropertyAvailablePhysicalFormats,
+                        kAudioObjectPropertyScopeGlobal,
+                        kAudioObjectPropertyElementMain
+                    };
+                    UInt32 avail_size = 0;
+                    if (AudioObjectGetPropertyDataSize(stream, &avail_addr, 0, nullptr, &avail_size) != noErr)
+                        continue;
+
+                    int fmt_count = static_cast<int>(avail_size / sizeof(AudioStreamRangedDescription));
+                    std::vector<AudioStreamRangedDescription> formats(fmt_count);
+                    if (AudioObjectGetPropertyData(stream, &avail_addr, 0, nullptr, &avail_size, formats.data()) != noErr)
+                        continue;
+
+                    for (auto& ranged : formats) {
+                        auto fid = ranged.mFormat.mFormatID;
+                        if (fid == 'truE' || fid == 'mlp ') caps.truehd = true;
+                        if (fid == 'dtsh') caps.dts_hd_ma = true;
+                        if (fid == kAudioFormatEnhancedAC3) caps.eac3 = true;
+                    }
+                }
+            }
+        }
+    }
+
+    PY_LOG_INFO(TAG, "Passthrough caps: AC3=%d E-AC3=%d DTS=%d DTS-HD=%d TrueHD=%d",
+                caps.ac3, caps.eac3, caps.dts, caps.dts_hd_ma, caps.truehd);
+#endif
+
+    return caps;
+}
+
+// ---- Device change listener ----
+
+void CAAudioOutput::set_device_change_callback(DeviceChangeCallback cb) {
+    impl_->device_change_callback = std::move(cb);
+
+#if TARGET_OS_OSX
+    if (!impl_->device_listener_installed && impl_->device_change_callback) {
+        // Listen for default output device changes
+        AudioObjectPropertyAddress addr = {
+            kAudioHardwarePropertyDefaultOutputDevice,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+
+        auto* raw_impl = impl_.get();
+        AudioObjectAddPropertyListenerBlock(
+            kAudioObjectSystemObject, &addr,
+            dispatch_get_main_queue(),
+            ^(UInt32, const AudioObjectPropertyAddress*) {
+                PY_LOG_INFO(TAG, "Audio output device changed");
+                if (raw_impl->device_change_callback) {
+                    raw_impl->device_change_callback();
+                }
+            });
+
+        // Also listen for device list changes (HDMI plug/unplug)
+        AudioObjectPropertyAddress devices_addr = {
+            kAudioHardwarePropertyDevices,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+
+        AudioObjectAddPropertyListenerBlock(
+            kAudioObjectSystemObject, &devices_addr,
+            dispatch_get_main_queue(),
+            ^(UInt32, const AudioObjectPropertyAddress*) {
+                PY_LOG_INFO(TAG, "Audio device list changed");
+                if (raw_impl->device_change_callback) {
+                    raw_impl->device_change_callback();
+                }
+            });
+
+        impl_->device_listener_installed = true;
+    }
+#endif
 }
 
 } // namespace py

@@ -16,10 +16,11 @@ struct DebugOverlayView: View {
             }
 
             section("Audio") {
+                let codecLabel = audioCodecLabel
                 if stats.audio_passthrough {
-                    row("Codec", "\(cString(stats.audio_codec_name)) (passthrough)")
+                    row("Codec", "\(codecLabel) (passthrough)")
                 } else {
-                    row("Codec", cString(stats.audio_codec_name))
+                    row("Codec", codecLabel)
                 }
                 row("Sample Rate", "\(stats.audio_sample_rate) Hz")
                 row("Channels", "\(stats.audio_channels) source → \(stats.audio_output_channels) output")
@@ -65,6 +66,13 @@ struct DebugOverlayView: View {
                 .foregroundStyle(.gray)
             Text(value)
         }
+    }
+
+    private var audioCodecLabel: String {
+        let name = cString(stats.audio_codec_name)
+        if stats.audio_atmos { return "E-AC3 (Atmos)" }
+        if stats.audio_dts_hd { return "DTS-HD MA" }
+        return name
     }
 
     private var hdrLabel: String {

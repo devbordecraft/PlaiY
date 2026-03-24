@@ -11,6 +11,7 @@ struct TrackInfo: Identifiable {
     let channels: Int
     let subtitleFormat: Int // 0=Unknown, 1=SRT, 2=ASS, 3=PGS, 4=VobSub
     let codecId: Int
+    let codecProfile: Int
     let bitsPerSample: Int
 
     var id: Int { streamIndex }
@@ -27,7 +28,7 @@ struct TrackInfo: Identifiable {
 
         // Codec details
         var details: [String] = []
-        let codec = codecName.uppercased()
+        let codec = Self.enhancedCodecName(codecName: codecName, codecId: codecId, codecProfile: codecProfile)
         if !codec.isEmpty {
             details.append(codec)
         }
@@ -79,6 +80,7 @@ struct TrackInfo: Identifiable {
                 channels: t["channels"] as? Int ?? 0,
                 subtitleFormat: t["subtitle_format"] as? Int ?? 0,
                 codecId: t["codec_id"] as? Int ?? 0,
+                codecProfile: t["codec_profile"] as? Int ?? -1,
                 bitsPerSample: t["bits_per_sample"] as? Int ?? 0
             )
 
@@ -90,6 +92,26 @@ struct TrackInfo: Identifiable {
         }
 
         return (audio, subtitle)
+    }
+
+    private static func enhancedCodecName(codecName: String, codecId: Int, codecProfile: Int) -> String {
+        // E-AC3 with Atmos (AV_PROFILE_EAC3_DDP_ATMOS = 30)
+        if codecName == "eac3" && codecProfile == 30 {
+            return "Dolby Atmos"
+        }
+        // DTS-HD MA (AV_PROFILE_DTS_HD_MA = 60, MA_X = 61, MA_X_IMAX = 62)
+        if codecName == "dts" && (codecProfile == 60 || codecProfile == 61 || codecProfile == 62) {
+            return "DTS-HD MA"
+        }
+        // DTS-HD HRA (AV_PROFILE_DTS_HD_HRA = 50)
+        if codecName == "dts" && codecProfile == 50 {
+            return "DTS-HD HRA"
+        }
+        // TrueHD
+        if codecName == "truehd" {
+            return "TrueHD"
+        }
+        return codecName.uppercased()
     }
 
     private static func channelLabel(_ channels: Int) -> String {

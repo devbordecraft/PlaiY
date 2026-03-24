@@ -26,9 +26,12 @@ public:
     void set_volume(float v) override;
     float volume() const override;
 
-    Error open_passthrough(int codec_id, int sample_rate, int channels) override;
+    Error open_passthrough(int codec_id, int codec_profile, int sample_rate, int channels) override;
     bool is_passthrough() const override;
     void set_bitstream_pull_callback(BitstreamPullCallback cb) override;
+
+    PassthroughCapability query_passthrough_support() const override;
+    void set_device_change_callback(DeviceChangeCallback cb) override;
 
 private:
     struct Impl;

@@ -79,6 +79,19 @@ int         py_player_get_active_subtitle_stream(PYPlayer* p);
 void        py_player_set_audio_passthrough(PYPlayer* p, bool enabled);
 bool        py_player_is_passthrough_active(PYPlayer* p);
 
+typedef struct {
+    bool ac3;
+    bool eac3;
+    bool dts;
+    bool dts_hd_ma;
+    bool truehd;
+} PYPassthroughCapabilities;
+
+PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p);
+
+typedef void (*PYDeviceChangeCallback)(void* userdata);
+void        py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata);
+
 // ---- Mute ----
 void        py_player_set_muted(PYPlayer* p, bool muted);
 bool        py_player_is_muted(PYPlayer* p);
@@ -112,6 +125,9 @@ typedef struct {
     int audio_channels;
     int audio_output_channels;
     bool audio_passthrough;
+    int audio_codec_profile;
+    bool audio_atmos;
+    bool audio_dts_hd;
     int audio_packet_queue_size;
     int audio_ring_fill_pct;
 

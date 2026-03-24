@@ -85,6 +85,27 @@ struct TrackSelectionView: View {
                                 .foregroundStyle(.green.opacity(0.8))
                                 .padding(.leading, 4)
                         }
+
+                        // Device capability summary
+                        let caps = viewModel.passthroughCaps
+                        let supported = [
+                            caps.ac3 ? "AC3" : nil,
+                            caps.eac3 ? "E-AC3" : nil,
+                            caps.dts ? "DTS" : nil,
+                            caps.dts_hd_ma ? "DTS-HD" : nil,
+                            caps.truehd ? "TrueHD" : nil,
+                        ].compactMap { $0 }
+                        if supported.isEmpty {
+                            Text("No passthrough formats detected")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.4))
+                                .padding(.leading, 4)
+                        } else {
+                            Text("Device supports: \(supported.joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.leading, 4)
+                        }
                     }
                 }
                 .padding(20)

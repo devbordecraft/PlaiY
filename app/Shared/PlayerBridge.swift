@@ -87,6 +87,19 @@ class PlayerBridge {
         py_player_is_passthrough_active(handle)
     }
 
+    func queryPassthroughSupport() -> PYPassthroughCapabilities {
+        py_player_query_passthrough_support(handle)
+    }
+
+    func setDeviceChangeCallback(_ callback: @escaping () -> Void) {
+        let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
+        py_player_set_device_change_callback(handle, { userdata in
+            guard let userdata else { return }
+            let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as! () -> Void
+            cb()
+        }, context)
+    }
+
     func setMuted(_ muted: Bool) {
         py_player_set_muted(handle, muted)
     }

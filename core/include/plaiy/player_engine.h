@@ -35,6 +35,19 @@ public:
     void set_audio_passthrough(bool enabled);
     bool is_passthrough_active() const;
 
+    // Probe which passthrough formats the current output device supports.
+    struct PassthroughCapability {
+        bool ac3 = false;
+        bool eac3 = false;
+        bool dts = false;
+        bool dts_hd_ma = false;
+        bool truehd = false;
+    };
+    PassthroughCapability query_passthrough_support() const;
+
+    using DeviceChangeCallback = std::function<void()>;
+    void set_device_change_callback(DeviceChangeCallback cb);
+
     void set_muted(bool muted);
     bool is_muted() const;
 
@@ -64,6 +77,9 @@ public:
     void set_error_callback(ErrorCallback cb);
 
 private:
+    void setup_audio_output(const TrackInfo& track);
+    void restart_audio_pipeline();
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -86,6 +86,7 @@ class PlayerViewModel: ObservableObject {
     private var preMuteVolume: Float = 1.0
     @Published var playbackSpeed: Double = 1.0
     @Published var passthroughEnabled = false
+    @Published var passthroughCaps = PYPassthroughCapabilities(ac3: false, eac3: false, dts: false, dts_hd_ma: false, truehd: false)
     @Published var showDebugOverlay = false
     @Published var playbackEnded = false
 
@@ -122,6 +123,14 @@ class PlayerViewModel: ObservableObject {
 
         bridge.setAudioPassthrough(settings.audioPassthrough)
         passthroughEnabled = settings.audioPassthrough
+        passthroughCaps = bridge.queryPassthroughSupport()
+
+        bridge.setDeviceChangeCallback { [weak self] in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.passthroughCaps = self.bridge.queryPassthroughSupport()
+            }
+        }
 
         volume = Float(settings.volume)
         bridge.setVolume(volume)

@@ -25,6 +25,7 @@ set(CORE_SOURCES
     src/audio/audio_resampler.cpp
     src/audio/audio_tempo_filter.cpp
     src/audio/audio_passthrough.cpp
+    src/audio/mat_framer.cpp
     src/subtitle/subtitle_manager.cpp
     src/subtitle/srt_parser.cpp
     src/subtitle/ass_renderer.cpp

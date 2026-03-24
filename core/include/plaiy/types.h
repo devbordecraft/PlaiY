@@ -161,6 +161,7 @@ struct TrackInfo {
     int channels = 0;
     uint64_t channel_layout = 0;
     int bits_per_sample = 0;
+    int codec_profile = -1;  // FF_PROFILE_* from libavcodec (-1 = unknown)
 
     // Subtitle-specific
     SubtitleFormat subtitle_format = SubtitleFormat::Unknown;
@@ -309,6 +310,9 @@ struct PlaybackStats {
     int audio_channels = 0;
     int audio_output_channels = 0;
     bool audio_passthrough = false;
+    int audio_codec_profile = -1;
+    bool audio_atmos = false;
+    bool audio_dts_hd = false;
     int audio_packet_queue_size = 0;
     int audio_ring_fill_pct = 0;   // Ring buffer fill percentage (0-100)
 
