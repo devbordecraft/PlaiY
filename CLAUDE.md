@@ -19,11 +19,13 @@ Pure C Bridge (core/include/plaiy_c.h)
     v
 C++ Core Library (core/)
     |
-    +-- FFmpeg (demux, SW decode, audio decode, resampling)
+    +-- FFmpeg (demux, SW decode, audio decode, resampling, tempo stretching)
     +-- VideoToolbox (HW video decode on Apple)
-    +-- CoreAudio AUHAL (audio output on Apple)
+    +-- CoreAudio AUHAL (stereo/passthrough audio output on Apple)
+    +-- AVAudioEngine (spatial audio with HRTF on Apple)
+    +-- Audio bitstream passthrough (Dolby Atmos, TrueHD, DTS-HD MA, DTS:X)
     +-- libass (ASS/SSA subtitle rendering)
-    +-- Metal shaders (YUV->RGB, HDR tone mapping)
+    +-- Metal shaders (YUV->RGB, HDR tone mapping, crop/zoom)
 ```
 
 ## Directory structure
@@ -40,18 +42,24 @@ plaiy/
       player_engine.cpp        # Central orchestrator (threading, state machine)
       demuxer/                 # FFmpeg demuxer (libavformat)
       video/                   # Video decoders (FFmpeg SW + VT factory)
-      audio/                   # Audio decoder + resampler (libavcodec + libswresample)
+      audio/                   # Audio decoder, resampler, tempo filter, passthrough
       subtitle/                # SRT parser, ASS renderer (libass), PGS decoder
       sync/                    # Clock, PacketQueue, FrameQueue
-      library/                 # Media library scanner + metadata reader
+      library/                 # Media library scanner, metadata reader, seek thumbnails
       bridge/                  # C bridge implementation
-    platform/apple/            # Apple-specific: VideoToolbox, CoreAudio, Metal shaders
+    platform/apple/            # VideoToolbox, CoreAudio, AVAudioEngine spatial, Metal
   app/
     project.yml                # XcodeGen spec (generates .xcodeproj)
     BridgingHeader.h           # Imports plaiy_c.h into Swift
     Shared/                    # SwiftUI code (shared macOS/tvOS)
       PlayerBridge.swift       # Swift wrapper around C API
-      Metal/                   # MetalViewCoordinator (display link + rendering)
+      AppSettings.swift        # Global settings with @AppStorage persistence
+      VideoDisplaySettings.swift  # Aspect ratio, crop, zoom, pan models
+      BlackBarDetector.swift   # Auto-crop via luma analysis of CVPixelBuffer
+      ResumeStore.swift        # Per-file playback position persistence
+      NowPlayingManager.swift  # MPRemoteCommandCenter / media key integration
+      ThumbnailManager.swift   # Seek preview thumbnail cache
+      Metal/                   # MetalViewCoordinator (display link, rendering, crop)
       Views/                   # SwiftUI views
     macOS/                     # macOS-specific (Info.plist)
   scripts/
@@ -112,16 +120,20 @@ Always build the C++ core **before** the Xcode project. The Xcode project links 
 - **`plaiy_c.h`** - The sole contract between Swift and C++. All cross-language calls go through here. Changes here require updating both `plaiy_c.cpp` and `PlayerBridge.swift`.
 - **`player_engine.h`** - The C++ orchestrator. Owns demuxer, decoders, audio, subtitles, queues, and threads.
 - **`video_decoder.h`** - `IVideoDecoder` interface. `VideoDecoderFactory` picks VT or FFmpeg.
-- **`audio_engine.h`** - `IAudioOutput` interface. `CAAudioOutput` implements it on Apple.
+- **`audio_engine.h`** - `IAudioOutput` interface. `CAAudioOutput` (stereo/passthrough) and `SpatialAudioOutput` (HRTF) implement it on Apple.
 - **`demuxer.h`** - `IDemuxer` interface. `FFDemuxer` is the only implementation.
+- **`audio_passthrough.h`** - Codec eligibility checks, bitrate limits, HDMI vs SPDIF routing for bitstream passthrough.
+- **`audio_tempo_filter.h`** - FFmpeg `atempo` filter wrapper for variable speed playback (0.25x-4x).
+- **`spatial_audio_output.h`** - AVAudioEngine-based spatial audio with HRTF and head tracking (AirPods).
 
 ## Threading model (during playback)
 
 1. **Demux thread** - reads packets, routes to video/audio/subtitle queues
 2. **Video decode thread** - packets -> VideoFrame (CVPixelBufferRef via VT)
-3. **Audio decode thread** - packets -> PCM float32 -> ring buffer
+3. **Audio decode thread** - packets -> PCM float32 (+ tempo filter if speed != 1x) -> ring buffer
 4. **Render thread** (MTKView display link) - pulls VideoFrame, presents via Metal
-5. **CoreAudio real-time thread** (OS-managed) - pulls from ring buffer
+5. **CoreAudio real-time thread** (OS-managed) - pulls from ring buffer (stereo/passthrough mode)
+6. **AVAudioEngine render thread** (OS-managed) - pulls from ring buffer, applies HRTF (spatial mode)
 
 ## HDR pipeline
 
@@ -129,8 +141,17 @@ Metal shaders in `core/platform/apple/metal_shaders.metal` handle:
 - BT.709 and BT.2020 YCbCr-to-RGB conversion
 - PQ EOTF (HDR10) and HLG OOTF
 - EDR scaling based on display headroom
+- Crop uniforms (texture coordinate remapping for crop/zoom)
 
 `CAMetalLayer` is configured with `rgba16Float` + `wantsExtendedDynamicRangeContent`.
+
+## Audio output modes
+
+PlayerEngine selects the audio output backend based on content and settings:
+
+1. **CoreAudio AUHAL** (`CAAudioOutput`) - Default stereo output. Also handles bitstream passthrough when enabled and an HDMI/SPDIF device is connected.
+2. **AVAudioEngine spatial** (`SpatialAudioOutput`) - Activated when spatial audio mode is Auto (with Bluetooth headphones detected) or Force. Renders multichannel content through HRTF. Supports head tracking via `CMHeadphoneMotionManager` on AirPods Pro/Max.
+3. **Bitstream passthrough** - Sends compressed audio (AC3, E-AC3, DTS, DTS-HD MA, TrueHD) directly to an AVR/soundbar. TrueHD requires MAT framing (`MATFramer`). High-bitrate formats (TrueHD, DTS-HD MA) require HDMI; AC3/DTS can use SPDIF.
 
 ## Dependencies
 
@@ -203,19 +224,24 @@ PYLog.error("decode failed: \(error)", tag: "Metal")
 
 `plaiy_c.h` exposes `py_log_set_level()`, `py_log_get_level()`, and `py_log_set_callback()` for configuring logging from the Swift side without touching C++ directly.
 
-## Phase 1 status (current)
+## Current status
 
-Working: local file playback, VideoToolbox HW decode, FFmpeg SW fallback, Metal rendering with HDR10 EDR, CoreAudio output, SRT/ASS/PGS subtitles, media library scanner, play/pause/seek controls.
+Working: local file playback, VideoToolbox HW decode, FFmpeg SW fallback, Metal rendering with HDR10/HLG EDR, CoreAudio output, SRT/ASS/PGS subtitles, media library scanner, play/pause/seek controls, seek preview thumbnails, keyboard shortcuts and media keys, variable speed playback (0.25x-4x), volume control with persistence, resume playback with dialog, global settings with persistence, audio bitstream passthrough (AC3, E-AC3/Atmos, DTS/DTS-HD MA/DTS:X, TrueHD), spatial audio rendering (AVAudioEngine HRTF + head tracking), aspect ratio override (auto/fill/stretch/16:9/4:3/21:9/2.35:1), auto-crop black bar detection, zoom and pan controls.
 
 ## Planned features (not yet implemented)
 
-- Audio bitstream passthrough (Dolby Atmos, TrueHD, DTS:X)
-- Spatial audio rendering
-- HDR10+ dynamic metadata
+- HDR10+ dynamic metadata tone mapping
 - Dolby Vision profile-specific tone mapping
+- Chapter navigation
+- Network sources (SMB/NFS, HTTP streaming)
+- Playlist / play queue
+- Subtitle timing adjustment
+- TMDb/OMDb metadata enrichment
+- Picture-in-Picture
+- Audio equalizer and effects
+- Frame capture / screenshot
 - tvOS target
 - Linux/Windows targets
-- Network sources (SMB/NFS, HTTP streaming)
-- TMDb/OMDb metadata enrichment
-- Chapter navigation
-- Variable speed playback
+- Watch history and smart resume (CloudKit sync)
+- Drag and drop / file association
+- Deinterlacing
