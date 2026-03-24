@@ -28,6 +28,11 @@ final class PlaybackTransport {
     var spatialActive: Bool = false
     var playbackStats: PYPlaybackStats?
 
+    // Display settings (aspect ratio, crop, zoom, pan)
+    var displaySettings: VideoDisplaySettings = .default
+    var pendingCropDetection = false
+    var onCropDetected: ((CropInsets) -> Void)?
+
     // Seek preview (written by thumb queue, read by controls view)
     var seekPreviewImage: CGImage?
 
@@ -91,6 +96,8 @@ class PlayerViewModel: ObservableObject {
     @Published var headTrackingEnabled = false
     @Published var showDebugOverlay = false
     @Published var playbackEnded = false
+    @Published var aspectRatioMode: AspectRatioMode = .auto
+    @Published var cropActive: Bool = false
 
     // NOT @Published — ContentView reads this in one-shot closures (onBack, playbackEnded),
     // not in body. Avoiding @Published prevents once-per-second PlayerView rebuilds.
@@ -143,6 +150,11 @@ class PlayerViewModel: ObservableObject {
 
         let url = URL(fileURLWithPath: path)
         mediaTitle = url.deletingPathExtension().lastPathComponent
+
+        loadDisplaySettings(for: path)
+        transport.onCropDetected = { [weak self] crop in
+            self?.setCrop(crop)
+        }
 
         let json = bridge.mediaInfoJSON()
         let parsed = TrackInfo.parseTracks(from: json)
@@ -254,6 +266,11 @@ class PlayerViewModel: ObservableObject {
         transport.currentPosition = 0
         playbackSpeed = 1.0
         transport.seekPreviewImage = nil
+        transport.displaySettings = .default
+        transport.onCropDetected = nil
+        aspectRatioMode = .auto
+        cropActive = false
+        displaySettingsPath = nil
         NowPlayingManager.shared.clearNowPlaying()
     }
 
@@ -329,6 +346,66 @@ class PlayerViewModel: ObservableObject {
     func setHeadTracking(_ enabled: Bool) {
         headTrackingEnabled = enabled
         bridge.setHeadTracking(enabled)
+    }
+
+    // MARK: - Display Settings (aspect ratio, crop, zoom, pan)
+
+    private var displaySettingsPath: String?
+
+    func setAspectRatioMode(_ mode: AspectRatioMode) {
+        transport.displaySettings.aspectRatioMode = mode
+        aspectRatioMode = mode
+        // Reset pan when switching modes
+        transport.displaySettings.panX = 0
+        transport.displaySettings.panY = 0
+        saveDisplaySettings()
+    }
+
+    func setCrop(_ crop: CropInsets) {
+        transport.displaySettings.crop = crop
+        cropActive = crop.isActive
+        saveDisplaySettings()
+    }
+
+    func setZoom(_ zoom: Double) {
+        transport.displaySettings.zoom = max(1.0, min(5.0, zoom))
+        if transport.displaySettings.zoom <= 1.001 {
+            transport.displaySettings.panX = 0
+            transport.displaySettings.panY = 0
+        }
+    }
+
+    func setPan(x: Double, y: Double) {
+        transport.displaySettings.panX = max(-1, min(1, x))
+        transport.displaySettings.panY = max(-1, min(1, y))
+    }
+
+    func adjustZoom(by delta: Double) {
+        setZoom(transport.displaySettings.zoom + delta)
+    }
+
+    func resetDisplaySettings() {
+        transport.displaySettings = .default
+        aspectRatioMode = .auto
+        cropActive = false
+        saveDisplaySettings()
+    }
+
+    func detectBlackBars() {
+        transport.pendingCropDetection = true
+    }
+
+    private func loadDisplaySettings(for path: String) {
+        displaySettingsPath = path
+        let settings = VideoDisplaySettingsStore.settings(for: path)
+        transport.displaySettings = settings
+        aspectRatioMode = settings.aspectRatioMode
+        cropActive = settings.crop.isActive
+    }
+
+    private func saveDisplaySettings() {
+        guard let path = displaySettingsPath else { return }
+        VideoDisplaySettingsStore.save(path: path, settings: transport.displaySettings)
     }
 
     // MARK: - Timeline interaction (writes to transport, not @Published)

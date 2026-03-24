@@ -66,8 +66,14 @@ struct DoviUniforms {
     var trimSaturationGain: Float = 1.0
 }
 
+struct CropUniforms {
+    var texOrigin: SIMD2<Float> = SIMD2(0, 0)
+    var texScale: SIMD2<Float> = SIMD2(1, 1)
+}
+
 class MetalViewCoordinator {
     private let playerBridge: PlayerBridge
+    let transport: PlaybackTransport
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private var pipelineState: MTLRenderPipelineState?
@@ -87,8 +93,9 @@ class MetalViewCoordinator {
     // setting CAEDRMetadata on every frame.
     private var currentHDRMode: Int32 = -1 // -1 = unset, 0 = SDR, 1 = PQ, 2 = HLG
 
-    init(playerBridge: PlayerBridge, mtkView: MTKView) {
+    init(playerBridge: PlayerBridge, transport: PlaybackTransport, mtkView: MTKView) {
         self.playerBridge = playerBridge
+        self.transport = transport
         self.device = mtkView.device!
         self.commandQueue = device.makeCommandQueue()!
 
@@ -349,27 +356,34 @@ class MetalViewCoordinator {
             }
         }
 
-        // Calculate viewport to preserve display aspect ratio.
-        // DAR = (coded_width * SAR_num) / (coded_height * SAR_den)
+        // Snapshot display settings once per frame (written from main thread)
+        let settings = transport.displaySettings
+
+        // Auto-crop detection: when requested, grab current pixel buffer
+        if transport.pendingCropDetection {
+            transport.pendingCropDetection = false
+            let retainedBuffer = pixelBuffer  // Swift ARC retains automatically
+            let callback = transport.onCropDetected
+            DispatchQueue.global(qos: .userInitiated).async {
+                let crop = BlackBarDetector.detect(pixelBuffer: retainedBuffer)
+                DispatchQueue.main.async { callback?(crop) }
+            }
+        }
+
+        // Compute viewport based on display settings
         let sarNum = PlayerBridge.frameSarNum(framePtr)
         let sarDen = PlayerBridge.frameSarDen(framePtr)
-        let videoDAR = (Double(width) * Double(sarNum)) / (Double(height) * Double(sarDen))
         let viewSize = drawable.layer.drawableSize
-        let viewAR = Double(viewSize.width) / Double(viewSize.height)
+        let viewport = computeViewport(
+            videoWidth: width, videoHeight: height,
+            sarNum: sarNum, sarDen: sarDen,
+            viewSize: viewSize, settings: settings)
 
-        var vpX: Double = 0
-        var vpY: Double = 0
-        var vpW = Double(viewSize.width)
-        var vpH = Double(viewSize.height)
-
-        if videoDAR > viewAR {
-            // Video wider than view → pillarbox (black bars top/bottom)
-            vpH = vpW / videoDAR
-            vpY = (Double(viewSize.height) - vpH) / 2.0
-        } else if videoDAR < viewAR {
-            // Video taller than view → letterbox (black bars left/right)
-            vpW = vpH * videoDAR
-            vpX = (Double(viewSize.width) - vpW) / 2.0
+        // Compute crop uniforms for texture coordinate remapping
+        var cropUniforms = CropUniforms()
+        if settings.crop.isActive {
+            cropUniforms.texOrigin = SIMD2(settings.crop.texOriginX, settings.crop.texOriginY)
+            cropUniforms.texScale = SIMD2(settings.crop.texScaleX, settings.crop.texScaleY)
         }
 
         // Clear to black first (for letterbox/pillarbox bars)
@@ -382,15 +396,13 @@ class MetalViewCoordinator {
             return
         }
 
-        let viewport = MTLViewport(originX: vpX, originY: vpY,
-                                   width: vpW, height: vpH,
-                                   znear: 0, zfar: 1)
         encoder.setViewport(viewport)
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(yTex, index: 0)
         encoder.setFragmentTexture(uvTex, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)
         encoder.setFragmentBytes(&doviUniforms, length: MemoryLayout<DoviUniforms>.size, index: 1)
+        encoder.setFragmentBytes(&cropUniforms, length: MemoryLayout<CropUniforms>.size, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 
@@ -405,6 +417,78 @@ class MetalViewCoordinator {
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+    }
+
+    private func computeViewport(
+        videoWidth: Int, videoHeight: Int,
+        sarNum: Int32, sarDen: Int32,
+        viewSize: CGSize,
+        settings: VideoDisplaySettings
+    ) -> MTLViewport {
+        let nativeDAR = (Double(videoWidth) * Double(sarNum)) /
+                        (Double(videoHeight) * Double(max(sarDen, 1)))
+
+        // Effective DAR: adjust for crop in auto/fill modes, or use forced ratio
+        var effectiveDAR: Double
+        if let forced = settings.aspectRatioMode.forcedDAR {
+            effectiveDAR = forced
+        } else {
+            effectiveDAR = nativeDAR
+            if settings.crop.isActive {
+                effectiveDAR *= Double(settings.crop.texScaleX) /
+                               Double(settings.crop.texScaleY)
+            }
+        }
+
+        let viewW = Double(viewSize.width)
+        let viewH = Double(viewSize.height)
+        let viewAR = viewW / viewH
+        var vpW = viewW
+        var vpH = viewH
+
+        switch settings.aspectRatioMode {
+        case .stretch:
+            break // Fill entire view, no aspect correction
+
+        case .fill:
+            // Invert fit: overflow the shorter dimension so no black bars remain
+            if effectiveDAR > viewAR {
+                // Video wider: expand height to fill, width overflows
+                vpW = viewH * effectiveDAR
+                vpH = viewH
+            } else if effectiveDAR < viewAR {
+                // Video taller: expand width to fill, height overflows
+                vpH = viewW / effectiveDAR
+                vpW = viewW
+            }
+
+        default:
+            // Fit with letterbox/pillarbox
+            if effectiveDAR > viewAR {
+                vpH = vpW / effectiveDAR
+            } else if effectiveDAR < viewAR {
+                vpW = vpH * effectiveDAR
+            }
+        }
+
+        // Apply zoom (minimum 1x)
+        let zoom = max(1.0, settings.zoom)
+        vpW *= zoom
+        vpH *= zoom
+
+        // Center, then apply pan offset
+        var vpX = (viewW - vpW) / 2.0
+        var vpY = (viewH - vpH) / 2.0
+
+        // Pan: map normalized [-1,1] to the max pan range (how much the viewport overflows)
+        let maxPanX = max(0, (vpW - viewW) / 2.0)
+        let maxPanY = max(0, (vpH - viewH) / 2.0)
+        vpX += settings.panX * maxPanX
+        vpY += settings.panY * maxPanY
+
+        return MTLViewport(originX: vpX, originY: vpY,
+                           width: vpW, height: vpH,
+                           znear: 0, zfar: 1)
     }
 
     private func drawBlack(descriptor: MTLRenderPassDescriptor, drawable: CAMetalDrawable) {

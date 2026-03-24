@@ -251,6 +251,12 @@ float doviReshape(float x, int numPivots, constant float* pivots,
     return clamp(result, 0.0, 1.0);
 };
 
+// Crop/zoom uniforms (passed as buffer(2))
+struct CropUniforms {
+    float2 texOrigin;  // UV origin for cropped region (default: 0,0)
+    float2 texScale;   // UV scale for cropped region (default: 1,1)
+};
+
 // ---- NV12/P010 fragment shader (biplanar: Y + UV textures) ----
 
 fragment float4 fragmentBiplanar(
@@ -258,12 +264,16 @@ fragment float4 fragmentBiplanar(
     texture2d<float> textureY [[texture(0)]],
     texture2d<float> textureUV [[texture(1)]],
     constant VideoUniforms& uniforms [[buffer(0)]],
-    constant DoviUniforms& doviUniforms [[buffer(1)]])
+    constant DoviUniforms& doviUniforms [[buffer(1)]],
+    constant CropUniforms& cropUniforms [[buffer(2)]])
 {
     constexpr sampler texSampler(mag_filter::linear, min_filter::linear);
 
-    float y = textureY.sample(texSampler, in.texCoord).r;
-    float2 uv = textureUV.sample(texSampler, in.texCoord).rg;
+    // Remap texture coordinates for crop (identity when origin=0, scale=1)
+    float2 coord = cropUniforms.texOrigin + in.texCoord * cropUniforms.texScale;
+
+    float y = textureY.sample(texSampler, coord).r;
+    float2 uv = textureUV.sample(texSampler, coord).rg;
 
     // YCbCr to RGB
     float3 ycbcr = float3(y, uv.x, uv.y);

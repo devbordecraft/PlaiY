@@ -12,13 +12,31 @@ struct PlayerView: View {
     @State private var showResumePrompt = false
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var resumeDismissTask: Task<Void, Never>?
+    @State private var zoomBase: Double = 1.0
+    @State private var panBase: (x: Double, y: Double) = (0, 0)
+    #if os(macOS)
+    @State private var scrollMonitor: Any?
+    #endif
     @FocusState private var isPlayerFocused: Bool
 
     var body: some View {
         ZStack {
             // Video layer
-            MetalPlayerView(playerBridge: viewModel.bridge)
+            MetalPlayerView(playerBridge: viewModel.bridge, transport: viewModel.transport)
                 .ignoresSafeArea()
+                .gesture(
+                    DragGesture(minimumDistance: 10)
+                        .onChanged { value in
+                            guard viewModel.transport.displaySettings.zoom > 1.001 else { return }
+                            let dx = value.translation.width / 200.0
+                            let dy = value.translation.height / 200.0
+                            viewModel.setPan(x: panBase.x + dx, y: panBase.y + dy)
+                        }
+                        .onEnded { _ in
+                            panBase = (viewModel.transport.displaySettings.panX,
+                                       viewModel.transport.displaySettings.panY)
+                        }
+                )
 
             // ── Display-link tick + subtitle ──
             // Lightweight TimelineView: only runs tick() and subtitle overlay.
@@ -146,6 +164,13 @@ struct PlayerView: View {
         .onAppear {
             isPlayerFocused = true
             scheduleHideControls()
+            #if os(macOS)
+            scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [self] event in
+                guard event.modifierFlags.contains(.option) else { return event }
+                viewModel.adjustZoom(by: event.scrollingDeltaY * 0.02)
+                return nil
+            }
+            #endif
             if resumePosition != nil {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
                     showResumePrompt = true
@@ -212,6 +237,35 @@ struct PlayerView: View {
             handleKeyAction { viewModel.setVolume(viewModel.volume - 0.05) }
             return .handled
         }
+        .onKeyPress(KeyEquivalent("=")) {
+            handleKeyAction { viewModel.adjustZoom(by: 0.25) }
+            return .handled
+        }
+        .onKeyPress(KeyEquivalent("-")) {
+            handleKeyAction { viewModel.adjustZoom(by: -0.25) }
+            return .handled
+        }
+        .onKeyPress(KeyEquivalent("0")) {
+            handleKeyAction { viewModel.resetDisplaySettings() }
+            return .handled
+        }
+        .gesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    viewModel.setZoom(zoomBase * value.magnification)
+                }
+                .onEnded { _ in
+                    zoomBase = viewModel.transport.displaySettings.zoom
+                }
+        )
+        #if os(macOS)
+        .onDisappear {
+            if let monitor = scrollMonitor {
+                NSEvent.removeMonitor(monitor)
+                scrollMonitor = nil
+            }
+        }
+        #endif
     }
 
     private func handleKeyAction(_ action: () -> Void) {

@@ -3,7 +3,7 @@ import Metal
 import MetalKit
 import CoreVideo
 
-private func configureMTKView(playerBridge: PlayerBridge, context: MetalPlayerView.Context) -> MTKView {
+private func configureMTKView(playerBridge: PlayerBridge, transport: PlaybackTransport, context: MetalPlayerView.Context) -> MTKView {
     let mtkView = MTKView()
     mtkView.device = MTLCreateSystemDefaultDevice()
     mtkView.colorPixelFormat = .rgba16Float
@@ -22,7 +22,7 @@ private func configureMTKView(playerBridge: PlayerBridge, context: MetalPlayerVi
         layer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
     }
 
-    let coordinator = MetalViewCoordinator(playerBridge: playerBridge, mtkView: mtkView)
+    let coordinator = MetalViewCoordinator(playerBridge: playerBridge, transport: transport, mtkView: mtkView)
     context.coordinator.inner = coordinator
     mtkView.delegate = context.coordinator
 
@@ -32,9 +32,10 @@ private func configureMTKView(playerBridge: PlayerBridge, context: MetalPlayerVi
 #if os(macOS)
 struct MetalPlayerView: NSViewRepresentable {
     let playerBridge: PlayerBridge
+    let transport: PlaybackTransport
 
     func makeNSView(context: Context) -> MTKView {
-        configureMTKView(playerBridge: playerBridge, context: context)
+        configureMTKView(playerBridge: playerBridge, transport: transport, context: context)
     }
 
     func updateNSView(_ nsView: MTKView, context: Context) {}
@@ -52,9 +53,10 @@ struct MetalPlayerView: NSViewRepresentable {
 #else
 struct MetalPlayerView: UIViewRepresentable {
     let playerBridge: PlayerBridge
+    let transport: PlaybackTransport
 
     func makeUIView(context: Context) -> MTKView {
-        configureMTKView(playerBridge: playerBridge, context: context)
+        configureMTKView(playerBridge: playerBridge, transport: transport, context: context)
     }
 
     func updateUIView(_ uiView: MTKView, context: Context) {}

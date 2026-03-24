@@ -18,6 +18,79 @@ struct TrackSelectionView: View {
             // Side panel
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
+                    // Video section (aspect ratio, crop, zoom)
+                    trackSection(title: "Video") {
+                        ForEach(AspectRatioMode.allCases) { mode in
+                            trackRow(
+                                label: mode.displayName,
+                                isSelected: viewModel.aspectRatioMode == mode
+                            ) {
+                                viewModel.setAspectRatioMode(mode)
+                            }
+                        }
+
+                        Divider().padding(.vertical, 4)
+
+                        Button {
+                            viewModel.detectBlackBars()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "crop")
+                                    .font(.caption)
+                                Text("Auto-Detect Black Bars")
+                                    .font(.body)
+                                Spacer()
+                            }
+                            .foregroundStyle(.white.opacity(0.8))
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.plain)
+
+                        if viewModel.cropActive {
+                            Button {
+                                viewModel.setCrop(.zero)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "arrow.uturn.backward")
+                                        .font(.caption)
+                                    Text("Remove Crop")
+                                        .font(.body)
+                                    Spacer()
+                                }
+                                .foregroundStyle(.orange.opacity(0.8))
+                                .padding(.vertical, 4)
+                                .padding(.horizontal, 4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        let zoom = viewModel.transport.displaySettings.zoom
+                        if zoom > 1.01 {
+                            Divider().padding(.vertical, 4)
+                            HStack {
+                                Text("Zoom: \(String(format: "%.0f%%", zoom * 100))")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Spacer()
+                                Button("Reset") {
+                                    viewModel.setZoom(1.0)
+                                    viewModel.setPan(x: 0, y: 0)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.orange.opacity(0.8))
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 4)
+                        }
+
+                        Text("Pinch or =/\u{2212} to zoom, drag to pan, 0 to reset")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.3))
+                            .padding(.leading, 4)
+                            .padding(.top, 4)
+                    }
+
                     // Subtitles section
                     if !viewModel.subtitleTracks.isEmpty {
                         trackSection(title: "Subtitles") {
