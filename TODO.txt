@@ -81,14 +81,7 @@ PlaiY - Feature TODO
     - Add keyboard shortcut (default: S)
     - Effort: Low | Impact: Low
 
-13. Spatial Audio Rendering
-    - Use Apple Spatial Audio APIs (PHASE or AVAudioEngine) for headphone rendering
-    - Map multichannel tracks (5.1, 7.1) to binaural output
-    - Support head tracking on AirPods Pro / Max
-    - Fallback to stereo downmix when spatial audio unavailable
-    - Effort: High | Impact: Medium (Apple headphone users)
-
-14. tvOS Target
+13. tvOS Target
     - Adapt SwiftUI views for tvOS focus system and Siri Remote
     - Replace mouse/keyboard interactions with focus-based navigation
     - Use tvOS top shelf and content store integration for library
@@ -96,21 +89,21 @@ PlaiY - Feature TODO
     - Shared C++ core, platform-specific UI and audio output
     - Effort: High | Impact: High (living room use case)
 
-15. Watch History and Smart Resume
+14. Watch History and Smart Resume
     - Track per-file watch progress, last played date, and watch count
     - Add "Continue Watching" row in library with sorted recent items
     - Mark files as watched when >90% complete
     - Sync watch history across devices via CloudKit (optional)
     - Effort: Medium | Impact: High
 
-16. Drag and Drop + File Association
+15. Drag and Drop + File Association
     - Accept file drops on the app window and dock icon
     - Register as handler for common video formats (mkv, mp4, avi, mov, etc.)
     - Open dropped files immediately or add to queue if already playing
     - Support dropping folders to batch-add to library
     - Effort: Low | Impact: Medium
 
-17. Deinterlacing
+16. Deinterlacing
     - Detect interlaced content via stream flags (field_order, interlaced_frame)
     - Implement yadif / bwdif deinterlacing via FFmpeg filters
     - Add option for VideoToolbox hardware deinterlacing when available
