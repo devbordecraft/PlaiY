@@ -37,6 +37,7 @@ enum class HDRType {
 enum class AudioOutputMode {
     PCM,          // Default: decode to float32 PCM
     Passthrough,  // Send compressed bitstream directly to output
+    Spatial,      // Spatial audio via AVAudioEngine + HRTF binaural rendering
 };
 
 enum class HWDecodePreference {
@@ -313,6 +314,8 @@ struct PlaybackStats {
     int audio_codec_profile = -1;
     bool audio_atmos = false;
     bool audio_dts_hd = false;
+    bool audio_spatial = false;        // Spatial audio rendering active (HRTF)
+    bool audio_head_tracking = false;  // Head tracking active
     int audio_packet_queue_size = 0;
     int audio_ring_fill_pct = 0;   // Ring buffer fill percentage (0-100)
 

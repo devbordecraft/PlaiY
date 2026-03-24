@@ -46,6 +46,8 @@ if(APPLE)
     list(APPEND CORE_SOURCES
         platform/apple/vt_video_decoder.mm
         platform/apple/ca_audio_output.mm
+        platform/apple/spatial_audio_output.mm
+        platform/apple/spatial_audio_detector.mm
         platform/apple/metal_video_renderer.mm
     )
 endif()
@@ -85,10 +87,14 @@ if(APPLE)
         "-framework Metal"
         "-framework QuartzCore"
         "-framework IOSurface"
+        "-framework AVFoundation"
+        "-framework CoreMotion"
     )
     set_source_files_properties(
         platform/apple/vt_video_decoder.mm
         platform/apple/ca_audio_output.mm
+        platform/apple/spatial_audio_output.mm
+        platform/apple/spatial_audio_detector.mm
         platform/apple/metal_video_renderer.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc"
     )

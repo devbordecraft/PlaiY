@@ -24,6 +24,9 @@ struct DebugOverlayView: View {
                 }
                 row("Sample Rate", "\(stats.audio_sample_rate) Hz")
                 row("Channels", "\(stats.audio_channels) source → \(stats.audio_output_channels) output")
+                if stats.audio_spatial {
+                    row("Spatial", stats.audio_head_tracking ? "HRTF + Head Tracking" : "HRTF")
+                }
                 row("Ring Buffer", "\(stats.audio_ring_fill_pct)%")
                 row("Packet Queue", "\(stats.audio_packet_queue_size) packets")
             }

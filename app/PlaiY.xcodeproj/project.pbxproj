@@ -273,6 +273,8 @@
 					"-framework IOSurface",
 					"-framework MediaPlayer",
 					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
 				PRODUCT_NAME = PlaiY;
@@ -452,6 +454,8 @@
 					"-framework IOSurface",
 					"-framework MediaPlayer",
 					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
 				PRODUCT_NAME = PlaiY;

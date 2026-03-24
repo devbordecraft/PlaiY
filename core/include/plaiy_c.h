@@ -92,6 +92,14 @@ PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p);
 typedef void (*PYDeviceChangeCallback)(void* userdata);
 void        py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata);
 
+// ---- Spatial audio ----
+// Mode: 0 = Auto (default), 1 = Off, 2 = Force Spatial
+void        py_player_set_spatial_audio_mode(PYPlayer* p, int mode);
+int         py_player_get_spatial_audio_mode(PYPlayer* p);
+bool        py_player_is_spatial_active(PYPlayer* p);
+void        py_player_set_head_tracking(PYPlayer* p, bool enabled);
+bool        py_player_is_head_tracking(PYPlayer* p);
+
 // ---- Mute ----
 void        py_player_set_muted(PYPlayer* p, bool muted);
 bool        py_player_is_muted(PYPlayer* p);
@@ -128,6 +136,8 @@ typedef struct {
     int audio_codec_profile;
     bool audio_atmos;
     bool audio_dts_hd;
+    bool audio_spatial;
+    bool audio_head_tracking;
     int audio_packet_queue_size;
     int audio_ring_fill_pct;
 

@@ -13,6 +13,9 @@ class AppSettings: ObservableObject {
     @AppStorage("preferredAudioLanguage") var preferredAudioLanguage: String = ""
     @AppStorage("audioPassthrough") var audioPassthrough: Bool = false
     @AppStorage("volume") var volume: Double = 1.0
+    // 0 = Auto, 1 = Off, 2 = Force Spatial
+    @AppStorage("spatialAudioMode") var spatialAudioMode: Int = 0
+    @AppStorage("headTrackingEnabled") var headTrackingEnabled: Bool = false
 
     // MARK: - Subtitles
     @AppStorage("preferredSubtitleLanguage") var preferredSubtitleLanguage: String = ""

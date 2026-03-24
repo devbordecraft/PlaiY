@@ -140,6 +140,29 @@ void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb
     }
 }
 
+void py_player_set_spatial_audio_mode(PYPlayer* p, int mode) {
+    if (p) p->engine.set_spatial_audio_mode(mode);
+}
+
+int py_player_get_spatial_audio_mode(PYPlayer* p) {
+    if (!p) return 0;
+    return p->engine.spatial_audio_mode();
+}
+
+bool py_player_is_spatial_active(PYPlayer* p) {
+    if (!p) return false;
+    return p->engine.is_spatial_active();
+}
+
+void py_player_set_head_tracking(PYPlayer* p, bool enabled) {
+    if (p) p->engine.set_head_tracking_enabled(enabled);
+}
+
+bool py_player_is_head_tracking(PYPlayer* p) {
+    if (!p) return false;
+    return p->engine.is_head_tracking_enabled();
+}
+
 void py_player_set_muted(PYPlayer* p, bool muted) {
     if (p) p->engine.set_muted(muted);
 }
@@ -190,6 +213,8 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     out.audio_codec_profile = s.audio_codec_profile;
     out.audio_atmos = s.audio_atmos;
     out.audio_dts_hd = s.audio_dts_hd;
+    out.audio_spatial = s.audio_spatial;
+    out.audio_head_tracking = s.audio_head_tracking;
     out.audio_packet_queue_size = s.audio_packet_queue_size;
     out.audio_ring_fill_pct = s.audio_ring_fill_pct;
     out.audio_pts_us = s.audio_pts_us;

@@ -25,6 +25,7 @@ final class PlaybackTransport {
     }
     var currentSubtitle: SubtitleData?
     var passthroughActive: Bool = false
+    var spatialActive: Bool = false
     var playbackStats: PYPlaybackStats?
 
     // Seek preview (written by thumb queue, read by controls view)
@@ -87,6 +88,7 @@ class PlayerViewModel: ObservableObject {
     @Published var playbackSpeed: Double = 1.0
     @Published var passthroughEnabled = false
     @Published var passthroughCaps = PYPassthroughCapabilities(ac3: false, eac3: false, dts: false, dts_hd_ma: false, truehd: false)
+    @Published var headTrackingEnabled = false
     @Published var showDebugOverlay = false
     @Published var playbackEnded = false
 
@@ -117,6 +119,9 @@ class PlayerViewModel: ObservableObject {
 
         bridge.setHWDecodePref(Int32(settings.hwDecodePref))
         bridge.setSubtitleFontScale(settings.assFontScale)
+        bridge.setSpatialAudioMode(Int32(settings.spatialAudioMode))
+        bridge.setHeadTracking(settings.headTrackingEnabled)
+        headTrackingEnabled = settings.headTrackingEnabled
 
         guard bridge.open(path: path) else { return }
         transport.duration = bridge.duration
@@ -129,6 +134,7 @@ class PlayerViewModel: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.passthroughCaps = self.bridge.queryPassthroughSupport()
+                self.transport.spatialActive = self.bridge.isSpatialActive
             }
         }
 
@@ -273,6 +279,7 @@ class PlayerViewModel: ObservableObject {
         transport.currentPosition = bridge.position
         currentPosition = transport.currentPosition
         transport.passthroughActive = bridge.isPassthroughActive
+        transport.spatialActive = bridge.isSpatialActive
 
         let now = CACurrentMediaTime()
 
@@ -313,6 +320,15 @@ class PlayerViewModel: ObservableObject {
     func setPassthrough(_ enabled: Bool) {
         passthroughEnabled = enabled
         bridge.setAudioPassthrough(enabled)
+    }
+
+    func setSpatialMode(_ mode: Int) {
+        bridge.setSpatialAudioMode(Int32(mode))
+    }
+
+    func setHeadTracking(_ enabled: Bool) {
+        headTrackingEnabled = enabled
+        bridge.setHeadTracking(enabled)
     }
 
     // MARK: - Timeline interaction (writes to transport, not @Published)

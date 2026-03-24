@@ -16,6 +16,8 @@
 
 #ifdef __APPLE__
 #include "../platform/apple/ca_audio_output.h"
+#include "../platform/apple/spatial_audio_output.h"
+#include "../platform/apple/spatial_audio_detector.h"
 #endif
 
 extern "C" {
@@ -100,6 +102,10 @@ struct PlayerEngine::Impl {
     HWDecodePreference hw_decode_pref = HWDecodePreference::Auto;
     bool muted = false;
     float volume = 1.0f;
+
+    // Spatial audio
+    int spatial_audio_mode = 0;  // 0=Auto, 1=Off, 2=Force
+    bool head_tracking_enabled = false;
 
     // Playback speed
     std::atomic<double> playback_speed{1.0};
@@ -430,15 +436,34 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
     // Create audio output if needed
     if (!impl_->audio_output) {
 #ifdef __APPLE__
-        impl_->audio_output = std::make_unique<CAAudioOutput>();
+        // Auto-detect: choose spatial vs CAAudioOutput based on device and preferences
+        if (impl_->spatial_audio_mode != 1 /* Off */) {
+            bool want_spatial = false;
+            if (impl_->spatial_audio_mode == 2 /* Force */) {
+                want_spatial = true;
+            } else {
+                // Auto mode: detect device type
+                auto dev_type = SpatialAudioDetector::detect_current_device();
+                want_spatial = (dev_type == AudioDeviceType::SpatialHeadphones);
+            }
+            // Spatial audio requires decoded PCM — incompatible with passthrough
+            if (want_spatial && !impl_->passthrough_preferred) {
+                impl_->audio_output = std::make_unique<SpatialAudioOutput>();
+                PY_LOG_INFO(TAG, "Using spatial audio output (HRTF)");
+            }
+        }
+        if (!impl_->audio_output) {
+            impl_->audio_output = std::make_unique<CAAudioOutput>();
+        }
 #endif
     }
     if (!impl_->audio_output) return;
 
     bool passthrough_ok = false;
 
-    // Try passthrough if preferred and codec is eligible
-    if (impl_->passthrough_preferred && is_passthrough_eligible(track.codec_id, track.codec_profile)) {
+    // Try passthrough if preferred and codec is eligible (only CAAudioOutput supports this)
+    if (impl_->passthrough_preferred && !impl_->audio_output->is_spatial()
+        && is_passthrough_eligible(track.codec_id, track.codec_profile)) {
         auto err = impl_->audio_output->open_passthrough(track.codec_id, track.codec_profile, track.sample_rate, track.channels);
         if (!err) {
             impl_->audio_output_mode = AudioOutputMode::Passthrough;
@@ -479,9 +504,10 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
         }
     }
 
-    // Normal PCM decode path
+    // Normal decode path (PCM or Spatial)
     if (!passthrough_ok) {
-        impl_->audio_output_mode = AudioOutputMode::PCM;
+        impl_->audio_output_mode = impl_->audio_output->is_spatial()
+            ? AudioOutputMode::Spatial : AudioOutputMode::PCM;
         impl_->audio_decoder = std::make_unique<AudioDecoder>();
         auto err = impl_->audio_decoder->open(track);
         if (err) {
@@ -497,6 +523,15 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
                         source_ch, device_max, out_channels);
 
             err = impl_->audio_output->open(out_rate, out_channels);
+            if (err && impl_->audio_output->is_spatial()) {
+                // Spatial audio failed — fall back to CAAudioOutput
+                PY_LOG_WARN(TAG, "Spatial audio output failed (%s), falling back to standard",
+                            err.message.c_str());
+                impl_->audio_output = std::make_unique<CAAudioOutput>();
+                impl_->audio_output_mode = AudioOutputMode::PCM;
+                out_channels = std::min(source_ch, impl_->audio_output->max_device_channels());
+                err = impl_->audio_output->open(out_rate, out_channels);
+            }
             if (err) {
                 PY_LOG_WARN(TAG, "Audio output open failed: %s", err.message.c_str());
                 impl_->audio_output.reset();
@@ -515,6 +550,12 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
                 impl_->audio_output->set_pts_callback([](int64_t) {});
                 impl_->audio_output->set_muted(impl_->muted);
                 impl_->audio_output->set_volume(impl_->volume);
+
+                // Configure head tracking for spatial output
+                if (impl_->audio_output->is_spatial()) {
+                    impl_->audio_output->set_head_tracking_enabled(
+                        impl_->head_tracking_enabled);
+                }
             }
         }
     }
@@ -671,6 +712,32 @@ double PlayerEngine::playback_speed() const {
     return impl_->playback_speed.load();
 }
 
+void PlayerEngine::set_spatial_audio_mode(int mode) {
+    impl_->spatial_audio_mode = std::clamp(mode, 0, 2);
+}
+
+int PlayerEngine::spatial_audio_mode() const {
+    return impl_->spatial_audio_mode;
+}
+
+bool PlayerEngine::is_spatial_active() const {
+    return impl_->audio_output_mode == AudioOutputMode::Spatial;
+}
+
+void PlayerEngine::set_head_tracking_enabled(bool enabled) {
+    impl_->head_tracking_enabled = enabled;
+    if (impl_->audio_output) {
+        impl_->audio_output->set_head_tracking_enabled(enabled);
+    }
+}
+
+bool PlayerEngine::is_head_tracking_enabled() const {
+    if (impl_->audio_output) {
+        return impl_->audio_output->is_head_tracking_enabled();
+    }
+    return impl_->head_tracking_enabled;
+}
+
 void PlayerEngine::set_hw_decode_preference(HWDecodePreference pref) {
     impl_->hw_decode_pref = pref;
 }
@@ -710,6 +777,10 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         s.audio_output_channels = impl_->audio_output->channels();
     }
     s.audio_passthrough = (impl_->audio_output_mode == AudioOutputMode::Passthrough);
+    s.audio_spatial = (impl_->audio_output_mode == AudioOutputMode::Spatial);
+    if (impl_->audio_output) {
+        s.audio_head_tracking = impl_->audio_output->is_head_tracking_enabled();
+    }
 
     if (impl_->active_audio_stream >= 0 &&
         impl_->active_audio_stream < static_cast<int>(impl_->media_info.tracks.size())) {

@@ -69,6 +69,11 @@ public:
     // Callback invoked when the audio output device changes (HDMI plug/unplug).
     using DeviceChangeCallback = std::function<void()>;
     virtual void set_device_change_callback(DeviceChangeCallback cb) {}
+
+    // Spatial audio support (optional, override in spatial implementation)
+    virtual void set_head_tracking_enabled(bool enabled) {}
+    virtual bool is_head_tracking_enabled() const { return false; }
+    virtual bool is_spatial() const { return false; }
 };
 
 } // namespace py

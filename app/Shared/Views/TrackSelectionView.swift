@@ -106,6 +106,41 @@ struct TrackSelectionView: View {
                                 .foregroundStyle(.white.opacity(0.5))
                                 .padding(.leading, 4)
                         }
+
+                        Divider().padding(.vertical, 4)
+
+                        // Spatial Audio
+                        HStack {
+                            Text("Spatial Audio")
+                                .foregroundStyle(.white)
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { viewModel.bridge.spatialAudioMode },
+                                set: { viewModel.setSpatialMode(Int($0)) }
+                            )) {
+                                Text("Auto").tag(Int32(0))
+                                Text("Off").tag(Int32(1))
+                                Text("Force").tag(Int32(2))
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 160)
+                        }
+                        .padding(.vertical, 2)
+
+                        if viewModel.transport.spatialActive {
+                            Text("Spatial audio active (HRTF)")
+                                .font(.caption)
+                                .foregroundStyle(.blue.opacity(0.8))
+                                .padding(.leading, 4)
+                        }
+
+                        Toggle("Head Tracking", isOn: Binding(
+                            get: { viewModel.headTrackingEnabled },
+                            set: { viewModel.setHeadTracking($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 2)
                     }
                 }
                 .padding(20)

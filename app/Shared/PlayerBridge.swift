@@ -100,6 +100,28 @@ class PlayerBridge {
         }, context)
     }
 
+    // MARK: - Spatial audio
+
+    func setSpatialAudioMode(_ mode: Int32) {
+        py_player_set_spatial_audio_mode(handle, mode)
+    }
+
+    var spatialAudioMode: Int32 {
+        py_player_get_spatial_audio_mode(handle)
+    }
+
+    var isSpatialActive: Bool {
+        py_player_is_spatial_active(handle)
+    }
+
+    func setHeadTracking(_ enabled: Bool) {
+        py_player_set_head_tracking(handle, enabled)
+    }
+
+    var isHeadTracking: Bool {
+        py_player_is_head_tracking(handle)
+    }
+
     func setMuted(_ muted: Bool) {
         py_player_set_muted(handle, muted)
     }

@@ -67,5 +67,7 @@ targets:
           - -framework IOSurface
           - -framework MediaPlayer
           - -framework Security
+          - -framework AVFoundation
+          - -framework CoreMotion
         ENABLE_HARDENED_RUNTIME: NO
         CODE_SIGN_IDENTITY: "-"

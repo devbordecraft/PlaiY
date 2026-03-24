@@ -57,6 +57,13 @@ public:
     void set_playback_speed(double speed);
     double playback_speed() const;
 
+    // Spatial audio
+    void set_spatial_audio_mode(int mode);  // 0=Auto, 1=Off, 2=Force
+    int spatial_audio_mode() const;
+    bool is_spatial_active() const;
+    void set_head_tracking_enabled(bool enabled);
+    bool is_head_tracking_enabled() const;
+
     void set_hw_decode_preference(HWDecodePreference pref);
     void set_subtitle_font_scale(double scale);
 
