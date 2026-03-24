@@ -25,3 +25,157 @@ PlaiY - Feature TODO
    - Add subtitle delay adjustment (+/- offset applied to PTS)
    - Styling already implemented (font size, color, background, ASS scale)
    - Effort: Low | Impact: Medium
+
+5. Dolby Vision and HDR10+ Tone Mapping
+   - Parse Dolby Vision RPU (enhancement layer) from HEVC streams
+   - Implement per-frame dynamic metadata application for DV profiles 5, 7, 8
+   - Parse HDR10+ SEI messages for dynamic tone mapping curves
+   - Apply dynamic metadata in Metal shader alongside existing static HDR10/HLG
+   - Effort: High | Impact: High (premium HDR content)
+
+6. TMDb / OMDb Metadata Enrichment
+   - Match library files to TMDb/OMDb entries by filename parsing
+   - Fetch poster art, synopsis, cast, ratings, and year
+   - Cache metadata + artwork locally as JSON + images
+   - Display enriched metadata in library grid and detail views
+   - Effort: Medium | Impact: High (transforms library UX)
+
+7. Picture-in-Picture
+   - Implement AVPictureInPictureController integration on macOS
+   - Maintain playback controls (play/pause, seek) in PiP window
+   - Handle PiP <-> fullscreen transitions cleanly
+   - Effort: Low | Impact: Medium
+
+8. Seek Bar Thumbnail Preview
+   - Generate thumbnail strips on file open (or lazily on first seek hover)
+   - Decode I-frames at regular intervals using a lightweight decode pass
+   - Display thumbnail tooltip above the seek bar on hover
+   - Cache thumbnails per file for instant preview on reopen
+   - Effort: Medium | Impact: High (huge UX improvement for navigation)
+
+9. Keyboard Shortcuts and Customization
+    - Define default shortcut set (space=play/pause, arrows=seek, f=fullscreen, etc.)
+    - Add a key binding editor in preferences
+    - Support modifier combos and media keys
+    - Persist custom bindings to user defaults
+    - Effort: Medium | Impact: Medium
+
+10. Audio Equalizer and Effects
+    - Implement a 10-band parametric EQ in the audio pipeline (post-decode, pre-output)
+    - Add presets (flat, bass boost, vocal, cinema)
+    - Allow custom EQ curves saved per profile
+    - Add audio compressor option for night-mode listening
+    - Effort: Medium | Impact: Medium
+
+11. Aspect Ratio and Crop Controls
+    - Allow manual aspect ratio override (16:9, 4:3, 21:9, custom)
+    - Add crop mode to remove black bars (auto-detect via pixel analysis)
+    - Support pan & zoom on cropped content
+    - Persist per-file aspect ratio preference
+    - Effort: Low | Impact: Medium
+
+12. Frame Capture / Screenshot
+    - Capture current displayed frame as PNG/JPEG
+    - Render subtitles onto capture optionally
+    - Copy to clipboard or save to configurable output folder
+    - Add keyboard shortcut (default: S)
+    - Effort: Low | Impact: Low
+
+13. Spatial Audio Rendering
+    - Use Apple Spatial Audio APIs (PHASE or AVAudioEngine) for headphone rendering
+    - Map multichannel tracks (5.1, 7.1) to binaural output
+    - Support head tracking on AirPods Pro / Max
+    - Fallback to stereo downmix when spatial audio unavailable
+    - Effort: High | Impact: Medium (Apple headphone users)
+
+14. tvOS Target
+    - Adapt SwiftUI views for tvOS focus system and Siri Remote
+    - Replace mouse/keyboard interactions with focus-based navigation
+    - Use tvOS top shelf and content store integration for library
+    - Support Siri playback intents ("Play X on PlaiY")
+    - Shared C++ core, platform-specific UI and audio output
+    - Effort: High | Impact: High (living room use case)
+
+15. Watch History and Smart Resume
+    - Track per-file watch progress, last played date, and watch count
+    - Add "Continue Watching" row in library with sorted recent items
+    - Mark files as watched when >90% complete
+    - Sync watch history across devices via CloudKit (optional)
+    - Effort: Medium | Impact: High
+
+16. Drag and Drop + File Association
+    - Accept file drops on the app window and dock icon
+    - Register as handler for common video formats (mkv, mp4, avi, mov, etc.)
+    - Open dropped files immediately or add to queue if already playing
+    - Support dropping folders to batch-add to library
+    - Effort: Low | Impact: Medium
+
+17. Deinterlacing
+    - Detect interlaced content via stream flags (field_order, interlaced_frame)
+    - Implement yadif / bwdif deinterlacing via FFmpeg filters
+    - Add option for VideoToolbox hardware deinterlacing when available
+    - Allow user toggle: auto / force on / off
+    - Effort: Medium | Impact: Medium (legacy content, DVDs, broadcast recordings)
+
+---
+
+Video Lib Pipeline
+==================
+Goal: Extract a standalone, reusable C++ video library from the PlaiY core
+that can be embedded in other apps (e.g., real-time video chat).
+
+1. Define Library Scope and Public API Surface
+   - Audit current core/ to identify reusable vs PlaiY-specific code
+   - Define what the library provides: decode, render, color conversion, audio output
+   - Design a minimal C API (independent from plaiy_c.h)
+   - Write an API spec document with usage examples
+
+2. Decouple Video Decode Pipeline
+   - Extract VideoToolbox and FFmpeg SW decode into a self-contained module
+   - Remove dependency on PlayerEngine orchestration and internal queues
+   - Accept raw packets/NAL units as input (not just demuxed AVPacket)
+   - Support caller-driven threading (no internal threads by default)
+
+3. Decouple Audio Decode and Output
+   - Extract audio decoder + resampler as a standalone module
+   - Separate CoreAudio output into a platform plugin interface
+   - Allow callers to pull decoded PCM without using the internal ring buffer
+
+4. Extract Metal Rendering as a Standalone Module
+   - Isolate YUV-to-RGB shaders and HDR tone mapping into a reusable renderer
+   - Accept CVPixelBuffer / raw frame data as input without internal frame queues
+   - Expose a simple "render this frame to this MTLTexture/CAMetalLayer" API
+   - Keep BT.709, BT.2020, PQ, HLG support intact
+
+5. Build a Platform Abstraction Layer
+   - Abstract Apple-specific code (VideoToolbox, CoreAudio, Metal) behind interfaces
+   - Define platform backends: Apple, Linux (VAAPI/Vulkan), Windows (D3D11/Media Foundation)
+   - Ensure the core library compiles on all targets without Apple frameworks
+
+6. Design a Flexible Threading and Sync Model
+   - Replace PlaiY's playback-oriented sync with pluggable sync strategies
+   - Provide a low-latency mode (for real-time chat) and buffered mode (for playback)
+   - Let callers own threads and drive the pipeline, or opt into managed threads
+
+7. Add Encoding Support
+   - Integrate VideoToolbox hardware encoding (H.264/HEVC)
+   - Add FFmpeg software encoding fallback
+   - Expose encoder configuration (bitrate, profile, latency tuning)
+   - Support both file output and raw packet output (for network transport)
+
+8. Standalone Build System and Packaging
+   - Create a separate CMake project for the library (outside PlaiY's build)
+   - Support building as static lib, shared lib, and framework (Apple)
+   - Add vcpkg/Conan manifest for dependency management
+   - Set up CI for macOS, Linux, and Windows builds
+
+9. Test Suite and Example Apps
+   - Write unit tests for each module (decode, encode, render, audio)
+   - Build a minimal example app: decode a file and render to a window
+   - Build a loopback example: capture -> encode -> decode -> render
+   - Benchmark latency and throughput per module
+
+10. Integrate Back into PlaiY
+    - Replace PlaiY core internals with the extracted library
+    - PlaiY becomes a consumer of the library (same as any other app would be)
+    - Validate no regressions in playback quality, HDR, subtitles
