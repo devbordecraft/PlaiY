@@ -42,10 +42,11 @@ final class PlaybackTransport {
     var isHoveringTimeline = false
     var isDraggingTimeline = false
     var isHoveringVolume = false
+    var isHoveringControls = false
     var hoverFraction: Double = 0
 
     var isUserInteracting: Bool {
-        isHoveringTimeline || isDraggingTimeline || isHoveringVolume
+        isHoveringTimeline || isDraggingTimeline || isHoveringVolume || isHoveringControls
     }
 
     var positionFraction: Double {

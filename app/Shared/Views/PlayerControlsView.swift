@@ -207,10 +207,11 @@ struct PlaybackButtonsView: View {
 
             Button { onTogglePlayPause() } label: {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                    .font(.largeTitle)
+                    .font(.title2)
+                    .fontWeight(.semibold)
                     .contentTransition(.symbolEffect(.replace))
             }
-            .buttonStyle(PlayerButtonStyle())
+            .buttonStyle(LargePlayerButtonStyle())
             .foregroundStyle(.white)
 
             Button { onSeekRelative(10) } label: {
@@ -247,9 +248,9 @@ struct PlaybackButtonsView: View {
                     .font(.caption)
                     .fontWeight(.semibold)
                     .monospacedDigit()
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 6))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 8))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)
@@ -298,23 +299,22 @@ struct VolumeControlView: View {
             .buttonStyle(PlayerButtonStyle())
             .foregroundStyle(.white)
 
-            if isHovering && !passthroughActive {
-                Slider(
-                    value: Binding(
-                        get: { Double(localVolume) },
-                        set: { newValue in
-                            localVolume = Float(newValue)
-                            // Direct bridge call only — no @Published, no objectWillChange
-                            bridge.setVolume(localVolume)
-                        }
-                    ),
-                    in: 0...1
-                )
-                .frame(width: 100)
-                .tint(.white)
-                .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
+            Slider(
+                value: Binding(
+                    get: { Double(localVolume) },
+                    set: { newValue in
+                        localVolume = Float(newValue)
+                        // Direct bridge call only — no @Published, no objectWillChange
+                        bridge.setVolume(localVolume)
+                    }
+                ),
+                in: 0...1
+            )
+            .frame(width: isHovering && !passthroughActive ? 100 : 0)
+            .opacity(isHovering && !passthroughActive ? 1 : 0)
+            .tint(.white)
         }
+        .frame(width: 160, alignment: .leading)
         .onHover { hovering in
             withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
                 isHovering = hovering

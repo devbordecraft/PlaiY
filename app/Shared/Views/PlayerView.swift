@@ -24,6 +24,36 @@ struct PlayerView: View {
             // Video layer
             MetalPlayerView(playerBridge: viewModel.bridge, transport: viewModel.transport)
                 .ignoresSafeArea()
+
+            // ── Display-link tick + subtitle ──
+            // Lightweight TimelineView: only runs tick() and subtitle overlay.
+            // Buttons, menus, gradients are NOT inside — they don't re-evaluate
+            // at 120Hz, only on @Published changes.
+            TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
+                let _ = viewModel.tick()
+                SubtitleOverlayView(transport: viewModel.transport)
+            }
+            .allowsHitTesting(false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // ── Tap/drag target for video area ──
+            // Sits behind controls but above video. Handles tap-to-toggle
+            // and pan drag (moved from MetalPlayerView so it receives hit tests).
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if showSettings {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showSettings = false
+                        }
+                        scheduleHideControls()
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showControls.toggle()
+                        }
+                        if showControls { scheduleHideControls() }
+                    }
+                }
                 .gesture(
                     DragGesture(minimumDistance: 10)
                         .onChanged { value in
@@ -38,58 +68,56 @@ struct PlayerView: View {
                         }
                 )
 
-            // ── Display-link tick + subtitle ──
-            // Lightweight TimelineView: only runs tick() and subtitle overlay.
-            // Buttons, menus, gradients are NOT inside — they don't re-evaluate
-            // at 120Hz, only on @Published changes.
-            TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
-                let _ = viewModel.tick()
-                SubtitleOverlayView(transport: viewModel.transport)
-            }
-            .allowsHitTesting(false)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
             // ── Controls overlay ──
-            // NOT inside TimelineView — only rebuilt on @Published / @State changes.
-            if showControls {
-                VStack {
-                    TopBarView(
-                        mediaTitle: viewModel.mediaTitle,
-                        showDebugOverlay: viewModel.showDebugOverlay,
-                        onBack: onBack,
-                        onToggleFullScreen: { toggleFullScreen() },
-                        onToggleDebug: { viewModel.showDebugOverlay.toggle() },
-                        onToggleSettings: {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                                showSettings.toggle()
-                            }
-                            if showSettings {
-                                hideControlsTask?.cancel()
-                            } else {
-                                scheduleHideControls()
-                            }
+            // Always in view tree; visibility via opacity preserves hover state.
+            VStack {
+                TopBarView(
+                    mediaTitle: viewModel.mediaTitle,
+                    showDebugOverlay: viewModel.showDebugOverlay,
+                    onBack: onBack,
+                    onToggleFullScreen: { toggleFullScreen() },
+                    onToggleDebug: { viewModel.showDebugOverlay.toggle() },
+                    onToggleSettings: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showSettings.toggle()
                         }
-                    )
+                        if showSettings {
+                            hideControlsTask?.cancel()
+                        } else {
+                            scheduleHideControls()
+                        }
+                    }
+                )
+                .onHover { hovering in
+                    viewModel.transport.isHoveringControls = hovering
+                    if !hovering { scheduleHideControls() }
+                }
 
-                    Spacer()
+                Spacer()
 
-                    // Bottom controls: timeline (120Hz) + buttons (static)
-                    BottomControlsView(
-                        viewModel: viewModel,
-                        onSeekRelative: { viewModel.seekRelative(seconds: $0) },
-                        onTogglePlayPause: { viewModel.togglePlayPause() },
-                        onToggleMute: { viewModel.toggleMute() },
-                        onSetVolume: { viewModel.setVolume($0) },
-                        onSetSpeed: { viewModel.setPlaybackSpeed($0) },
-                        onTimelineHoverChanged: { viewModel.timelineHoverChanged($0) },
-                        onTimelineHoverMoved: { viewModel.timelineHoverMoved(fraction: $0) },
-                        onTimelineDragStarted: { viewModel.timelineDragStarted() },
-                        onTimelineDragChanged: { viewModel.timelineDragChanged(fraction: $0) },
-                        onTimelineDragEnded: { viewModel.timelineDragEnded() },
-                        onTimeText: { viewModel.timeText(for: $0) }
-                    )
+                // Bottom controls: timeline (120Hz) + buttons (static)
+                BottomControlsView(
+                    viewModel: viewModel,
+                    onSeekRelative: { viewModel.seekRelative(seconds: $0) },
+                    onTogglePlayPause: { viewModel.togglePlayPause() },
+                    onToggleMute: { viewModel.toggleMute() },
+                    onSetVolume: { viewModel.setVolume($0) },
+                    onSetSpeed: { viewModel.setPlaybackSpeed($0) },
+                    onTimelineHoverChanged: { viewModel.timelineHoverChanged($0) },
+                    onTimelineHoverMoved: { viewModel.timelineHoverMoved(fraction: $0) },
+                    onTimelineDragStarted: { viewModel.timelineDragStarted() },
+                    onTimelineDragChanged: { viewModel.timelineDragChanged(fraction: $0) },
+                    onTimelineDragEnded: { viewModel.timelineDragEnded() },
+                    onTimeText: { viewModel.timeText(for: $0) }
+                )
+                .onHover { hovering in
+                    viewModel.transport.isHoveringControls = hovering
+                    if !hovering { scheduleHideControls() }
                 }
             }
+            .opacity(showControls ? 1 : 0)
+            .allowsHitTesting(showControls)
+            .animation(.spring(response: 0.35, dampingFraction: 0.82), value: showControls)
 
             // Debug overlay (top-left, always visible when toggled)
             if viewModel.showDebugOverlay {
@@ -117,17 +145,19 @@ struct PlayerView: View {
             }
         }
         .background(.black)
-        .onTapGesture {
-            if showSettings {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    showSettings = false
+        .onContinuousHover { phase in
+            switch phase {
+            case .active:
+                if !showControls {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                        showControls = true
+                    }
                 }
                 scheduleHideControls()
-            } else {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                    showControls.toggle()
-                }
+            case .ended:
                 scheduleHideControls()
+            @unknown default:
+                break
             }
         }
         .focusable()
@@ -280,14 +310,17 @@ struct PlayerView: View {
             try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
             if !Task.isCancelled {
                 await MainActor.run {
-                    // Don't hide while user is interacting — reschedule instead
-                    if showSettings || viewModel.transport.isUserInteracting {
-                        scheduleHideControls()
+                    // Don't hide while user is interacting — hover-end handlers
+                    // will call scheduleHideControls() when interaction ends.
+                    guard !showSettings && !viewModel.transport.isUserInteracting else {
                         return
                     }
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         showControls = false
                     }
+                    #if os(macOS)
+                    NSCursor.setHiddenUntilMouseMoves(true)
+                    #endif
                 }
             }
         }
@@ -392,6 +425,7 @@ private struct TopBarView: View {
             LinearGradient(colors: [.black.opacity(0.6), .clear],
                            startPoint: .top, endPoint: .bottom)
         )
+        .contentShape(Rectangle())
     }
 }
 
@@ -453,6 +487,7 @@ private struct BottomControlsView: View {
             LinearGradient(colors: [.clear, .black.opacity(0.7)],
                            startPoint: .top, endPoint: .bottom)
         )
+        .contentShape(Rectangle())
     }
 }
 
@@ -490,6 +525,16 @@ struct PlayerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(8)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
+            .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+struct LargePlayerButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(12)
             .glassEffect(.regular.interactive(), in: .circle)
             .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
             .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
