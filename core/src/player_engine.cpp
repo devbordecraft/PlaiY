@@ -1002,7 +1002,10 @@ void PlayerEngine::Impl::video_decode_loop() {
                 if (frame.pts_us < seek_target_us) continue;
                 skip_to_target = false;
                 video_decoder->set_skip_mode(false);
-                continue; // discard this PTS-only frame; next will be full
+                if (frame.pts_only) continue; // PTS-only from skip mode; next will be full
+                // Full frame from DVSeekDecoder replay — push it directly
+                if (!video_frame_queue.push(std::move(frame))) return false;
+                continue;
             }
 
             if (!video_frame_queue.push(std::move(frame))) return false;
@@ -1039,6 +1042,7 @@ void PlayerEngine::Impl::video_decode_loop() {
             video_decoder->flush();
             video_frame_queue.flush();
             skip_to_target = true;
+            video_decoder->set_seek_target(seek_target_us);
             video_decoder->set_skip_mode(true);
             continue;
         }

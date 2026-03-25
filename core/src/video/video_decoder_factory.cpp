@@ -1,5 +1,6 @@
 #include "video_decoder_factory.h"
 #include "ff_video_decoder.h"
+#include "dv_seek_decoder.h"
 #include "plaiy/logger.h"
 #include "plaiy/types.h"
 
@@ -41,7 +42,12 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(
         }
         if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision &&
             track.dv_profile == 8) {
-            PY_LOG_INFO(TAG, "DV Profile 8: using FFmpeg decoder for RPU metadata");
+            PY_LOG_INFO(TAG, "DV Profile 8: using DVSeekDecoder (FFmpeg + VT shadow)");
+            auto dv = std::make_unique<DVSeekDecoder>();
+            Error err = dv->open(track);
+            if (err.ok()) return dv;
+            PY_LOG_WARN(TAG, "DVSeekDecoder failed: %s, falling back to FFmpeg-only",
+                        err.message.c_str());
             vt_candidate = false;
         }
 

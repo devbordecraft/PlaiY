@@ -21,6 +21,7 @@ set(CORE_SOURCES
     src/demuxer/ff_demuxer.cpp
     src/video/video_decoder_factory.cpp
     src/video/ff_video_decoder.cpp
+    src/video/dv_seek_decoder.cpp
     src/audio/audio_decoder.cpp
     src/audio/audio_resampler.cpp
     src/audio/audio_tempo_filter.cpp

@@ -108,6 +108,14 @@ void FFVideoDecoder::flush() {
 
 void FFVideoDecoder::set_skip_mode(bool skip) {
     skip_mode_ = skip;
+    if (codec_ctx_) {
+        if (skip) {
+            saved_skip_frame_ = codec_ctx_->skip_frame;
+            codec_ctx_->skip_frame = AVDISCARD_NONREF;
+        } else {
+            codec_ctx_->skip_frame = static_cast<AVDiscard>(saved_skip_frame_);
+        }
+    }
 }
 
 Error FFVideoDecoder::send_packet(const Packet& pkt) {
@@ -156,6 +164,7 @@ Error FFVideoDecoder::receive_frame(VideoFrame& out) {
         // Skip mode: extract only PTS for skip-to-target comparison.
         // Avoids metadata extraction, CVPixelBuffer alloc, and sws_scale.
         out = VideoFrame{};
+        out.pts_only = true;
         if (av_frame_->pts != AV_NOPTS_VALUE) {
             AVRational tb = codec_ctx_->time_base;
             if (codec_ctx_->pkt_timebase.den > 0) tb = codec_ctx_->pkt_timebase;

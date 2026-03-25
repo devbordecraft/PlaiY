@@ -23,6 +23,10 @@ public:
     // sws_scale). Used during seek skip-to-target. Default: no-op.
     virtual void set_skip_mode(bool /*skip*/) {}
 
+    // Set the target PTS for the current seek operation.  Composite decoders
+    // (e.g. DVSeekDecoder) use this to know when VT skip-to-target is done.
+    virtual void set_seek_target(int64_t /*target_pts_us*/) {}
+
     // Send a compressed packet to the decoder.
     virtual Error send_packet(const Packet& pkt) = 0;
 

@@ -240,6 +240,9 @@ struct VideoFrame {
     // If true, the frame is from hardware decoder (zero-copy)
     bool hardware_frame = false;
 
+    // If true, only pts_us is valid (produced during seek skip phase)
+    bool pts_only = false;
+
     // For software frames: the backing memory
     std::shared_ptr<uint8_t[]> plane_data;
 

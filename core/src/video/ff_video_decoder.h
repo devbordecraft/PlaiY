@@ -28,6 +28,7 @@ private:
     AVPacket* reuse_pkt_ = nullptr;
     TrackInfo track_info_;
     bool skip_mode_ = false;
+    int saved_skip_frame_ = 0;  // AVDISCARD_DEFAULT
 
     // Cached swscale context — recreated only when format/resolution changes
     SwsContext* sws_ctx_ = nullptr;
