@@ -31,12 +31,14 @@ Error AudioDecoder::open(const TrackInfo& track) {
     av_channel_layout_default(&codec_ctx_->ch_layout, track.channels);
 
     if (!track.extradata.empty()) {
-        codec_ctx_->extradata_size = static_cast<int>(track.extradata.size());
         codec_ctx_->extradata = static_cast<uint8_t*>(
             av_mallocz(track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
-        if (codec_ctx_->extradata) {
-            memcpy(codec_ctx_->extradata, track.extradata.data(), track.extradata.size());
+        if (!codec_ctx_->extradata) {
+            close();
+            return {ErrorCode::OutOfMemory, "Failed to allocate codec extradata"};
         }
+        codec_ctx_->extradata_size = static_cast<int>(track.extradata.size());
+        memcpy(codec_ctx_->extradata, track.extradata.data(), track.extradata.size());
     }
 
     codec_ctx_->thread_count = 1;

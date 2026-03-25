@@ -14,6 +14,7 @@ AssRenderer::~AssRenderer() {
 }
 
 Error AssRenderer::init() {
+    cache_valid_ = false;
     library_ = ass_library_init();
     if (!library_) {
         return {ErrorCode::SubtitleError, "Failed to init libass"};
@@ -39,6 +40,7 @@ Error AssRenderer::init() {
 }
 
 Error AssRenderer::load_file(const std::string& path) {
+    cache_valid_ = false;
     if (!library_) {
         Error err = init();
         if (err) return err;
@@ -59,6 +61,7 @@ Error AssRenderer::load_file(const std::string& path) {
 }
 
 Error AssRenderer::load_embedded(const uint8_t* header, size_t header_size) {
+    cache_valid_ = false;
     if (!library_) {
         Error err = init();
         if (err) return err;
@@ -161,6 +164,7 @@ SubtitleFrame AssRenderer::render(int64_t timestamp_us) {
 }
 
 void AssRenderer::set_font_scale(double scale) {
+    cache_valid_ = false;
     font_scale_ = scale;
     if (renderer_) {
         ass_set_font_scale(renderer_, scale);
@@ -168,6 +172,7 @@ void AssRenderer::set_font_scale(double scale) {
 }
 
 void AssRenderer::set_video_size(int width, int height) {
+    cache_valid_ = false;
     video_width_ = width;
     video_height_ = height;
     if (renderer_) {

@@ -59,6 +59,9 @@ struct TrackInfo: Identifiable {
         guard let data = json.data(using: .utf8),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tracks = root["tracks"] as? [[String: Any]] else {
+            if !json.isEmpty {
+                PYLog.warning("Failed to parse track info JSON", tag: "TrackInfo")
+            }
             return ([], [])
         }
 
@@ -134,7 +137,7 @@ struct TrackInfo: Identifiable {
         }
     }
 
-    private static func languageName(for code: String) -> String {
+    static func languageName(for code: String) -> String {
         let map: [String: String] = [
             "eng": "English", "en": "English",
             "fra": "French", "fre": "French", "fr": "French",

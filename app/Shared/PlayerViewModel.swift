@@ -8,6 +8,7 @@ import QuartzCore
 // objectWillChange. Views that need these values poll via their own timers.
 // This is the key to preventing UI interactions from dropping video frames.
 // ---------------------------------------------------------------------------
+@MainActor
 final class PlaybackTransport {
     // Written by tick(), read by controls/subtitle views
     var currentPosition: Int64 = 0 {
@@ -29,12 +30,13 @@ final class PlaybackTransport {
     var playbackStats: PYPlaybackStats?
 
     // Display settings (aspect ratio, crop, zoom, pan)
-    var displaySettings: VideoDisplaySettings = .default
-    var pendingCropDetection = false
-    var onCropDetected: ((CropInsets) -> Void)?
+    // Accessed from both main thread and Metal render thread.
+    nonisolated(unsafe) var displaySettings: VideoDisplaySettings = .default
+    nonisolated(unsafe) var pendingCropDetection = false
+    nonisolated(unsafe) var onCropDetected: (@Sendable (CropInsets) -> Void)?
 
     // Seek preview (written by thumb queue, read by controls view)
-    var seekPreviewImage: CGImage?
+    nonisolated(unsafe) var seekPreviewImage: CGImage?
 
     // Interaction flags (written by controls, read by auto-hide timer)
     var isHoveringTimeline = false
@@ -92,6 +94,7 @@ class PlayerViewModel: ObservableObject {
     @Published var playbackEnded = false
     @Published var aspectRatioMode: AspectRatioMode = .auto
     @Published var cropActive: Bool = false
+    @Published var openError: String?
 
     // NOT @Published — ContentView reads this in one-shot closures (onBack, playbackEnded),
     // not in body. Avoiding @Published prevents once-per-second PlayerView rebuilds.
@@ -124,7 +127,14 @@ class PlayerViewModel: ObservableObject {
         bridge.setHeadTracking(settings.headTrackingEnabled)
         headTrackingEnabled = settings.headTrackingEnabled
 
-        guard bridge.open(path: path) else { return }
+        guard bridge.open(path: path) else {
+            openError = "Could not open: \(URL(fileURLWithPath: path).lastPathComponent)"
+            mediaTitle = ""
+            audioTracks = []
+            subtitleTracks = []
+            return
+        }
+        openError = nil
         transport.duration = bridge.duration
 
         bridge.setAudioPassthrough(settings.audioPassthrough)
@@ -147,7 +157,7 @@ class PlayerViewModel: ObservableObject {
 
         loadDisplaySettings(for: path)
         transport.onCropDetected = { [weak self] crop in
-            self?.setCrop(crop)
+            Task { @MainActor in self?.setCrop(crop) }
         }
 
         let json = bridge.mediaInfoJSON()
@@ -233,7 +243,7 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
-    private static let speedPresets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
+    static let speedPresets: [Double] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
 
     func setPlaybackSpeed(_ speed: Double) {
         playbackSpeed = speed

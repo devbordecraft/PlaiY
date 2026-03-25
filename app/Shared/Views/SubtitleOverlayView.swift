@@ -5,11 +5,11 @@ struct SubtitleOverlayView: View {
     let transport: PlaybackTransport
 
     // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
-    private static var cachedDataHash: Int = 0
+    @MainActor private static var cachedDataHash: Int = 0
     #if os(macOS)
-    private static var cachedImage: NSImage?
+    @MainActor private static var cachedImage: NSImage?
     #else
-    private static var cachedImage: UIImage?
+    @MainActor private static var cachedImage: UIImage?
     #endif
 
     var body: some View {

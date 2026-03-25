@@ -4,13 +4,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+PREFIX="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
+
 echo "Building C++ core..."
-cmake -B "$PROJECT_DIR/build/apple-debug" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=/opt/homebrew -S "$PROJECT_DIR" 2>/dev/null
+cmake -B "$PROJECT_DIR/build/apple-debug" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PREFIX" -S "$PROJECT_DIR"
 cmake --build "$PROJECT_DIR/build/apple-debug" --parallel
 
 echo "Building app..."
 cd "$PROJECT_DIR/app"
-xcodegen generate 2>/dev/null
+xcodegen generate
 xcodebuild -project PlaiY.xcodeproj -scheme PlaiY -configuration Debug build 2>&1 | grep -E '(BUILD|error:)' || true
 
 # Find the built app

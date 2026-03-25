@@ -35,6 +35,7 @@ set(CORE_SOURCES
     src/sync/frame_queue.cpp
     src/library/media_library.cpp
     src/library/metadata_reader.cpp
+    src/library/ffmpeg_video_opener.cpp
     src/library/thumbnail_generator.cpp
     src/library/seek_thumbnail_generator.cpp
     src/util/logger.cpp
@@ -53,6 +54,8 @@ if(APPLE)
 endif()
 
 add_library(plaiy_core STATIC ${CORE_SOURCES})
+
+target_compile_options(plaiy_core PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
 
 target_include_directories(plaiy_core
     PUBLIC include
@@ -96,7 +99,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/metal_video_renderer.mm
-        PROPERTIES COMPILE_FLAGS "-fobjc-arc"
+        PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
 endif()
 

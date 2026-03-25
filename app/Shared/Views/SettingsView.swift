@@ -8,27 +8,14 @@ struct SettingsView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
     let onDismiss: () -> Void
 
-    private let languages: [(code: String, name: String)] = [
-        ("", "None"),
-        ("eng", "English"),
-        ("jpn", "Japanese"),
-        ("fra", "French"),
-        ("deu", "German"),
-        ("spa", "Spanish"),
-        ("ita", "Italian"),
-        ("por", "Portuguese"),
-        ("rus", "Russian"),
-        ("kor", "Korean"),
-        ("zho", "Chinese"),
-        ("ara", "Arabic"),
-        ("hin", "Hindi"),
-        ("tha", "Thai"),
-        ("pol", "Polish"),
-        ("tur", "Turkish"),
-        ("nld", "Dutch"),
-        ("swe", "Swedish"),
-        ("vie", "Vietnamese"),
-    ]
+    private static let languageCodes = ["", "eng", "jpn", "fra", "deu", "spa", "ita", "por",
+                                         "rus", "kor", "zho", "ara", "hin", "tha", "pol", "tur",
+                                         "nld", "swe", "vie"]
+    private var languages: [(code: String, name: String)] {
+        Self.languageCodes.map { code in
+            (code, code.isEmpty ? "None" : TrackInfo.languageName(for: code))
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {

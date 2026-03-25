@@ -366,8 +366,14 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     }
 
     if (sws_ctx_) {
-        sws_scale(sws_ctx_, av_frame->data, av_frame->linesize, 0, av_frame->height,
-                  dst_data, dst_linesize);
+        int sws_ret = sws_scale(sws_ctx_, av_frame->data, av_frame->linesize, 0, av_frame->height,
+                                dst_data, dst_linesize);
+        if (sws_ret < 0) {
+            CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
+            CVPixelBufferRelease(pixel_buffer);
+            PY_LOG_WARN(TAG, "sws_scale failed: %d", sws_ret);
+            return;
+        }
     }
 
     CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);

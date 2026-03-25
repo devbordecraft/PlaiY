@@ -368,7 +368,7 @@ class MetalViewCoordinator {
             transport.pendingCropDetection = false
             let retainedBuffer = pixelBuffer  // Swift ARC retains automatically
             let callback = transport.onCropDetected
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .userInitiated).async { [callback] in
                 let crop = BlackBarDetector.detect(pixelBuffer: retainedBuffer)
                 DispatchQueue.main.async { callback?(crop) }
             }

@@ -50,6 +50,9 @@ typedef struct PYPlayer PYPlayer;
 typedef struct PYLibrary PYLibrary;
 
 // ---- Player lifecycle ----
+// Thread safety: All player functions must be called from the same thread,
+// EXCEPT py_player_acquire_video_frame / py_player_release_video_frame
+// which are called from the Metal display-link (render) thread.
 PYPlayer*   py_player_create(void);
 void        py_player_destroy(PYPlayer* p);
 
@@ -160,14 +163,18 @@ typedef struct {
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p);
 
 // ---- Media info ----
+// Ownership: returned string is owned by the player and valid until
+// the next call to py_player_open() or py_player_destroy().
 const char* py_player_get_media_info_json(PYPlayer* p);
 
-// ---- Video frame acquisition (called from display link) ----
+// ---- Video frame acquisition (called from display-link / render thread) ----
 // Returns an opaque frame handle; NULL if no frame ready.
+// Ownership: the caller borrows the frame. It is valid until
+// py_player_release_video_frame() is called. Do NOT free it.
 void*       py_player_acquire_video_frame(PYPlayer* p, int64_t target_pts_us);
 void        py_player_release_video_frame(PYPlayer* p, void* frame);
 
-// Get properties of an acquired frame
+// Get properties of an acquired frame (valid between acquire and release)
 void*       py_player_frame_get_pixel_buffer(void* frame);   // CVPixelBufferRef (Apple)
 int         py_player_frame_get_width(void* frame);
 int         py_player_frame_get_height(void* frame);
@@ -232,6 +239,8 @@ typedef struct {
     int region_count;
 } PYSubtitleFrame;
 
+// Ownership: caller must call py_subtitle_free() on the returned frame.
+// Returns NULL if no subtitle is active at the given timestamp.
 PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us);
 void             py_subtitle_free(PYSubtitleFrame* sf);
 
@@ -254,9 +263,9 @@ PYLibrary*  py_library_create(void);
 void        py_library_destroy(PYLibrary* lib);
 int         py_library_add_folder(PYLibrary* lib, const char* path);
 int         py_library_get_item_count(PYLibrary* lib);
-// Returns a JSON string for the item at index. Caller must NOT free.
+// Ownership: returned strings are owned by the library. Valid until
+// the next scan, add_folder, or py_library_destroy(). Do NOT free.
 const char* py_library_get_item_json(PYLibrary* lib, int index);
-// Returns JSON for all items
 const char* py_library_get_all_items_json(PYLibrary* lib);
 
 // ---- Thumbnails ----
@@ -270,7 +279,8 @@ void py_player_start_seek_thumbnails(PYPlayer* p, int interval_seconds);
 void py_player_cancel_seek_thumbnails(PYPlayer* p);
 
 // Get BGRA thumbnail data for a timestamp. Returns PY_OK if available.
-// out_data points to internal buffer valid until next call or player close.
+// Ownership: out_data points to internal buffer, valid until next call
+// to this function, py_player_stop(), or py_player_destroy().
 int  py_player_get_seek_thumbnail(PYPlayer* p, int64_t timestamp_us,
                                    const uint8_t** out_data,
                                    int* out_width, int* out_height);

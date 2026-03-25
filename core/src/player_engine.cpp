@@ -874,8 +874,8 @@ VideoFrame* PlayerEngine::acquire_video_frame(int64_t /*target_pts_us*/) {
 
     // Video has a frame — release the audio gate and unfreeze the clock.
     // Audio and clock start together with video, ensuring A-V sync.
-    if (force) {
-        impl_->waiting_for_first_frame.store(false);
+    // Use exchange() so only one thread unfreezes even under concurrent calls.
+    if (impl_->waiting_for_first_frame.exchange(false)) {
         impl_->clock.unfreeze();
     }
 
@@ -1080,6 +1080,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
     AVFrame* tempo_frame = av_frame_alloc();
     AVPacket* av_pkt = av_packet_alloc();
     bool resampler_initialized = false;
+    bool resampler_fatal = false;
     bool timebase_initialized = false;
     bool skip_to_target = false;
     std::vector<float> resample_buf; // reused across frames
@@ -1192,6 +1193,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 Error err = resampler.open(ctx, out_rate, out_channels);
                 if (err) {
                     PY_LOG_ERROR(TAG, "Resampler init failed: %s", err.message.c_str());
+                    resampler_fatal = true;
                     break;
                 }
                 resampler_initialized = true;
@@ -1260,6 +1262,8 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
             av_frame_unref(av_frame);
         }
+
+        if (resampler_fatal) break;
 
         // If send_packet returned EAGAIN, the packet was NOT consumed.
         // Retry now that we've drained output frames.

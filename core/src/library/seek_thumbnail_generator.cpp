@@ -1,4 +1,5 @@
 #include "seek_thumbnail_generator.h"
+#include "ffmpeg_video_opener.h"
 #include "plaiy/logger.h"
 
 extern "C" {
@@ -161,49 +162,16 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
 void SeekThumbnailGenerator::generate_loop(std::string video_path,
                                             std::string cache_dir,
                                             int interval_seconds) {
-    AVFormatContext* fmt = nullptr;
-    int ret = avformat_open_input(&fmt, video_path.c_str(), nullptr, nullptr);
-    if (ret < 0) {
-        PY_LOG_ERROR(TAG, "failed to open: %s", video_path.c_str());
+    FFmpegVideoOpener opener;
+    if (!opener.open(video_path)) {
         return;
     }
 
-    ret = avformat_find_stream_info(fmt, nullptr);
-    if (ret < 0) {
-        avformat_close_input(&fmt);
-        return;
-    }
+    AVFormatContext* fmt = opener.fmt;
+    AVCodecContext* dec = opener.dec;
+    int video_idx = opener.stream_index;
 
-    int video_idx = av_find_best_stream(fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    if (video_idx < 0) {
-        avformat_close_input(&fmt);
-        return;
-    }
-
-    AVStream* stream = fmt->streams[video_idx];
-    AVCodecParameters* par = stream->codecpar;
-
-    const AVCodec* codec = avcodec_find_decoder(par->codec_id);
-    if (!codec) {
-        avformat_close_input(&fmt);
-        return;
-    }
-
-    AVCodecContext* dec = avcodec_alloc_context3(codec);
-    if (!dec) {
-        avformat_close_input(&fmt);
-        return;
-    }
-
-    avcodec_parameters_to_context(dec, par);
-    dec->thread_count = 2;
-
-    ret = avcodec_open2(dec, codec, nullptr);
-    if (ret < 0) {
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
-        return;
-    }
+    AVCodecParameters* par = fmt->streams[video_idx]->codecpar;
 
     // Calculate thumbnail dimensions
     int src_w = par->width;
@@ -243,8 +211,6 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
         PY_LOG_ERROR(TAG, "failed to init scaler or encoder");
         if (sws) sws_freeContext(sws);
         if (enc) avcodec_free_context(&enc);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return;
     }
 
@@ -253,8 +219,6 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
     if (total <= 0) {
         sws_freeContext(sws);
         avcodec_free_context(&enc);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return;
     }
 
@@ -270,6 +234,7 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
     av_frame_get_buffer(scaled, 0);
 
     AVPacket* pkt = av_packet_alloc();
+    int ret;
 
     for (int i = 0; i < total && !cancel_flag_.load(); i++) {
         int64_t target_ts = static_cast<int64_t>(i) * interval_seconds * AV_TIME_BASE;
@@ -337,8 +302,6 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
     av_packet_free(&pkt);
     sws_freeContext(sws);
     avcodec_free_context(&enc);
-    avcodec_free_context(&dec);
-    avformat_close_input(&fmt);
 
     if (!cancel_flag_.load()) {
         progress_.store(100);

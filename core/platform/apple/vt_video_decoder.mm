@@ -17,6 +17,33 @@ static constexpr const char* TAG = "VTVideoDecoder";
 
 namespace py {
 
+// Helper: build CMFormatDescription from codec extradata (shared by H264/HEVC/AV1/VP9)
+static OSStatus create_vt_format_description(
+    const uint8_t* extra, size_t extra_size, CFStringRef atom_key,
+    CMVideoCodecType codec_type, int width, int height,
+    CMFormatDescriptionRef* out_fmt)
+{
+    CFDataRef ext_data = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
+    const void* atom_keys[] = { atom_key };
+    const void* atom_values[] = { ext_data };
+    CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
+        atom_keys, atom_values, 1,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    const void* ext_keys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
+    const void* ext_values[] = { atoms };
+    CFDictionaryRef ext_dict = CFDictionaryCreate(kCFAllocatorDefault,
+        ext_keys, ext_values, 1,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    OSStatus status = CMVideoFormatDescriptionCreate(
+        kCFAllocatorDefault, codec_type, width, height, ext_dict, out_fmt);
+
+    CFRelease(ext_dict);
+    CFRelease(atoms);
+    CFRelease(ext_data);
+    return status;
+}
+
 struct VTVideoDecoder::Impl {
     VTDecompressionSessionRef session = nullptr;
     CMFormatDescriptionRef format_desc = nullptr;
@@ -82,98 +109,17 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
     size_t extra_size = track.extradata.size();
 
     if (codec_id == AV_CODEC_ID_H264) {
-        // Build format description from raw avcC extradata
-        CFDataRef avcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
-        const void* atomKeys[] = { CFSTR("avcC") };
-        const void* atomValues[] = { avcC };
-        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
-            atomKeys, atomValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
-        const void* extValues[] = { atoms };
-        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, extValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-        status = CMVideoFormatDescriptionCreate(
-            kCFAllocatorDefault,
-            kCMVideoCodecType_H264,
-            track.width, track.height,
-            extDict,
-            &impl_->format_desc);
-
-        CFRelease(extDict);
-        CFRelease(atoms);
-        CFRelease(avcC);
+        status = create_vt_format_description(extra, extra_size, CFSTR("avcC"),
+            kCMVideoCodecType_H264, track.width, track.height, &impl_->format_desc);
     } else if (codec_id == AV_CODEC_ID_HEVC) {
-        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
-        CFDataRef hvcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
-        const void* atomKeys[] = { CFSTR("hvcC") };
-        const void* atomValues[] = { hvcC };
-        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
-            atomKeys, atomValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        const void* extValues[] = { atoms };
-        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, extValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-        status = CMVideoFormatDescriptionCreate(
-            kCFAllocatorDefault,
-            kCMVideoCodecType_HEVC,
-            track.width, track.height,
-            extDict,
-            &impl_->format_desc);
-
-        CFRelease(extDict);
-        CFRelease(atoms);
-        CFRelease(hvcC);
+        status = create_vt_format_description(extra, extra_size, CFSTR("hvcC"),
+            kCMVideoCodecType_HEVC, track.width, track.height, &impl_->format_desc);
     } else if (codec_id == AV_CODEC_ID_AV1) {
-        CFDataRef av1C = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
-        const void* atomKeys[] = { CFSTR("av1C") };
-        const void* atomValues[] = { av1C };
-        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
-            atomKeys, atomValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
-        const void* extValues[] = { atoms };
-        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, extValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-        status = CMVideoFormatDescriptionCreate(
-            kCFAllocatorDefault,
-            kCMVideoCodecType_AV1,
-            track.width, track.height,
-            extDict,
-            &impl_->format_desc);
-
-        CFRelease(extDict);
-        CFRelease(atoms);
-        CFRelease(av1C);
+        status = create_vt_format_description(extra, extra_size, CFSTR("av1C"),
+            kCMVideoCodecType_AV1, track.width, track.height, &impl_->format_desc);
     } else if (codec_id == AV_CODEC_ID_VP9) {
-        CFDataRef vpcC = CFDataCreate(kCFAllocatorDefault, extra, static_cast<CFIndex>(extra_size));
-        const void* atomKeys[] = { CFSTR("vpcC") };
-        const void* atomValues[] = { vpcC };
-        CFDictionaryRef atoms = CFDictionaryCreate(kCFAllocatorDefault,
-            atomKeys, atomValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        const void* extKeys[] = { CFSTR("SampleDescriptionExtensionAtoms") };
-        const void* extValues[] = { atoms };
-        CFDictionaryRef extDict = CFDictionaryCreate(kCFAllocatorDefault,
-            extKeys, extValues, 1,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-        status = CMVideoFormatDescriptionCreate(
-            kCFAllocatorDefault,
-            kCMVideoCodecType_VP9,
-            track.width, track.height,
-            extDict,
-            &impl_->format_desc);
-
-        CFRelease(extDict);
-        CFRelease(atoms);
-        CFRelease(vpcC);
+        status = create_vt_format_description(extra, extra_size, CFSTR("vpcC"),
+            kCMVideoCodecType_VP9, track.width, track.height, &impl_->format_desc);
     } else {
         return {ErrorCode::UnsupportedCodec, "VideoToolbox: unsupported codec"};
     }

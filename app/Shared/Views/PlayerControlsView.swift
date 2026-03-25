@@ -230,7 +230,7 @@ struct PlaybackButtonsView: View {
             )
 
             Menu {
-                ForEach([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0], id: \.self) { speed in
+                ForEach(PlayerViewModel.speedPresets, id: \.self) { speed in
                     Button {
                         onSetSpeed(speed)
                     } label: {

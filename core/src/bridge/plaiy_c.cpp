@@ -490,16 +490,21 @@ int py_log_get_level(void) {
     return static_cast<int>(py::Logger::instance().level());
 }
 
+static std::mutex g_log_mutex;
 static PYLogCallback g_log_cb = nullptr;
 static void* g_log_ud = nullptr;
 
 void py_log_set_callback(PYLogCallback cb, void* userdata) {
-    g_log_cb = cb;
-    g_log_ud = userdata;
+    {
+        std::lock_guard<std::mutex> lock(g_log_mutex);
+        g_log_cb = cb;
+        g_log_ud = userdata;
+    }
 
     if (cb) {
         py::Logger::instance().set_callback(
             [](py::LogLevel level, const char* tag, const char* message) {
+                std::lock_guard<std::mutex> lock(g_log_mutex);
                 if (g_log_cb) {
                     g_log_cb(static_cast<int>(level), tag, message, g_log_ud);
                 }

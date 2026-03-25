@@ -16,8 +16,10 @@ case "$BUILD_TYPE" in
         ;;
 esac
 
+PREFIX="$(brew --prefix 2>/dev/null || echo /opt/homebrew)"
+
 cd "$PROJECT_DIR"
-cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_PREFIX_PATH=/opt/homebrew -S .
+cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_PREFIX_PATH="$PREFIX" -S .
 cmake --build "$BUILD_DIR" --parallel "$NPROCS"
 
 echo "Build complete."

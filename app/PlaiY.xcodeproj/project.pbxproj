@@ -46,6 +46,7 @@
 		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		2E13F471AA3B2426876CCB66 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
@@ -136,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				12D362E93F1F7BFB374D7C8A /* Info.plist */,
+				5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */,
 			);
 			path = macOS;
 			sourceTree = "<group>";
@@ -241,12 +243,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = macOS/PlaiY.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../core/include",
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				INFOPLIST_FILE = macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -257,6 +261,7 @@
 					"$(PROJECT_DIR)/../build/apple-debug/core",
 					"$(PROJECT_DIR)/../build/apple-release/core",
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lc++",
@@ -268,10 +273,6 @@
 					"-lswscale",
 					"-lavfilter",
 					"-lass",
-					"-lfreetype",
-					"-lharfbuzz",
-					"-lfribidi",
-					"-lfontconfig",
 					"-lz",
 					"-lbz2",
 					"-liconv",
@@ -422,12 +423,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = macOS/PlaiY.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../core/include",
 					/opt/homebrew/include,
+					/usr/local/include,
 				);
 				INFOPLIST_FILE = macOS/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -438,6 +441,7 @@
 					"$(PROJECT_DIR)/../build/apple-debug/core",
 					"$(PROJECT_DIR)/../build/apple-release/core",
 					/opt/homebrew/lib,
+					/usr/local/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lc++",
@@ -449,10 +453,6 @@
 					"-lswscale",
 					"-lavfilter",
 					"-lass",
-					"-lfreetype",
-					"-lharfbuzz",
-					"-lfribidi",
-					"-lfontconfig",
 					"-lz",
 					"-lbz2",
 					"-liconv",

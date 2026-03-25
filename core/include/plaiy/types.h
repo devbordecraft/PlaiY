@@ -199,10 +199,11 @@ struct Packet {
     int time_base_num = 1;
     int time_base_den = 90000;
 
-    // Convert PTS to microseconds
+    // Convert PTS to microseconds (split-division avoids int64 overflow)
     int64_t pts_us() const {
         if (pts < 0) return -1;
-        return pts * 1000000LL * time_base_num / time_base_den;
+        return (pts / time_base_den) * 1000000LL * time_base_num
+             + (pts % time_base_den) * 1000000LL * time_base_num / time_base_den;
     }
 };
 

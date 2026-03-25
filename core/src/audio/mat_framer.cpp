@@ -133,6 +133,10 @@ Error MATFramer::frame_packet(const uint8_t* data, size_t size, int64_t pts,
         return {ErrorCode::OutOfMemory, "Failed to allocate packet"};
     }
 
+    if (size > static_cast<size_t>(INT_MAX)) {
+        av_packet_free(&pkt);
+        return {ErrorCode::InvalidArgument, "MAT frame size exceeds INT_MAX"};
+    }
     pkt->data = const_cast<uint8_t*>(data);
     pkt->size = static_cast<int>(size);
     pkt->pts = pts;

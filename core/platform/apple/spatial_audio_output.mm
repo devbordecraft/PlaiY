@@ -8,6 +8,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <mutex>
 #include <vector>
 
 static constexpr const char* TAG = "SpatialAudio";
@@ -45,6 +46,7 @@ struct SpatialAudioOutput::Impl {
     std::atomic<int64_t> samples_played{0};
     std::atomic<bool> head_tracking_enabled{false};
 
+    std::mutex callback_mutex;
     PullCallback pull_callback;
     PtsCallback pts_callback;
     DeviceChangeCallback device_change_callback;
@@ -137,7 +139,8 @@ Error SpatialAudioOutput::open(int sample_rate, int channels) {
         return {ErrorCode::AudioOutputError, "Failed to create multichannel audio format"};
     }
 
-    // Single source node — one render block, no synchronization needed.
+    // Single source node — callbacks are set before start() and cleared after stop(),
+    // so they are safe to read without locking on the real-time audio thread.
     Impl *pImpl = impl_.get();
     impl_->sourceNode = [[AVAudioSourceNode alloc]
         initWithFormat:multiChFormat
@@ -273,10 +276,12 @@ void SpatialAudioOutput::reset_position() {
 }
 
 void SpatialAudioOutput::set_pull_callback(PullCallback cb) {
+    std::lock_guard<std::mutex> lock(impl_->callback_mutex);
     impl_->pull_callback = std::move(cb);
 }
 
 void SpatialAudioOutput::set_pts_callback(PtsCallback cb) {
+    std::lock_guard<std::mutex> lock(impl_->callback_mutex);
     impl_->pts_callback = std::move(cb);
 }
 
@@ -311,6 +316,7 @@ float SpatialAudioOutput::volume() const {
 }
 
 void SpatialAudioOutput::set_device_change_callback(DeviceChangeCallback cb) {
+    std::lock_guard<std::mutex> lock(impl_->callback_mutex);
     impl_->device_change_callback = std::move(cb);
 }
 

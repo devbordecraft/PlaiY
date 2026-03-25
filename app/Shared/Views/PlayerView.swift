@@ -230,6 +230,14 @@ struct PlayerView: View {
                     zoomBase = viewModel.transport.displaySettings.zoom
                 }
         )
+        .alert("Open Error", isPresented: Binding(
+            get: { viewModel.openError != nil },
+            set: { if !$0 { viewModel.openError = nil } }
+        )) {
+            Button("OK") { onBack() }
+        } message: {
+            Text(viewModel.openError ?? "")
+        }
         #if os(macOS)
         .onDisappear {
             if let monitor = scrollMonitor {

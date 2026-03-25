@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <mutex>
 #include <vector>
 
@@ -43,6 +44,10 @@ struct CAAudioOutput::Impl {
     // Device change listener
     IAudioOutput::DeviceChangeCallback device_change_callback;
     bool device_listener_installed = false;
+#if TARGET_OS_OSX
+    AudioObjectPropertyListenerBlock device_listener_block = nil;
+    AudioObjectPropertyListenerBlock devices_listener_block = nil;
+#endif
 
     static OSStatus renderCallback(
         void* inRefCon,
@@ -526,6 +531,7 @@ bool CAAudioOutput::is_passthrough() const {
 }
 
 void CAAudioOutput::set_bitstream_pull_callback(BitstreamPullCallback cb) {
+    assert(!impl_->running && "Callbacks must be set before start()");
     std::lock_guard lock(impl_->callback_mutex);
     impl_->bitstream_pull_callback = std::move(cb);
 }
@@ -534,6 +540,35 @@ void CAAudioOutput::set_bitstream_pull_callback(BitstreamPullCallback cb) {
 
 void CAAudioOutput::close() {
     stop();
+
+#if TARGET_OS_OSX
+    if (impl_->device_listener_installed) {
+        AudioObjectPropertyAddress addr = {
+            kAudioHardwarePropertyDefaultOutputDevice,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        if (impl_->device_listener_block) {
+            AudioObjectRemovePropertyListenerBlock(
+                kAudioObjectSystemObject, &addr,
+                dispatch_get_main_queue(), impl_->device_listener_block);
+            impl_->device_listener_block = nil;
+        }
+        AudioObjectPropertyAddress devices_addr = {
+            kAudioHardwarePropertyDevices,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        if (impl_->devices_listener_block) {
+            AudioObjectRemovePropertyListenerBlock(
+                kAudioObjectSystemObject, &devices_addr,
+                dispatch_get_main_queue(), impl_->devices_listener_block);
+            impl_->devices_listener_block = nil;
+        }
+        impl_->device_listener_installed = false;
+    }
+#endif
+
     if (impl_->audio_unit) {
         AudioUnitUninitialize(impl_->audio_unit);
         AudioComponentInstanceDispose(impl_->audio_unit);
@@ -581,11 +616,13 @@ void CAAudioOutput::stop() {
 }
 
 void CAAudioOutput::set_pull_callback(PullCallback cb) {
+    assert(!impl_->running && "Callbacks must be set before start()");
     std::lock_guard lock(impl_->callback_mutex);
     impl_->pull_callback = std::move(cb);
 }
 
 void CAAudioOutput::set_pts_callback(PtsCallback cb) {
+    assert(!impl_->running && "Callbacks must be set before start()");
     std::lock_guard lock(impl_->callback_mutex);
     impl_->pts_callback = std::move(cb);
 }
@@ -793,15 +830,16 @@ void CAAudioOutput::set_device_change_callback(DeviceChangeCallback cb) {
         };
 
         auto* raw_impl = impl_.get();
+        impl_->device_listener_block = ^(UInt32, const AudioObjectPropertyAddress*) {
+            PY_LOG_INFO(TAG, "Audio output device changed");
+            if (raw_impl->device_change_callback) {
+                raw_impl->device_change_callback();
+            }
+        };
         AudioObjectAddPropertyListenerBlock(
             kAudioObjectSystemObject, &addr,
             dispatch_get_main_queue(),
-            ^(UInt32, const AudioObjectPropertyAddress*) {
-                PY_LOG_INFO(TAG, "Audio output device changed");
-                if (raw_impl->device_change_callback) {
-                    raw_impl->device_change_callback();
-                }
-            });
+            impl_->device_listener_block);
 
         // Also listen for device list changes (HDMI plug/unplug)
         AudioObjectPropertyAddress devices_addr = {
@@ -810,15 +848,16 @@ void CAAudioOutput::set_device_change_callback(DeviceChangeCallback cb) {
             kAudioObjectPropertyElementMain
         };
 
+        impl_->devices_listener_block = ^(UInt32, const AudioObjectPropertyAddress*) {
+            PY_LOG_INFO(TAG, "Audio device list changed");
+            if (raw_impl->device_change_callback) {
+                raw_impl->device_change_callback();
+            }
+        };
         AudioObjectAddPropertyListenerBlock(
             kAudioObjectSystemObject, &devices_addr,
             dispatch_get_main_queue(),
-            ^(UInt32, const AudioObjectPropertyAddress*) {
-                PY_LOG_INFO(TAG, "Audio device list changed");
-                if (raw_impl->device_change_callback) {
-                    raw_impl->device_change_callback();
-                }
-            });
+            impl_->devices_listener_block);
 
         impl_->device_listener_installed = true;
     }

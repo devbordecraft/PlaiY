@@ -76,9 +76,16 @@ Error PgsDecoder::decode(const Packet& pkt, SubtitleFrame& out, bool& has_output
     out.end_us = pts_us + static_cast<int64_t>(sub.end_display_time) * 1000LL;
     out.is_text = false;
 
-    for (unsigned i = 0; i < sub.num_rects; i++) {
+    if (!sub.rects || sub.num_rects == 0) {
+        avsubtitle_free(&sub);
+        return Error::Ok();
+    }
+    unsigned max_rects = std::min(sub.num_rects, 64u);
+
+    for (unsigned i = 0; i < max_rects; i++) {
         AVSubtitleRect* rect = sub.rects[i];
-        if (rect->type != SUBTITLE_BITMAP) continue;
+        if (!rect || rect->type != SUBTITLE_BITMAP) continue;
+        if (rect->w <= 0 || rect->h <= 0 || !rect->data[0] || !rect->data[1]) continue;
 
         SubtitleFrame::BitmapRegion region;
         region.width = rect->w;

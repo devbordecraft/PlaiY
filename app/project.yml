@@ -32,10 +32,12 @@ targets:
         HEADER_SEARCH_PATHS:
           - $(PROJECT_DIR)/../core/include
           - /opt/homebrew/include
+          - /usr/local/include
         LIBRARY_SEARCH_PATHS:
           - $(PROJECT_DIR)/../build/apple-debug/core
           - $(PROJECT_DIR)/../build/apple-release/core
           - /opt/homebrew/lib
+          - /usr/local/lib
         OTHER_LDFLAGS:
           - -lc++
           - -lplaiy_core
@@ -46,10 +48,6 @@ targets:
           - -lswscale
           - -lavfilter
           - -lass
-          - -lfreetype
-          - -lharfbuzz
-          - -lfribidi
-          - -lfontconfig
           - -lz
           - -lbz2
           - -liconv
@@ -69,5 +67,6 @@ targets:
           - -framework Security
           - -framework AVFoundation
           - -framework CoreMotion
-        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_ENTITLEMENTS: macOS/PlaiY.entitlements

@@ -48,7 +48,8 @@ bool SrtParser::parse_string(const std::string& content) {
 
             case EXPECT_TIME: {
                 auto arrow = line.find("-->");
-                if (arrow == std::string::npos) break;
+                if (arrow == std::string::npos || arrow == 0) break;
+                if (line.substr(0, arrow).find(':') == std::string::npos) break;
 
                 std::string start_str = line.substr(0, arrow);
                 std::string end_str = line.substr(arrow + 3);

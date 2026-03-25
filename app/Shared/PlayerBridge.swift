@@ -5,12 +5,16 @@ import CoreGraphics
 /// Swift wrapper around the C bridge API (plaiy_c.h)
 class PlayerBridge: @unchecked Sendable {
     private let handle: OpaquePointer
+    private var deviceCallbackContext: UnsafeMutableRawPointer?
 
     init() {
         handle = py_player_create()
     }
 
     deinit {
+        if let ctx = deviceCallbackContext {
+            Unmanaged<AnyObject>.fromOpaque(ctx).release()
+        }
         py_player_destroy(handle)
     }
 
@@ -92,7 +96,12 @@ class PlayerBridge: @unchecked Sendable {
     }
 
     func setDeviceChangeCallback(_ callback: @escaping () -> Void) {
+        // Release previously retained callback to avoid memory leak
+        if let prev = deviceCallbackContext {
+            Unmanaged<AnyObject>.fromOpaque(prev).release()
+        }
         let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
+        deviceCallbackContext = context
         py_player_set_device_change_callback(handle, { userdata in
             guard let userdata else { return }
             guard let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? () -> Void else { return }

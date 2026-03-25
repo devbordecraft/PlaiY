@@ -49,9 +49,17 @@ Error SubtitleManager::load_external(const std::string& path) {
         impl_->srt_parser = std::move(parser);
         impl_->active_format = SubtitleFormat::SRT;
     } else if (ext == "ass" || ext == "ssa") {
+        int vw, vh;
+        double font_scale;
+        {
+            std::lock_guard lock(impl_->mutex);
+            vw = impl_->video_width;
+            vh = impl_->video_height;
+            font_scale = impl_->ass_font_scale;
+        }
         auto renderer = std::make_unique<AssRenderer>();
-        renderer->set_video_size(impl_->video_width, impl_->video_height);
-        renderer->set_font_scale(impl_->ass_font_scale);
+        renderer->set_video_size(vw, vh);
+        renderer->set_font_scale(font_scale);
         Error err = renderer->load_file(path);
         if (err) return err;
         std::lock_guard lock(impl_->mutex);
@@ -108,10 +116,12 @@ void SubtitleManager::feed_packet(const Packet& pkt) {
     switch (impl_->active_format) {
         case SubtitleFormat::SRT:
             // Embedded SRT: each packet is one subtitle event with PTS + duration
+            if (pkt.data.empty()) break;
             if (impl_->srt_parser) {
                 std::string text(reinterpret_cast<const char*>(pkt.data.data()), pkt.data.size());
                 int64_t start_us = pkt.pts_us();
-                int64_t duration_us = pkt.duration * 1000000LL * pkt.time_base_num / pkt.time_base_den;
+                int64_t duration_us = (pkt.duration / pkt.time_base_den) * 1000000LL * pkt.time_base_num
+                                    + (pkt.duration % pkt.time_base_den) * 1000000LL * pkt.time_base_num / pkt.time_base_den;
                 impl_->srt_parser->add_entry(start_us, start_us + duration_us, text);
             }
             break;

@@ -186,7 +186,8 @@ int AudioTempoFilter::receive_frame(AVFrame* frame) {
 }
 
 void AudioTempoFilter::flush() {
-    // Tear down and let caller rebuild with open() if needed
+    // Tears down graph; callers must call open() again. This simplifies
+    // state management after seeks where sample rate or tempo may change.
     close();
 }
 

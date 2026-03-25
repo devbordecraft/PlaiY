@@ -1,4 +1,5 @@
 #include "thumbnail_generator.h"
+#include "ffmpeg_video_opener.h"
 #include "plaiy/logger.h"
 
 extern "C" {
@@ -17,51 +18,14 @@ namespace py {
 bool ThumbnailGenerator::generate(const std::string& video_path,
                                    const std::string& output_path,
                                    int max_width, int max_height) {
-    AVFormatContext* fmt = nullptr;
-    int ret = avformat_open_input(&fmt, video_path.c_str(), nullptr, nullptr);
-    if (ret < 0) {
-        PY_LOG_ERROR(TAG, "failed to open: %s", video_path.c_str());
+    FFmpegVideoOpener opener;
+    if (!opener.open(video_path)) {
         return false;
     }
 
-    ret = avformat_find_stream_info(fmt, nullptr);
-    if (ret < 0) {
-        avformat_close_input(&fmt);
-        return false;
-    }
-
-    // Find best video stream
-    int video_idx = av_find_best_stream(fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    if (video_idx < 0) {
-        avformat_close_input(&fmt);
-        return false;
-    }
-
-    AVStream* stream = fmt->streams[video_idx];
-    AVCodecParameters* par = stream->codecpar;
-
-    // Open decoder
-    const AVCodec* codec = avcodec_find_decoder(par->codec_id);
-    if (!codec) {
-        avformat_close_input(&fmt);
-        return false;
-    }
-
-    AVCodecContext* dec = avcodec_alloc_context3(codec);
-    if (!dec) {
-        avformat_close_input(&fmt);
-        return false;
-    }
-
-    avcodec_parameters_to_context(dec, par);
-    dec->thread_count = 2;
-
-    ret = avcodec_open2(dec, codec, nullptr);
-    if (ret < 0) {
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
-        return false;
-    }
+    AVFormatContext* fmt = opener.fmt;
+    AVCodecContext* dec = opener.dec;
+    int video_idx = opener.stream_index;
 
     // Seek to 10% of duration
     if (fmt->duration > 0) {
@@ -74,6 +38,7 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     AVPacket* pkt = av_packet_alloc();
     bool got_frame = false;
     int attempts = 0;
+    int ret;
 
     while (!got_frame && attempts < 60) {
         ret = av_read_frame(fmt, pkt);
@@ -103,8 +68,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
         PY_LOG_WARN(TAG, "no frame decoded for: %s", video_path.c_str());
         av_frame_free(&frame);
         av_packet_free(&pkt);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return false;
     }
 
@@ -129,8 +92,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     if (!sws) {
         av_frame_free(&frame);
         av_packet_free(&pkt);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return false;
     }
 
@@ -138,7 +99,13 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     scaled->format = AV_PIX_FMT_YUVJ420P;
     scaled->width = dst_w;
     scaled->height = dst_h;
-    av_frame_get_buffer(scaled, 0);
+    if (av_frame_get_buffer(scaled, 0) < 0) {
+        av_frame_free(&scaled);
+        sws_freeContext(sws);
+        av_frame_free(&frame);
+        av_packet_free(&pkt);
+        return false;
+    }
 
     sws_scale(sws, frame->data, frame->linesize, 0, src_h,
               scaled->data, scaled->linesize);
@@ -150,8 +117,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     if (!mjpeg) {
         av_frame_free(&scaled);
         av_packet_free(&pkt);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return false;
     }
 
@@ -169,8 +134,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
         avcodec_free_context(&enc);
         av_frame_free(&scaled);
         av_packet_free(&pkt);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return false;
     }
 
@@ -179,8 +142,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     if (ret < 0) {
         avcodec_free_context(&enc);
         av_packet_free(&pkt);
-        avcodec_free_context(&dec);
-        avformat_close_input(&fmt);
         return false;
     }
 
@@ -200,8 +161,6 @@ bool ThumbnailGenerator::generate(const std::string& video_path,
     av_packet_unref(pkt);
     av_packet_free(&pkt);
     avcodec_free_context(&enc);
-    avcodec_free_context(&dec);
-    avformat_close_input(&fmt);
     return success;
 }
 
