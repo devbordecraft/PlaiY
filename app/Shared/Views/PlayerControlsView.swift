@@ -150,7 +150,7 @@ struct TimelineSectionView: View {
                         .monospacedDigit()
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 6))
+                        .glassEffect(.regular, in: .rect(cornerRadius: 6))
                         .foregroundStyle(.white)
                         .position(x: max(30, min(width - 30, clampedActiveX)),
                                   y: currentThumb != nil ? -10 : -16)
@@ -249,7 +249,7 @@ struct PlaybackButtonsView: View {
                     .monospacedDigit()
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(.white.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 6))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.white)

@@ -34,9 +34,8 @@ struct MediaItemView: View {
                             .fontWeight(.medium)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(.black.opacity(0.7))
                             .foregroundStyle(.white)
-                            .cornerRadius(4)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 4))
                     }
                     .padding(8)
 
@@ -83,11 +82,7 @@ struct MediaItemView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(.background)
-                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
-        )
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
         #if os(macOS)
         .onHover { hovering in
             if hovering {
@@ -110,8 +105,7 @@ struct BadgeView: View {
             .fontWeight(.semibold)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(color.opacity(0.15))
             .foregroundStyle(color)
-            .cornerRadius(3)
+            .glassEffect(.regular, in: .rect(cornerRadius: 3))
     }
 }

@@ -46,8 +46,7 @@ struct DebugOverlayView: View {
             }
         }
         .padding(10)
-        .background(.black.opacity(0.75))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .glassEffect(.regular, in: .rect(cornerRadius: 8))
         .font(.system(size: 11, design: .monospaced))
         .foregroundStyle(.white)
     }

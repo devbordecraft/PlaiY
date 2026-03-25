@@ -64,6 +64,7 @@ struct LibraryItem: Identifiable, Codable {
     }
 }
 
+@MainActor
 class LibraryViewModel: ObservableObject {
     @Published var items: [LibraryItem] = []
     @Published var folders: [String] = []

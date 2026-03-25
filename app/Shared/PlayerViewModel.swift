@@ -67,6 +67,7 @@ final class PlaybackTransport {
 // PlayerViewModel: only @Published properties that genuinely need to rebuild
 // the SwiftUI view tree. High-frequency data lives in `transport`.
 // ---------------------------------------------------------------------------
+@MainActor
 class PlayerViewModel: ObservableObject {
     let bridge = PlayerBridge()
     let transport = PlaybackTransport()

@@ -5,7 +5,7 @@ import AppKit
 #endif
 
 class ThumbnailManager {
-    static let shared = ThumbnailManager()
+    nonisolated(unsafe) static let shared = ThumbnailManager()
 
     private let cacheDir: URL
     private let queue = OperationQueue()

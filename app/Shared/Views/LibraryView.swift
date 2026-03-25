@@ -15,39 +15,41 @@ struct LibraryView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
-            HStack {
-                Text("Library")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+            GlassEffectContainer {
+                HStack {
+                    Text("Library")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
 
-                Spacer()
+                    Spacer()
 
-                if libraryVM.isScanning {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                    Text("Scanning...")
-                        .foregroundStyle(.secondary)
+                    if libraryVM.isScanning {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Scanning...")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        onSettings()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .font(.title2)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("Add Folder") {
+                        pickFolder()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Open File") {
+                        pickFile()
+                    }
+                    .buttonStyle(.bordered)
                 }
-
-                Button {
-                    onSettings()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.title2)
-                }
-                .buttonStyle(.bordered)
-
-                Button("Add Folder") {
-                    pickFolder()
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("Open File") {
-                    pickFile()
-                }
-                .buttonStyle(.bordered)
+                .padding()
             }
-            .padding()
 
             if libraryVM.items.isEmpty {
                 Spacer()

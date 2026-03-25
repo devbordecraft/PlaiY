@@ -51,9 +51,6 @@ struct PlayerView: View {
 
             // ── Controls overlay ──
             // NOT inside TimelineView — only rebuilt on @Published / @State changes.
-            // .drawingGroup() rasterizes the entire overlay into a single Metal
-            // texture, so the WindowServer composites 1 layer over the video
-            // instead of ~20 individual CA layers.
             if showControls {
                 VStack {
                     TopBarView(
@@ -92,7 +89,6 @@ struct PlayerView: View {
                         onTimeText: { viewModel.timeText(for: $0) }
                     )
                 }
-                .compositingGroup()
             }
 
             // Debug overlay (top-left, always visible when toggled)
@@ -108,7 +104,7 @@ struct PlayerView: View {
                 )
             }
 
-            // Resume prompt overlay (outside drawingGroup — uses .ultraThinMaterial)
+            // Resume prompt overlay
             if showResumePrompt, let pos = resumePosition {
                 ResumePromptView(position: pos, onResume: {
                     dismissResumePrompt()
@@ -309,7 +305,6 @@ private struct ResumePromptView: View {
                         .fontWeight(.semibold)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.white.opacity(0.2))
 
                 Button {
                     onStartOver()
@@ -317,14 +312,11 @@ private struct ResumePromptView: View {
                     Text("Start from Beginning")
                 }
                 .buttonStyle(.bordered)
-                .tint(.white.opacity(0.3))
             }
             .font(.callout)
             .foregroundStyle(.white)
             .padding(20)
-            .background(.ultraThinMaterial.opacity(0.8))
-            .background(.black.opacity(0.4))
-            .cornerRadius(14)
+            .glassEffect(.regular, in: .rect(cornerRadius: 14))
             .padding(.bottom, 100)
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -344,48 +336,50 @@ private struct TopBarView: View {
     let onToggleSettings: () -> Void
 
     var body: some View {
-        HStack {
-            Button(action: onBack) {
-                Image(systemName: "chevron.left")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            .buttonStyle(PlayerButtonStyle())
-            .foregroundStyle(.white)
-
-            Text(mediaTitle)
-                .font(.headline)
+        GlassEffectContainer {
+            HStack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(PlayerButtonStyle())
                 .foregroundStyle(.white)
 
-            Spacer()
+                Text(mediaTitle)
+                    .font(.headline)
+                    .foregroundStyle(.white)
 
-            #if os(macOS)
-            Button(action: onToggleFullScreen) {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            .buttonStyle(PlayerButtonStyle())
-            .foregroundStyle(.white)
-            #endif
+                Spacer()
 
-            Button(action: onToggleDebug) {
-                Image(systemName: "ant")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            .buttonStyle(PlayerButtonStyle())
-            .foregroundStyle(showDebugOverlay ? .green : .white)
+                #if os(macOS)
+                Button(action: onToggleFullScreen) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(PlayerButtonStyle())
+                .foregroundStyle(.white)
+                #endif
 
-            Button(action: onToggleSettings) {
-                Image(systemName: "gearshape")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                Button(action: onToggleDebug) {
+                    Image(systemName: "ant")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(PlayerButtonStyle())
+                .foregroundStyle(showDebugOverlay ? .green : .white)
+
+                Button(action: onToggleSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(PlayerButtonStyle())
+                .foregroundStyle(.white)
             }
-            .buttonStyle(PlayerButtonStyle())
-            .foregroundStyle(.white)
+            .padding()
         }
-        .padding()
         .background(
             LinearGradient(colors: [.black.opacity(0.6), .clear],
                            startPoint: .top, endPoint: .bottom)
@@ -413,38 +407,40 @@ private struct BottomControlsView: View {
     let onTimeText: (Double) -> String
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Timeline: its own TimelineView for 120Hz Canvas updates
-            TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
-                TimelineSectionView(
+        GlassEffectContainer {
+            VStack(spacing: 12) {
+                // Timeline: its own TimelineView for 120Hz Canvas updates
+                TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
+                    TimelineSectionView(
+                        transport: viewModel.transport,
+                        onHoverChanged: onTimelineHoverChanged,
+                        onHoverMoved: onTimelineHoverMoved,
+                        onDragStarted: onTimelineDragStarted,
+                        onDragChanged: onTimelineDragChanged,
+                        onDragEnded: onTimelineDragEnded,
+                        onTimeText: onTimeText
+                    )
+                }
+
+                // Buttons: static, NOT in TimelineView
+                PlaybackButtonsView(
+                    isPlaying: viewModel.isPlaying,
+                    isMuted: viewModel.isMuted,
+                    volume: viewModel.volume,
+                    playbackSpeed: viewModel.playbackSpeed,
+                    passthroughActive: viewModel.transport.passthroughActive,
+                    bridge: viewModel.bridge,
                     transport: viewModel.transport,
-                    onHoverChanged: onTimelineHoverChanged,
-                    onHoverMoved: onTimelineHoverMoved,
-                    onDragStarted: onTimelineDragStarted,
-                    onDragChanged: onTimelineDragChanged,
-                    onDragEnded: onTimelineDragEnded,
-                    onTimeText: onTimeText
+                    onSeekRelative: onSeekRelative,
+                    onTogglePlayPause: onTogglePlayPause,
+                    onToggleMute: onToggleMute,
+                    onSetVolume: onSetVolume,
+                    onSetSpeed: onSetSpeed
                 )
             }
-
-            // Buttons: static, NOT in TimelineView
-            PlaybackButtonsView(
-                isPlaying: viewModel.isPlaying,
-                isMuted: viewModel.isMuted,
-                volume: viewModel.volume,
-                playbackSpeed: viewModel.playbackSpeed,
-                passthroughActive: viewModel.transport.passthroughActive,
-                bridge: viewModel.bridge,
-                transport: viewModel.transport,
-                onSeekRelative: onSeekRelative,
-                onTogglePlayPause: onTogglePlayPause,
-                onToggleMute: onToggleMute,
-                onSetVolume: onSetVolume,
-                onSetSpeed: onSetSpeed
-            )
+            .padding(.horizontal)
+            .padding(.bottom, 20)
         }
-        .padding(.horizontal)
-        .padding(.bottom, 20)
         .background(
             LinearGradient(colors: [.clear, .black.opacity(0.7)],
                            startPoint: .top, endPoint: .bottom)
@@ -483,14 +479,11 @@ struct DebugOverlayWrapper: View {
 }
 
 struct PlayerButtonStyle: ButtonStyle {
-    @State private var isHovering = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.85 : isHovering ? 1.1 : 1.0)
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .padding(8)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
             .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
-            .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isHovering)
-            .onHover { isHovering = $0 }
     }
 }

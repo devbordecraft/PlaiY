@@ -146,7 +146,7 @@ struct TrackSelectionView: View {
                 .padding(20)
             }
             .frame(width: 280)
-            .background(.ultraThinMaterial)
+            .glassEffect(.regular, in: .rect(cornerRadius: 0))
             .environment(\.colorScheme, .dark)
             .transition(.move(edge: .trailing))
         }

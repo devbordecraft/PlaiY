@@ -4,7 +4,7 @@
 
 PlaiY is a high-quality video player with a C++ core library and SwiftUI frontend. The core handles demuxing, decoding, audio output, subtitles, and A-V sync. The SwiftUI layer handles UI and Metal rendering. Communication between the two happens through a pure C bridge API (`plaiy_c.h`).
 
-Current platform: macOS 14+. Future: tvOS, Linux, Windows.
+Current platform: macOS 26+. Future: tvOS, Linux, Windows.
 
 ## Architecture
 
