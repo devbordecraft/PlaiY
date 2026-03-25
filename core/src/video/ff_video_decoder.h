@@ -18,6 +18,7 @@ public:
     void flush() override;
     Error send_packet(const Packet& pkt) override;
     Error receive_frame(VideoFrame& out) override;
+    void set_skip_mode(bool skip) override;
 
 private:
     void fill_frame(const AVFrame* av_frame, VideoFrame& out);
@@ -26,6 +27,7 @@ private:
     AVFrame* av_frame_ = nullptr;
     AVPacket* reuse_pkt_ = nullptr;
     TrackInfo track_info_;
+    bool skip_mode_ = false;
 
     // Cached swscale context — recreated only when format/resolution changes
     SwsContext* sws_ctx_ = nullptr;

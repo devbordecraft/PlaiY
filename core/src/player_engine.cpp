@@ -1001,6 +1001,8 @@ void PlayerEngine::Impl::video_decode_loop() {
             if (skip_to_target) {
                 if (frame.pts_us < seek_target_us) continue;
                 skip_to_target = false;
+                video_decoder->set_skip_mode(false);
+                continue; // discard this PTS-only frame; next will be full
             }
 
             if (!video_frame_queue.push(std::move(frame))) return false;
@@ -1037,6 +1039,7 @@ void PlayerEngine::Impl::video_decode_loop() {
             video_decoder->flush();
             video_frame_queue.flush();
             skip_to_target = true;
+            video_decoder->set_skip_mode(true);
             continue;
         }
 

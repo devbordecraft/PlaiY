@@ -103,6 +103,11 @@ void FFVideoDecoder::flush() {
     if (codec_ctx_) {
         avcodec_flush_buffers(codec_ctx_);
     }
+    skip_mode_ = false;
+}
+
+void FFVideoDecoder::set_skip_mode(bool skip) {
+    skip_mode_ = skip;
 }
 
 Error FFVideoDecoder::send_packet(const Packet& pkt) {
@@ -146,6 +151,19 @@ Error FFVideoDecoder::receive_frame(VideoFrame& out) {
     if (ret == AVERROR(EAGAIN)) return {ErrorCode::OutputNotReady};
     if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};
     if (ret < 0) return {ErrorCode::DecoderError, "receive_frame failed"};
+
+    if (skip_mode_) {
+        // Skip mode: extract only PTS for skip-to-target comparison.
+        // Avoids metadata extraction, CVPixelBuffer alloc, and sws_scale.
+        out = VideoFrame{};
+        if (av_frame_->pts != AV_NOPTS_VALUE) {
+            AVRational tb = codec_ctx_->time_base;
+            if (codec_ctx_->pkt_timebase.den > 0) tb = codec_ctx_->pkt_timebase;
+            out.pts_us = av_rescale_q(av_frame_->pts, tb, {1, 1000000});
+        }
+        av_frame_unref(av_frame_);
+        return Error::Ok();
+    }
 
     fill_frame(av_frame_, out);
     av_frame_unref(av_frame_);

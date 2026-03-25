@@ -18,6 +18,11 @@ public:
     // Called at end-of-stream before the final drain.  Default: no-op.
     virtual void drain() {}
 
+    // When true, receive_frame() returns frames with only pts_us populated,
+    // skipping expensive fill_frame work (metadata extraction, CVPixelBuffer,
+    // sws_scale). Used during seek skip-to-target. Default: no-op.
+    virtual void set_skip_mode(bool /*skip*/) {}
+
     // Send a compressed packet to the decoder.
     virtual Error send_packet(const Packet& pkt) = 0;
 
