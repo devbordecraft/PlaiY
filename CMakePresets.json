@@ -46,5 +46,14 @@
       "name": "apple-release",
       "configurePreset": "apple-release"
     }
+  ],
+  "testPresets": [
+    {
+      "name": "apple-debug",
+      "configurePreset": "apple-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
   ]
 }

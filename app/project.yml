@@ -106,6 +106,28 @@ targets:
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_ENTITLEMENTS: iOS/PlaiY.entitlements
 
+  PlaiYTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: PlaiYTests
+        type: group
+    dependencies:
+      - target: PlaiY
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plaiy.tests
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        SWIFT_VERSION: "6.3"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PlaiY.app/Contents/MacOS/PlaiY"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        SWIFT_OBJC_BRIDGING_HEADER: ""
+        HEADER_SEARCH_PATHS:
+          - $(PROJECT_DIR)/../core/include
+          - /opt/homebrew/include
+          - /usr/local/include
+
   PlaiY-tvOS:
     type: application
     platform: tvOS

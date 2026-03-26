@@ -22,7 +22,7 @@ struct PlayerView: View {
     var body: some View {
         ZStack {
             // Video layer
-            MetalPlayerView(playerBridge: viewModel.bridge, transport: viewModel.transport)
+            MetalPlayerView(playerBridge: viewModel.playerBridge, transport: viewModel.transport)
                 .ignoresSafeArea()
 
             // ── Display-link tick + subtitle ──
@@ -121,7 +121,7 @@ struct PlayerView: View {
 
             // Debug overlay (top-left, always visible when toggled)
             if viewModel.showDebugOverlay {
-                DebugOverlayWrapper(bridge: viewModel.bridge)
+                DebugOverlayWrapper(bridge: viewModel.playerBridge)
             }
 
             // Settings panel overlay
@@ -498,7 +498,7 @@ private struct BottomControlsView: View {
                     volume: viewModel.volume,
                     playbackSpeed: viewModel.playbackSpeed,
                     passthroughActive: viewModel.transport.passthroughActive,
-                    bridge: viewModel.bridge,
+                    bridge: viewModel.playerBridge,
                     transport: viewModel.transport,
                     onSeekRelative: onSeekRelative,
                     onTogglePlayPause: onTogglePlayPause,

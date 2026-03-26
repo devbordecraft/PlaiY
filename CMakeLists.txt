@@ -17,3 +17,19 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
 add_subdirectory(core)
+
+# ── Tests (only when building natively, not cross-compiling) ──
+if(NOT CMAKE_CROSSCOMPILING)
+    option(PLAIY_BUILD_TESTS "Build unit tests" ON)
+    if(PLAIY_BUILD_TESTS)
+        include(FetchContent)
+        FetchContent_Declare(
+            Catch2
+            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+            GIT_TAG v3.7.1
+        )
+        FetchContent_MakeAvailable(Catch2)
+        enable_testing()
+        add_subdirectory(core/tests)
+    endif()
+endif()

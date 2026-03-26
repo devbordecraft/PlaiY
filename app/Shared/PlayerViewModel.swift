@@ -81,8 +81,16 @@ final class PlaybackTransport {
 // ---------------------------------------------------------------------------
 @MainActor
 class PlayerViewModel: ObservableObject {
-    let bridge = PlayerBridge()
+    let bridge: any PlayerBridgeProtocol
     let transport = PlaybackTransport()
+
+    /// Concrete bridge for views that need frame-level access (Metal rendering, controls).
+    /// Force-unwraps because production code always uses PlayerBridge.
+    var playerBridge: PlayerBridge { bridge as! PlayerBridge }
+
+    init(bridge: any PlayerBridgeProtocol = PlayerBridge()) {
+        self.bridge = bridge
+    }
 
     // --- Properties that trigger view rebuilds (infrequent changes) ---
     @Published var isPlaying = false

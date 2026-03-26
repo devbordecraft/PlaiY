@@ -6,7 +6,7 @@ NPROCS     := $(shell sysctl -n hw.ncpu 2>/dev/null || echo 4)
 PREFIX     := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
 APP_PATH    = $(shell xcodebuild -project $(APP_DIR)/PlaiY.xcodeproj -scheme $(SCHEME) -configuration $(CONFIG) -showBuildSettings 2>/dev/null | awk '/^ *BUILT_PRODUCTS_DIR/{print $$3}')/PlaiY.app
 
-.PHONY: all core xcodegen app run clean core-ios core-ios-sim app-ios core-tvos app-tvos deps-ios deps-tvos
+.PHONY: all core xcodegen app run clean test test-cpp test-swift core-ios core-ios-sim app-ios core-tvos app-tvos deps-ios deps-tvos
 
 all: app
 
@@ -28,6 +28,20 @@ app: core xcodegen
 run: app
 	@echo "==> Launching PlaiY..."
 	@open "$(APP_PATH)"
+
+# ── Tests ──
+
+test: test-cpp test-swift
+
+test-cpp: core
+	@echo "==> Running C++ tests..."
+	@cd $(BUILD_DIR) && ctest --output-on-failure
+
+test-swift: app
+	@echo "==> Running Swift tests..."
+	@cd $(APP_DIR) && xcodebuild test -project PlaiY.xcodeproj \
+		-scheme PlaiYTests -configuration $(CONFIG) \
+		-destination 'platform=macOS' 2>&1 | grep -E '(Test Suite|Executed|FAIL|error:)' || true
 
 # ── iOS ──
 

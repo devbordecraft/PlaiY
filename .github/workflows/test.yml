@@ -1,0 +1,45 @@
+name: Tests
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  cpp-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake ffmpeg libass nlohmann-json
+
+      - name: Configure
+        run: cmake -B build/apple-debug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH=$(brew --prefix)
+
+      - name: Build
+        run: cmake --build build/apple-debug --parallel $(sysctl -n hw.ncpu)
+
+      - name: Run C++ tests
+        run: cd build/apple-debug && ctest --output-on-failure
+
+  swift-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake ffmpeg libass nlohmann-json xcodegen
+
+      - name: Build C++ core
+        run: make core
+
+      - name: Generate Xcode project
+        run: make xcodegen
+
+      - name: Run Swift tests
+        run: |
+          cd app && xcodebuild test \
+            -project PlaiY.xcodeproj \
+            -scheme PlaiYTests \
+            -configuration Debug \
+            -destination 'platform=macOS'
