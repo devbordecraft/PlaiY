@@ -331,6 +331,11 @@ uint16_t py_player_frame_get_max_cll(void* frame) {
     return static_cast<py::VideoFrame*>(frame)->hdr_metadata.max_content_light_level;
 }
 
+uint16_t py_player_frame_get_max_fall(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->hdr_metadata.max_frame_average_light_level;
+}
+
 int py_player_frame_get_color_space(void* frame) {
     if (!frame) return 0;
     return static_cast<py::VideoFrame*>(frame)->color_space;

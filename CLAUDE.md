@@ -39,7 +39,10 @@ plaiy/
     include/plaiy/        # Public C++ headers (interfaces, types)
     include/plaiy_c.h     # Pure C bridge API (the Swift<->C++ contract)
     src/                       # Implementation
-      player_engine.cpp        # Central orchestrator (threading, state machine)
+      player_engine.cpp        # Central orchestrator (threading, state machine, thread loops)
+      playback_stats.h/cpp     # Stats gathering (extracted from PlayerEngine)
+      frame_presenter.h/cpp    # A-V sync frame acquisition (extracted from PlayerEngine)
+      audio_pipeline.h/cpp     # Audio output lifecycle, passthrough ring buffer, callbacks (extracted from PlayerEngine)
       demuxer/                 # FFmpeg demuxer (libavformat)
       video/                   # Video decoders (FFmpeg SW + VT factory)
       audio/                   # Audio decoder, resampler, tempo filter, passthrough
@@ -47,6 +50,7 @@ plaiy/
       sync/                    # Clock, PacketQueue, FrameQueue
       library/                 # Media library scanner, metadata reader, seek thumbnails
       bridge/                  # C bridge implementation
+    tests/                     # C++ unit tests (Catch2)
     platform/apple/            # VideoToolbox, CoreAudio, AVAudioEngine spatial, Metal
   app/
     project.yml                # XcodeGen spec (generates .xcodeproj)
@@ -59,7 +63,9 @@ plaiy/
       ResumeStore.swift        # Per-file playback position persistence
       NowPlayingManager.swift  # MPRemoteCommandCenter / media key integration
       ThumbnailManager.swift   # Seek preview thumbnail cache
-      Metal/                   # MetalViewCoordinator (display link, rendering, crop)
+      Metal/                   # Metal rendering pipeline
+        MetalViewCoordinator.swift  # Display link, frame acquisition, render encoding
+        HDRUniformBuilder.swift     # HDR metadata population (HDR10/10+/DV uniforms, EDR)
       Views/                   # SwiftUI views
     macOS/                     # macOS-specific (Info.plist)
   scripts/
@@ -118,7 +124,10 @@ Always build the C++ core **before** the Xcode project. The Xcode project links 
 ## Key interfaces
 
 - **`plaiy_c.h`** - The sole contract between Swift and C++. All cross-language calls go through here. Changes here require updating both `plaiy_c.cpp` and `PlayerBridge.swift`.
-- **`player_engine.h`** - The C++ orchestrator. Owns demuxer, decoders, audio, subtitles, queues, and threads.
+- **`player_engine.h`** - The C++ orchestrator. Owns demuxer, decoders, audio, subtitles, queues, and threads. Delegates to `AudioPipeline`, `FramePresenter`, and `gather_playback_stats()`.
+- **`audio_pipeline.h`** - Audio output lifecycle: setup, restart, teardown, passthrough ring buffer, real-time PCM/bitstream pull callbacks. Internal helper (not part of public API).
+- **`frame_presenter.h`** - A-V sync frame acquisition: peek/pop from frame queue, skip late frames, first-frame gate, clock unfreeze. Internal helper.
+- **`playback_stats.h`** - `StatsContext` struct + `gather_playback_stats()` free function. Pure read-only stats gathering. Internal helper.
 - **`video_decoder.h`** - `IVideoDecoder` interface. `VideoDecoderFactory` picks VT or FFmpeg.
 - **`audio_engine.h`** - `IAudioOutput` interface. `CAAudioOutput` (stereo/passthrough) and `SpatialAudioOutput` (HRTF) implement it on Apple.
 - **`demuxer.h`** - `IDemuxer` interface. `FFDemuxer` is the only implementation.
@@ -138,10 +147,16 @@ Always build the C++ core **before** the Xcode project. The Xcode project links 
 ## HDR pipeline
 
 Metal shaders in `core/platform/apple/metal_shaders.metal` handle:
-- BT.709 and BT.2020 YCbCr-to-RGB conversion
-- PQ EOTF (HDR10) and HLG OOTF
-- EDR scaling based on display headroom
+- BT.709 and BT.2020 YCbCr-to-RGB conversion (full and limited range)
+- PQ EOTF/OETF (`pqToLinear`/`linearToPQ`) and HLG EOTF
+- Static HDR10 tone mapping via BT.2390 EETF (proper PQ domain conversion)
+- HDR10+ dynamic tone mapping via ST 2094-40 bezier curves with per-frame `maxscl`
+- Dolby Vision Profile 8 reshaping (piecewise polynomial) + L1 brightness-adaptive headroom + L2 trim (SOP + chroma)
+- Scene-adaptive tone mapping: DV uses `avgPQ` for dark scene headroom (0.6-1.0x), static HDR10 uses `MaxFALL` for knee bias
+- Extended Reinhard output mapping to EDR headroom
 - Crop uniforms (texture coordinate remapping for crop/zoom)
+
+HDR metadata flows from FFmpeg -> `VideoFrame` -> C bridge -> `HDRUniformBuilder.swift` -> shader uniforms.
 
 `CAMetalLayer` is configured with `rgba16Float` + `wantsExtendedDynamicRangeContent`.
 
@@ -183,6 +198,48 @@ PlayerEngine selects the audio output backend based on content and settings:
 1. Create in `core/platform/apple/`
 2. Add to the `if(APPLE)` block in `core/CMakeLists.txt`
 3. Add ARC flag in `set_source_files_properties` if using Objective-C
+
+## Testing
+
+### C++ tests (Catch2)
+
+113 tests in `core/tests/`, built as a single `plaiy_tests` executable via CMake + Catch2.
+
+```bash
+# Build and run
+cmake --build build/apple-debug && cd build/apple-debug && ctest --output-on-failure
+```
+
+| Test file | Coverage |
+|---|---|
+| `test_error.cpp` | Error enum and struct |
+| `test_packet_pts.cpp` | Packet PTS to microseconds conversion |
+| `test_spsc_ring_buffer.cpp` | Lock-free SPSC ring buffer (resize, wrap, concurrent) |
+| `test_clock.cpp` | Clock pause/resume/seek/rate/concurrent |
+| `test_packet_queue.cpp` | PacketQueue sizing, timeout, abort, concurrent |
+| `test_frame_queue.cpp` | FrameQueue blocking push/pop, peek, flush |
+| `test_srt_parser.cpp` | SRT subtitle parsing and lookup |
+| `test_audio_passthrough.cpp` | Passthrough codec support, byte rates, HDMI requirements |
+| `test_playback_stats.cpp` | Stats gathering with mocked context (video/audio info, ring fill, DV metadata) |
+| `test_frame_presenter.cpp` | A-V sync (empty queue, tolerance, skip late, first-frame gate, clock unfreeze) |
+
+### Swift tests (XCTest)
+
+In `app/PlaiYTests/`, run via Xcode or `xcodebuild test`.
+
+| Test file | Coverage |
+|---|---|
+| `PlayerViewModelTests.swift` | Play/pause, seek, track selection, speed (mock bridge) |
+| `TrackInfoTests.swift` | Track metadata parsing |
+| `VideoDisplaySettingsTests.swift` | Aspect ratio, crop, zoom, pan calculations |
+| `LibraryItemTests.swift` | Media library item model |
+| `TimeFormattingTests.swift` | Time display formatting |
+| `ResumeStoreTests.swift` | Resume position persistence |
+
+### Adding a new C++ test
+1. Create `core/tests/test_<name>.cpp` with `#include <catch2/catch_test_macros.hpp>`
+2. Add the file to `add_executable(plaiy_tests ...)` in `core/tests/CMakeLists.txt`
+3. Internal headers (from `core/src/`) are accessible — the test target has `core/src` in its include path
 
 ## Logging
 
@@ -226,12 +283,10 @@ PYLog.error("decode failed: \(error)", tag: "Metal")
 
 ## Current status
 
-Working: local file playback, VideoToolbox HW decode, FFmpeg SW fallback, Metal rendering with HDR10/HLG EDR, CoreAudio output, SRT/ASS/PGS subtitles, media library scanner, play/pause/seek controls, seek preview thumbnails, keyboard shortcuts and media keys, variable speed playback (0.25x-4x), volume control with persistence, resume playback with dialog, global settings with persistence, audio bitstream passthrough (AC3, E-AC3/Atmos, DTS/DTS-HD MA/DTS:X, TrueHD), spatial audio rendering (AVAudioEngine HRTF + head tracking), aspect ratio override (auto/fill/stretch/16:9/4:3/21:9/2.35:1), auto-crop black bar detection, zoom and pan controls.
+Working: local file playback, VideoToolbox HW decode, FFmpeg SW fallback, Metal rendering with HDR10/HDR10+/HLG/Dolby Vision EDR tone mapping, CoreAudio output, SRT/ASS/PGS subtitles, media library scanner, play/pause/seek controls, seek preview thumbnails, keyboard shortcuts and media keys, variable speed playback (0.25x-4x), volume control with persistence, resume playback with dialog, global settings with persistence, audio bitstream passthrough (AC3, E-AC3/Atmos, DTS/DTS-HD MA/DTS:X, TrueHD), spatial audio rendering (AVAudioEngine HRTF + head tracking), aspect ratio override (auto/fill/stretch/16:9/4:3/21:9/2.35:1), auto-crop black bar detection, zoom and pan controls.
 
 ## Planned features (not yet implemented)
 
-- HDR10+ dynamic metadata tone mapping
-- Dolby Vision profile-specific tone mapping
 - Chapter navigation
 - Network sources (SMB/NFS, HTTP streaming)
 - Playlist / play queue

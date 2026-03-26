@@ -7,6 +7,8 @@ add_executable(plaiy_tests
     test_frame_queue.cpp
     test_srt_parser.cpp
     test_audio_passthrough.cpp
+    test_playback_stats.cpp
+    test_frame_presenter.cpp
 )
 
 target_link_libraries(plaiy_tests PRIVATE

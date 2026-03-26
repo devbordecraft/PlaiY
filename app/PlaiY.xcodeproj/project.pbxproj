@@ -29,6 +29,7 @@
 		2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		3476DEEC7977C8673A0E5D62 /* LibraryItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */; };
 		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
+		384152C1489E05CB6E1315BF /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		39BFDCC45CF8E7927B8DC47A /* TrackInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDAEF68423AF3437F2668253 /* TrackInfoTests.swift */; };
 		3B21956E3701C0F7D5C6FDBA /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
@@ -46,6 +47,7 @@
 		67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
 		68A82B207E24F91787B02B60 /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		6A0F24D92E7D1D7A2346F0FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
+		7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		7D40A9E38CC9771AA4D625E7 /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
@@ -79,6 +81,7 @@
 		CCA2A68999C94F8A19F90B9A /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		D25FC2DD6F96D28385BE2EF1 /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
+		D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		D53D3576A70DFE015CD9AEFE /* ResumeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */; };
 		D71BD686F1B98796D06CAF15 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
 		D7FE81C235F565B33C070DFD /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
@@ -126,6 +129,7 @@
 		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		2E13F471AA3B2426876CCB66 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRUniformBuilder.swift; sourceTree = "<group>"; };
 		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
@@ -238,6 +242,7 @@
 		39C2695F72D1983380708E99 /* Metal */ = {
 			isa = PBXGroup;
 			children = (
+				59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */,
 				20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */,
 			);
 			path = Metal;
@@ -419,6 +424,7 @@
 				29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */,
 				AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */,
 				96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */,
+				7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */,
 				C72FDABAF60B8AC1AFEBB61C /* LibraryView.swift in Sources */,
 				0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */,
 				9858FFB6B6B45698B64D58A2 /* MediaItemView.swift in Sources */,
@@ -454,6 +460,7 @@
 				D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */,
 				F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */,
 				2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */,
+				384152C1489E05CB6E1315BF /* HDRUniformBuilder.swift in Sources */,
 				2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */,
 				7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */,
 				67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */,
@@ -489,6 +496,7 @@
 				53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */,
 				24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */,
 				F13BD1A6F5020058D746CBFC /* DebugOverlayView.swift in Sources */,
+				D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */,
 				DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */,
 				59A465F92D44A1C49313D082 /* LibraryViewModel.swift in Sources */,
 				CA433238B540E42BE64F28F5 /* MediaItemView.swift in Sources */,

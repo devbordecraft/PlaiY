@@ -201,6 +201,10 @@ final class PlayerBridge: @unchecked Sendable {
         py_player_frame_get_max_cll(frame)
     }
 
+    @inline(always) static func frameMaxFALL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
+        py_player_frame_get_max_fall(frame)
+    }
+
     @inline(always) static func frameColorTrc(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_trc(frame)
     }

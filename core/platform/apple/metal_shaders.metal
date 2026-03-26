@@ -58,6 +58,19 @@ float pqToLinear(float pq) {
     return L * 10000.0;
 }
 
+// PQ OETF (inverse of pqToLinear): linear cd/m2 -> PQ signal [0, 1]
+float linearToPQ(float L) {
+    float m1 = 0.1593017578125;
+    float m2 = 78.84375;
+    float c1 = 0.8359375;
+    float c2 = 18.8515625;
+    float c3 = 18.6875;
+
+    float Y = max(L / 10000.0, 0.0);
+    float Ym1 = pow(Y, m1);
+    return pow((c1 + c2 * Ym1) / (1.0 + c3 * Ym1), m2);
+}
+
 // PQ (SMPTE ST 2084) EOTF: converts PQ signal to linear light (cd/m2)
 float3 pqEOTF(float3 pq) {
     float m1 = 0.1593017578125;
@@ -197,6 +210,9 @@ struct VideoUniforms {
 
     // HDR10+ per-frame max scene content light (R,G,B) in cd/m2
     float maxscl[3];
+
+    // MaxFALL (Maximum Frame Average Light Level) in cd/m2
+    float maxFALL;
 };
 
 // Dolby Vision reshaping uniforms (passed as buffer(1))
@@ -362,7 +378,16 @@ fragment float4 fragmentBiplanar(
             float maxLum = (doviUniforms.maxPQ > 0.0)
                 ? pqToLinear(doviUniforms.maxPQ)
                 : max(uniforms.maxLuminance, 1000.0);
-            rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
+
+            // Scene-adaptive headroom: use avgPQ to modulate EDR for dark scenes.
+            // Dark scenes (low avgPQ) get less headroom to preserve shadow intent.
+            float effectiveHeadroom = uniforms.edrHeadroom;
+            float sceneMid = (doviUniforms.avgPQ > 0.0) ? pqToLinear(doviUniforms.avgPQ) : 0.0;
+            if (sceneMid > 0.0 && maxLum > 0.0) {
+                float normalizedAvg = sceneMid / maxLum;
+                effectiveHeadroom *= mix(0.6, 1.0, smoothstep(0.0, 0.3, normalizedAvg));
+            }
+            rgb = hdrToneMap(linear, sdrWhite, maxLum, effectiveHeadroom);
         } else if (uniforms.hdr10plusPresent != 0) {
             // HDR10+: apply bezier curve tone mapping per-channel
             float3 norm = rgb; // already in PQ [0, 1]
@@ -385,16 +410,24 @@ fragment float4 fragmentBiplanar(
             float3 linear = pqEOTF(rgb);
             float maxLum = max(uniforms.maxLuminance, 1000.0);
 
-            // Convert source max luminance to PQ for BT.2390
-            // PQ inverse: L -> PQ signal. Approximate using the content's max luminance.
-            float srcMaxPQ = max(maxLum / 10000.0, 0.01);
-            float dstMaxPQ = max(uniforms.edrHeadroom * sdrWhite / 10000.0, 0.01);
+            // Convert luminance to PQ domain for BT.2390 EETF
+            float srcMaxPQ = linearToPQ(maxLum);
+            float dstMaxPQ = linearToPQ(max(uniforms.edrHeadroom * sdrWhite, 1.0));
 
             if (srcMaxPQ > dstMaxPQ * 1.1) {
                 // Source brighter than display: apply BT.2390 compression
                 float3 pqNorm = rgb; // PQ signal values
+
+                // Scene-adaptive knee using MaxFALL when available:
+                // bias the BT.2390 knee higher for bright content (preserve highlights)
+                float ksBias = 0.0;
+                if (uniforms.maxFALL > 0.0) {
+                    float normalizedAvg = uniforms.maxFALL / maxLum;
+                    ksBias = mix(0.0, 0.15, smoothstep(0.0, 0.3, normalizedAvg));
+                }
+
                 for (int i = 0; i < 3; i++) {
-                    pqNorm[i] = bt2390EETF(pqNorm[i], srcMaxPQ, dstMaxPQ);
+                    pqNorm[i] = bt2390EETF(pqNorm[i], srcMaxPQ, dstMaxPQ + ksBias);
                 }
                 linear = pqEOTF(pqNorm);
             }

@@ -23,6 +23,9 @@ struct VideoUniforms {
 
     // HDR10+ per-frame max scene content light (R,G,B) in cd/m2
     var maxscl: (Float, Float, Float) = (0, 0, 0)
+
+    // MaxFALL (Maximum Frame Average Light Level) in cd/m2
+    var maxFALL: Float = 0.0
 }
 
 struct DoviUniforms {
@@ -275,39 +278,7 @@ class MetalViewCoordinator {
         activeYTexture = yTexture
         activeUVTexture = uvTexture
 
-        // Determine color space, transfer function, and range from frame metadata
-        var uniforms = VideoUniforms()
-        let colorTrc = PlayerBridge.frameColorTrc(framePtr)
-        let colorPrimaries = PlayerBridge.frameColorPrimaries(framePtr)
-        let colorRange = PlayerBridge.frameColorRange(framePtr)
-
-        // Transfer function: AVCOL_TRC_SMPTE2084 = 16 (PQ), AVCOL_TRC_ARIB_STD_B67 = 18 (HLG)
-        if colorTrc == 16 {
-            uniforms.transferFunc = 1 // PQ
-        } else if colorTrc == 18 {
-            uniforms.transferFunc = 2 // HLG
-        }
-
-        // Color space matrix: AVCOL_PRI_BT2020 = 9
-        if colorPrimaries == 9 {
-            uniforms.colorSpace = 1  // BT.2020
-        }
-
-        // AVCOL_RANGE_JPEG = 2 → full range
-        uniforms.colorRange = (colorRange == 2) ? 1 : 0
-
-        // Use HDR metadata from the frame instead of hardcoded defaults
-        let maxLum = PlayerBridge.frameMaxLuminance(framePtr) // in 0.0001 cd/m2 units
-        let maxCLL = PlayerBridge.frameMaxCLL(framePtr)
-        if maxLum > 0 {
-            uniforms.maxLuminance = Float(maxLum) / 10000.0 // convert to cd/m2
-        }
-        if maxCLL > 0 {
-            uniforms.maxLuminance = max(uniforms.maxLuminance, Float(maxCLL))
-        }
-
-        // Use cached EDR headroom (updated on screen change, not per-frame).
-        // Refresh the cache if the window just became available.
+        // Refresh EDR headroom cache if needed
         #if os(macOS)
         if cachedEDRHeadroom <= 1.0, let window = view.window {
             updateEDRHeadroom(window: window)
@@ -315,109 +286,26 @@ class MetalViewCoordinator {
         #else
         cachedEDRHeadroom = Float(UIScreen.main.currentEDRHeadroom)
         #endif
-        uniforms.edrHeadroom = max(cachedEDRHeadroom, 1.0)
 
-        // Populate HDR10+ per-frame dynamic metadata
-        if PlayerBridge.frameHasHDR10Plus(framePtr) {
-            uniforms.hdr10plusPresent = 1
-            uniforms.kneePointX = PlayerBridge.frameHDR10PlusKneeX(framePtr)
-            uniforms.kneePointY = PlayerBridge.frameHDR10PlusKneeY(framePtr)
-            uniforms.targetMaxLuminance = PlayerBridge.frameHDR10PlusTargetMaxLum(framePtr)
-
-            let anchors = PlayerBridge.frameHDR10PlusAnchors(framePtr)
-            uniforms.numBezierAnchors = Int32(anchors.count)
-            withUnsafeMutablePointer(to: &uniforms.bezierAnchors) { ptr in
-                ptr.withMemoryRebound(to: Float.self, capacity: 15) { floatPtr in
-                    for i in 0..<min(anchors.count, 15) {
-                        floatPtr[i] = anchors[i]
-                    }
-                }
-            }
-
-            // Per-frame max scene content light (R,G,B)
-            uniforms.maxscl = PlayerBridge.frameHDR10PlusMaxSCL(framePtr)
-        }
-
-        // Populate Dolby Vision per-frame RPU metadata
-        var doviUniforms = DoviUniforms()
-        if let dovi = PlayerBridge.frameGetDovi(framePtr) {
-            doviUniforms.present = 1
-            doviUniforms.minPQ = dovi.min_pq
-            doviUniforms.maxPQ = dovi.max_pq
-            doviUniforms.avgPQ = dovi.avg_pq
-            doviUniforms.sourceMaxPQ = dovi.source_max_pq
-            doviUniforms.sourceMinPQ = dovi.source_min_pq
-            doviUniforms.trimSlope = dovi.trim_slope
-            doviUniforms.trimOffset = dovi.trim_offset
-            doviUniforms.trimPower = dovi.trim_power
-            doviUniforms.trimChromaWeight = dovi.trim_chroma_weight
-            doviUniforms.trimSaturationGain = dovi.trim_saturation_gain
-
-            // Copy reshaping curves from C struct tuples into DoviUniforms.
-            // C arrays are imported as tuples in Swift; use withMemoryRebound
-            // to bulk-copy the flat memory layout.
-            withUnsafePointer(to: dovi.curves) { srcPtr in
-                srcPtr.withMemoryRebound(to: PYDoviCurve.self, capacity: 3) { curves in
-                    for c in 0..<3 {
-                        withUnsafeMutablePointer(to: &doviUniforms.numPivots) { p in
-                            p.withMemoryRebound(to: Int32.self, capacity: 3) { dst in
-                                dst[c] = curves[c].num_pivots
-                            }
-                        }
-                        withUnsafePointer(to: curves[c].pivots) { src in
-                            src.withMemoryRebound(to: Float.self, capacity: 9) { srcF in
-                                withUnsafeMutablePointer(to: &doviUniforms.pivots) { dst in
-                                    dst.withMemoryRebound(to: Float.self, capacity: 27) { dstF in
-                                        for i in 0..<9 { dstF[c * 9 + i] = srcF[i] }
-                                    }
-                                }
-                            }
-                        }
-                        withUnsafePointer(to: curves[c].poly_order) { src in
-                            src.withMemoryRebound(to: Int32.self, capacity: 8) { srcI in
-                                withUnsafeMutablePointer(to: &doviUniforms.polyOrder) { dst in
-                                    dst.withMemoryRebound(to: Int32.self, capacity: 24) { dstI in
-                                        for i in 0..<8 { dstI[c * 8 + i] = srcI[i] }
-                                    }
-                                }
-                            }
-                        }
-                        withUnsafePointer(to: curves[c].poly_coef) { src in
-                            src.withMemoryRebound(to: Float.self, capacity: 24) { srcF in
-                                withUnsafeMutablePointer(to: &doviUniforms.polyCoef) { dst in
-                                    dst.withMemoryRebound(to: Float.self, capacity: 72) { dstF in
-                                        for i in 0..<24 { dstF[c * 24 + i] = srcF[i] }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Build HDR uniforms from frame metadata
+        var uniforms = HDRUniformBuilder.buildVideoUniforms(
+            framePtr: framePtr, edrHeadroom: cachedEDRHeadroom)
+        var doviUniforms = HDRUniformBuilder.buildDoviUniforms(framePtr: framePtr)
 
         // Configure CAEDRMetadata so macOS activates HDR mode on the display.
         // Only update when the content type changes to avoid per-frame overhead.
         if uniforms.transferFunc != currentHDRMode {
             currentHDRMode = uniforms.transferFunc
             if let metalLayer = view.layer as? CAMetalLayer {
+                metalLayer.edrMetadata = HDRUniformBuilder.edrMetadata(
+                    transferFunc: uniforms.transferFunc,
+                    maxLuminance: uniforms.maxLuminance,
+                    sdrWhite: uniforms.sdrWhite)
                 if uniforms.transferFunc == 1 {
-                    // PQ (HDR10/HDR10+/DV): tell the system the content luminance range.
-                    // opticalOutputScale = nits per unit pixel value.
-                    // Our shader maps SDR white (203 cd/m²) to pixel value 1.0.
                     let maxNits = uniforms.maxLuminance > 0 ? uniforms.maxLuminance : 1000.0
-                    metalLayer.edrMetadata = CAEDRMetadata.hdr10(
-                        minLuminance: 0.0001,
-                        maxLuminance: maxNits,
-                        opticalOutputScale: uniforms.sdrWhite)
                     PYLog.info("HDR mode activated: PQ, max \(maxNits) nits", tag: "Metal")
                 } else if uniforms.transferFunc == 2 {
-                    // HLG: use the class property (available macOS 10.15+)
-                    metalLayer.edrMetadata = CAEDRMetadata.hlg
                     PYLog.info("HDR mode activated: HLG", tag: "Metal")
-                } else {
-                    // SDR — clear HDR metadata so display returns to SDR mode
-                    metalLayer.edrMetadata = nil
                 }
             }
         }

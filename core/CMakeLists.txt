@@ -32,6 +32,9 @@ endif()
 set(CORE_SOURCES
     src/types.cpp
     src/player_engine.cpp
+    src/playback_stats.cpp
+    src/frame_presenter.cpp
+    src/audio_pipeline.cpp
     src/demuxer/ff_demuxer.cpp
     src/video/video_decoder_factory.cpp
     src/video/ff_video_decoder.cpp

@@ -197,6 +197,7 @@ int         py_player_frame_get_height(void* frame);
 int         py_player_frame_get_hdr_type(void* frame);
 uint32_t    py_player_frame_get_max_luminance(void* frame); // in 0.0001 cd/m2 units
 uint16_t    py_player_frame_get_max_cll(void* frame);       // MaxCLL in cd/m2
+uint16_t    py_player_frame_get_max_fall(void* frame);      // MaxFALL in cd/m2
 int         py_player_frame_get_color_space(void* frame);
 int         py_player_frame_get_color_trc(void* frame);
 int64_t     py_player_frame_get_pts(void* frame);          // PTS in microseconds
