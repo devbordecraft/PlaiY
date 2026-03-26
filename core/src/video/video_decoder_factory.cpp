@@ -41,8 +41,9 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(
             vt_candidate = false;
         }
         if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision &&
-            track.dv_profile == 8) {
-            PY_LOG_INFO(TAG, "DV Profile 8: using DVSeekDecoder (FFmpeg + VT shadow)");
+            (track.dv_profile == 7 || track.dv_profile == 8)) {
+            PY_LOG_INFO(TAG, "DV Profile %d: using DVSeekDecoder (FFmpeg + VT shadow)",
+                        track.dv_profile);
             auto dv = std::make_unique<DVSeekDecoder>();
             Error err = dv->open(track);
             if (err.ok()) return dv;

@@ -44,6 +44,20 @@ constant float3x3 bt2020Matrix = float3x3(
 
 // ---- Transfer functions ----
 
+// PQ (SMPTE ST 2084) EOTF: scalar version for single values (e.g., uniform conversion)
+float pqToLinear(float pq) {
+    float m1 = 0.1593017578125;
+    float m2 = 78.84375;
+    float c1 = 0.8359375;
+    float c2 = 18.8515625;
+    float c3 = 18.6875;
+
+    float Np = pow(max(pq, 0.0), 1.0 / m2);
+    float L = pow(max(Np - c1, 0.0) / (c2 - c3 * Np), 1.0 / m1);
+
+    return L * 10000.0;
+}
+
 // PQ (SMPTE ST 2084) EOTF: converts PQ signal to linear light (cd/m2)
 float3 pqEOTF(float3 pq) {
     float m1 = 0.1593017578125;
@@ -209,6 +223,9 @@ struct VideoUniforms {
     int numBezierAnchors;
     float bezierAnchors[15];
     float targetMaxLuminance;
+
+    // HDR10+ per-frame max scene content light (R,G,B) in cd/m2
+    float maxscl[3];
 };
 
 // Dolby Vision reshaping uniforms (passed as buffer(1))
@@ -250,6 +267,43 @@ float doviReshape(float x, int numPivots, constant float* pivots,
     }
     return clamp(result, 0.0, 1.0);
 };
+
+// Dolby Vision trim: apply Slope-Offset-Power curve to luminance.
+// This encodes the colorist's mastering intent for the target display.
+float3 doviTrimSOP(float3 rgb, float slope, float offset, float power) {
+    // Identity fast path
+    if (slope == 1.0 && offset == 0.0 && power == 1.0) return rgb;
+
+    // BT.2020 luminance coefficients
+    float Y = dot(rgb, float3(0.2627, 0.6780, 0.0593));
+    if (Y < 1e-6) return rgb;
+
+    float Y_trim = pow(max(slope * Y + offset, 0.0), power);
+    return rgb * (Y_trim / Y);
+}
+
+// Dolby Vision trim: apply saturation gain and chroma weight desaturation in highlights.
+float3 doviChromaTrim(float3 rgb, float satGain, float chromaWeight) {
+    // Identity fast path
+    if (satGain == 1.0 && chromaWeight == 1.0) return rgb;
+
+    float Y = dot(rgb, float3(0.2627, 0.6780, 0.0593));
+
+    // Global saturation adjustment
+    float3 result = Y + satGain * (rgb - Y);
+
+    // Chroma weight: desaturate highlights to prevent fluorescent-looking brights.
+    // chromaWeight < 1.0 reduces chroma in bright regions.
+    if (chromaWeight < 1.0 && Y > 0.0) {
+        // Smooth ramp: full effect above Y=1.0 (SDR white in linear-normalized space),
+        // partial effect in transition zone 0.5-1.0
+        float t = smoothstep(0.5, 1.0, Y);
+        float blend = mix(1.0, chromaWeight, t);
+        result = Y + blend * (result - Y);
+    }
+
+    return max(result, 0.0);
+}
 
 // Crop/zoom uniforms (passed as buffer(2))
 struct CropUniforms {
@@ -324,7 +378,18 @@ fragment float4 fragmentBiplanar(
                                      doviUniforms.polyCoef[2]);
             float3 linear = pqEOTF(reshaped);
             float sdrWhite = max(uniforms.sdrWhite, 1.0);
-            float maxLum = max(uniforms.maxLuminance, 1000.0);
+
+            // Apply DV trim parameters (L2): colorist's mastering intent
+            linear = doviTrimSOP(linear, doviUniforms.trimSlope,
+                                 doviUniforms.trimOffset, doviUniforms.trimPower);
+            linear = doviChromaTrim(linear, doviUniforms.trimSaturationGain,
+                                   doviUniforms.trimChromaWeight);
+
+            // L1 brightness-adaptive tone mapping: use per-frame scene brightness
+            // instead of static mastering display max luminance
+            float maxLum = (doviUniforms.maxPQ > 0.0)
+                ? pqToLinear(doviUniforms.maxPQ)
+                : max(uniforms.maxLuminance, 1000.0);
             rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
         } else if (uniforms.hdr10plusPresent != 0) {
             // HDR10+: apply bezier curve tone mapping per-channel
@@ -338,8 +403,12 @@ fragment float4 fragmentBiplanar(
             // Bezier output is PQ-normalized for target display; apply EOTF
             float3 linear = pqEOTF(norm);
             float sdrWhite = max(uniforms.sdrWhite, 1.0);
-            rgb = linear / sdrWhite;
-            rgb = clamp(rgb, 0.0, uniforms.edrHeadroom);
+
+            // Use per-frame maxscl for scene-adaptive tone mapping
+            float sceneMax = max(max(uniforms.maxscl[0], uniforms.maxscl[1]),
+                                 uniforms.maxscl[2]);
+            if (sceneMax <= 0.0) sceneMax = max(uniforms.targetMaxLuminance, 1000.0);
+            rgb = hdrToneMap(linear, sdrWhite, sceneMax, uniforms.edrHeadroom);
         } else {
             // Static HDR10: BT.2390 EETF
             float3 linear = pqEOTF(rgb);

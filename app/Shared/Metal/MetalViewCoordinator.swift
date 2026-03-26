@@ -20,6 +20,9 @@ struct VideoUniforms {
                         Float, Float, Float, Float, Float,
                         Float, Float, Float, Float, Float) = (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
     var targetMaxLuminance: Float = 0.0
+
+    // HDR10+ per-frame max scene content light (R,G,B) in cd/m2
+    var maxscl: (Float, Float, Float) = (0, 0, 0)
 }
 
 struct DoviUniforms {
@@ -276,6 +279,9 @@ class MetalViewCoordinator {
                     }
                 }
             }
+
+            // Per-frame max scene content light (R,G,B)
+            uniforms.maxscl = PlayerBridge.frameHDR10PlusMaxSCL(framePtr)
         }
 
         // Populate Dolby Vision per-frame RPU metadata

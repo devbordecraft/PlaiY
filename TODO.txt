@@ -26,55 +26,48 @@ PlaiY - Feature TODO
    - Styling already implemented (font size, color, background, ASS scale)
    - Effort: Low | Impact: Medium
 
-5. Dolby Vision and HDR10+ Tone Mapping
-   - Parse Dolby Vision RPU (enhancement layer) from HEVC streams
-   - Implement per-frame dynamic metadata application for DV profiles 5, 7, 8
-   - Parse HDR10+ SEI messages for dynamic tone mapping curves
-   - Apply dynamic metadata in Metal shader alongside existing static HDR10/HLG
-   - Effort: High | Impact: High (premium HDR content)
-
-6. TMDb / OMDb Metadata Enrichment
+5. TMDb / OMDb Metadata Enrichment
    - Match library files to TMDb/OMDb entries by filename parsing
    - Fetch poster art, synopsis, cast, ratings, and year
    - Cache metadata + artwork locally as JSON + images
    - Display enriched metadata in library grid and detail views
    - Effort: Medium | Impact: High (transforms library UX)
 
-7. Picture-in-Picture
+6. Picture-in-Picture
    - Implement AVPictureInPictureController integration on macOS
    - Maintain playback controls (play/pause, seek) in PiP window
    - Handle PiP <-> fullscreen transitions cleanly
    - Effort: Low | Impact: Medium
 
-8. Seek Bar Thumbnail Preview
+7. Seek Bar Thumbnail Preview
    - Generate thumbnail strips on file open (or lazily on first seek hover)
    - Decode I-frames at regular intervals using a lightweight decode pass
    - Display thumbnail tooltip above the seek bar on hover
    - Cache thumbnails per file for instant preview on reopen
    - Effort: Medium | Impact: High (huge UX improvement for navigation)
 
-9. Keyboard Shortcuts and Customization
+8. Keyboard Shortcuts and Customization
     - Define default shortcut set (space=play/pause, arrows=seek, f=fullscreen, etc.)
     - Add a key binding editor in preferences
     - Support modifier combos and media keys
     - Persist custom bindings to user defaults
     - Effort: Medium | Impact: Medium
 
-10. Audio Equalizer and Effects
+9. Audio Equalizer and Effects
     - Implement a 10-band parametric EQ in the audio pipeline (post-decode, pre-output)
     - Add presets (flat, bass boost, vocal, cinema)
     - Allow custom EQ curves saved per profile
     - Add audio compressor option for night-mode listening
     - Effort: Medium | Impact: Medium
 
-11. Frame Capture / Screenshot
+10. Frame Capture / Screenshot
     - Capture current displayed frame as PNG/JPEG
     - Render subtitles onto capture optionally
     - Copy to clipboard or save to configurable output folder
     - Add keyboard shortcut (default: S)
     - Effort: Low | Impact: Low
 
-13. tvOS Target
+11. tvOS Target
     - Adapt SwiftUI views for tvOS focus system and Siri Remote
     - Replace mouse/keyboard interactions with focus-based navigation
     - Use tvOS top shelf and content store integration for library
@@ -82,21 +75,21 @@ PlaiY - Feature TODO
     - Shared C++ core, platform-specific UI and audio output
     - Effort: High | Impact: High (living room use case)
 
-14. Watch History and Smart Resume
+12. Watch History and Smart Resume
     - Track per-file watch progress, last played date, and watch count
     - Add "Continue Watching" row in library with sorted recent items
     - Mark files as watched when >90% complete
     - Sync watch history across devices via CloudKit (optional)
     - Effort: Medium | Impact: High
 
-15. Drag and Drop + File Association
+13. Drag and Drop + File Association
     - Accept file drops on the app window and dock icon
     - Register as handler for common video formats (mkv, mp4, avi, mov, etc.)
     - Open dropped files immediately or add to queue if already playing
     - Support dropping folders to batch-add to library
     - Effort: Low | Impact: Medium
 
-16. Deinterlacing
+14. Deinterlacing
     - Detect interlaced content via stream flags (field_order, interlaced_frame)
     - Implement yadif / bwdif deinterlacing via FFmpeg filters
     - Add option for VideoToolbox hardware deinterlacing when available
