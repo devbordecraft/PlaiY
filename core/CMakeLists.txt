@@ -1,18 +1,32 @@
-find_package(PkgConfig REQUIRED)
-find_package(FFmpeg COMPONENTS avformat avcodec avutil swresample swscale avfilter QUIET)
+if(CMAKE_CROSSCOMPILING)
+    # Cross-compilation (iOS/tvOS): use find_library with CMAKE_PREFIX_PATH
+    find_library(AVFORMAT_LIB avformat REQUIRED)
+    find_library(AVCODEC_LIB avcodec REQUIRED)
+    find_library(AVUTIL_LIB avutil REQUIRED)
+    find_library(SWRESAMPLE_LIB swresample REQUIRED)
+    find_library(SWSCALE_LIB swscale REQUIRED)
+    find_library(AVFILTER_LIB avfilter REQUIRED)
+    find_library(LIBASS_LIB ass REQUIRED)
+    find_path(FFMPEG_INCLUDE_DIR libavformat/avformat.h REQUIRED)
+    find_path(LIBASS_INCLUDE_DIR ass/ass.h REQUIRED)
+    find_package(nlohmann_json CONFIG REQUIRED)
+else()
+    find_package(PkgConfig REQUIRED)
+    find_package(FFmpeg COMPONENTS avformat avcodec avutil swresample swscale avfilter QUIET)
 
-if(NOT FFmpeg_FOUND)
-    pkg_check_modules(AVFORMAT REQUIRED IMPORTED_TARGET libavformat)
-    pkg_check_modules(AVCODEC REQUIRED IMPORTED_TARGET libavcodec)
-    pkg_check_modules(AVUTIL REQUIRED IMPORTED_TARGET libavutil)
-    pkg_check_modules(SWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
-    pkg_check_modules(SWSCALE REQUIRED IMPORTED_TARGET libswscale)
-    pkg_check_modules(AVFILTER REQUIRED IMPORTED_TARGET libavfilter)
+    if(NOT FFmpeg_FOUND)
+        pkg_check_modules(AVFORMAT REQUIRED IMPORTED_TARGET libavformat)
+        pkg_check_modules(AVCODEC REQUIRED IMPORTED_TARGET libavcodec)
+        pkg_check_modules(AVUTIL REQUIRED IMPORTED_TARGET libavutil)
+        pkg_check_modules(SWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
+        pkg_check_modules(SWSCALE REQUIRED IMPORTED_TARGET libswscale)
+        pkg_check_modules(AVFILTER REQUIRED IMPORTED_TARGET libavfilter)
+    endif()
+
+    pkg_check_modules(LIBASS REQUIRED IMPORTED_TARGET libass)
+
+    find_package(nlohmann_json CONFIG REQUIRED)
 endif()
-
-pkg_check_modules(LIBASS REQUIRED IMPORTED_TARGET libass)
-
-find_package(nlohmann_json CONFIG REQUIRED)
 
 # Platform-agnostic sources
 set(CORE_SOURCES
@@ -63,7 +77,17 @@ target_include_directories(plaiy_core
     PRIVATE src
 )
 
-if(FFmpeg_FOUND)
+if(CMAKE_CROSSCOMPILING)
+    target_include_directories(plaiy_core PRIVATE
+        ${FFMPEG_INCLUDE_DIR}
+        ${LIBASS_INCLUDE_DIR}
+    )
+    target_link_libraries(plaiy_core PRIVATE
+        ${AVFORMAT_LIB} ${AVCODEC_LIB} ${AVUTIL_LIB}
+        ${SWRESAMPLE_LIB} ${SWSCALE_LIB} ${AVFILTER_LIB}
+        ${LIBASS_LIB}
+    )
+elseif(FFmpeg_FOUND)
     target_link_libraries(plaiy_core PRIVATE
         FFmpeg::avformat FFmpeg::avcodec FFmpeg::avutil
         FFmpeg::swresample FFmpeg::swscale FFmpeg::avfilter
@@ -75,8 +99,11 @@ else()
     )
 endif()
 
+if(NOT CMAKE_CROSSCOMPILING)
+    target_link_libraries(plaiy_core PRIVATE PkgConfig::LIBASS)
+endif()
+
 target_link_libraries(plaiy_core PRIVATE
-    PkgConfig::LIBASS
     nlohmann_json::nlohmann_json
 )
 

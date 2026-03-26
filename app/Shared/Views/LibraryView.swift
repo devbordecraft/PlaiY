@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -7,6 +8,11 @@ struct LibraryView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
     let onSelect: (String) -> Void
     let onSettings: () -> Void
+
+    #if os(iOS)
+    @State private var showFolderPicker = false
+    @State private var showFilePicker = false
+    #endif
 
     private let columns = [
         GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 16)
@@ -38,6 +44,7 @@ struct LibraryView: View {
                     }
                     .buttonStyle(.bordered)
 
+                    #if !os(tvOS)
                     Button("Add Folder") {
                         pickFolder()
                     }
@@ -47,6 +54,7 @@ struct LibraryView: View {
                         pickFile()
                     }
                     .buttonStyle(.bordered)
+                    #endif
                 }
                 .padding()
             }
@@ -60,24 +68,56 @@ struct LibraryView: View {
                     Text("No media files")
                         .font(.title2)
                         .foregroundStyle(.secondary)
+                    #if os(tvOS)
+                    Text("Network sources coming soon")
+                        .foregroundStyle(.tertiary)
+                    #else
                     Text("Add a folder or open a file to get started")
                         .foregroundStyle(.tertiary)
+                    #endif
                 }
                 Spacer()
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(libraryVM.items) { item in
+                            #if os(tvOS)
+                            Button {
+                                onSelect(item.filePath)
+                            } label: {
+                                MediaItemView(item: item)
+                            }
+                            .buttonStyle(.card)
+                            #else
                             MediaItemView(item: item)
                                 .onTapGesture {
                                     onSelect(item.filePath)
                                 }
+                            #endif
                         }
                     }
                     .padding()
                 }
             }
         }
+        #if os(iOS)
+        .fileImporter(isPresented: $showFolderPicker,
+                      allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result {
+                guard url.startAccessingSecurityScopedResource() else { return }
+                libraryVM.addFolder(url.path)
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        .fileImporter(isPresented: $showFilePicker,
+                      allowedContentTypes: [.movie, .mpeg4Movie, .avi, .mpeg2TransportStream]) { result in
+            if case .success(let url) = result {
+                guard url.startAccessingSecurityScopedResource() else { return }
+                onSelect(url.path)
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        #endif
     }
 
     private func pickFolder() {
@@ -91,6 +131,8 @@ struct LibraryView: View {
         if panel.runModal() == .OK, let url = panel.url {
             libraryVM.addFolder(url.path)
         }
+        #elseif os(iOS)
+        showFolderPicker = true
         #endif
     }
 
@@ -107,6 +149,8 @@ struct LibraryView: View {
         if panel.runModal() == .OK, let url = panel.url {
             onSelect(url.path)
         }
+        #elseif os(iOS)
+        showFilePicker = true
         #endif
     }
 }

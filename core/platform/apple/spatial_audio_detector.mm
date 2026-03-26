@@ -1,4 +1,8 @@
+#if TARGET_OS_OSX
 #import <CoreAudio/CoreAudio.h>
+#else
+#import <AVFAudio/AVFAudio.h>
+#endif
 #import <AudioToolbox/AudioToolbox.h>
 
 #include "spatial_audio_detector.h"
@@ -7,6 +11,8 @@
 static constexpr const char* TAG = "SpatialDetect";
 
 namespace py {
+
+#if TARGET_OS_OSX
 
 struct DefaultOutputInfo {
     AudioDeviceID device = kAudioObjectUnknown;
@@ -74,6 +80,30 @@ AudioDeviceType SpatialAudioDetector::detect_current_device() {
     PY_LOG_DEBUG(TAG, "Detected standard output (transport type: %u)", info.transport);
     return AudioDeviceType::StandardOutput;
 }
+
+#else // iOS/tvOS
+
+AudioDeviceType SpatialAudioDetector::detect_current_device() {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    for (AVAudioSessionPortDescription *output in session.currentRoute.outputs) {
+        NSString *type = output.portType;
+        if ([type isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+            [type isEqualToString:AVAudioSessionPortBluetoothHFP] ||
+            [type isEqualToString:AVAudioSessionPortBluetoothLE]) {
+            PY_LOG_DEBUG(TAG, "Detected Bluetooth output: %s (spatial candidate)",
+                         [output.portName UTF8String]);
+            return AudioDeviceType::SpatialHeadphones;
+        }
+        if ([type isEqualToString:AVAudioSessionPortHDMI]) {
+            PY_LOG_DEBUG(TAG, "Detected HDMI output");
+            return AudioDeviceType::HDMIReceiver;
+        }
+    }
+    PY_LOG_DEBUG(TAG, "Detected standard output");
+    return AudioDeviceType::StandardOutput;
+}
+
+#endif // TARGET_OS_OSX
 
 bool SpatialAudioDetector::is_spatial_headphones_connected() {
     return detect_current_device() == AudioDeviceType::SpatialHeadphones;

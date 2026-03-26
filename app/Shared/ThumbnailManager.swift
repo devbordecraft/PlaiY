@@ -2,6 +2,8 @@ import Foundation
 import CryptoKit
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 class ThumbnailManager {
@@ -29,12 +31,12 @@ class ThumbnailManager {
         return cacheDir.appendingPathComponent(hex + ".jpg")
     }
 
-    func loadThumbnail(for filePath: String) async -> NSImage? {
+    func loadThumbnail(for filePath: String) async -> PlatformImage? {
         let url = cachePath(for: filePath)
 
         // Check cache
         if FileManager.default.fileExists(atPath: url.path) {
-            return NSImage(contentsOf: url)
+            return Self.loadImage(from: url)
         }
 
         // Generate on limited-concurrency queue
@@ -51,8 +53,16 @@ class ThumbnailManager {
         }
 
         if success {
-            return NSImage(contentsOf: url)
+            return Self.loadImage(from: url)
         }
         return nil
+    }
+
+    private static func loadImage(from url: URL) -> PlatformImage? {
+        #if os(macOS)
+        return NSImage(contentsOf: url)
+        #else
+        return UIImage(contentsOfFile: url.path)
+        #endif
     }
 }

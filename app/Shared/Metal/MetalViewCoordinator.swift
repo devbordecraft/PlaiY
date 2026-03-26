@@ -255,6 +255,8 @@ class MetalViewCoordinator {
         if let screen = view.window?.screen {
             uniforms.edrHeadroom = Float(screen.maximumPotentialExtendedDynamicRangeColorComponentValue)
         }
+        #else
+        uniforms.edrHeadroom = Float(UIScreen.main.currentEDRHeadroom)
         #endif
         uniforms.edrHeadroom = max(uniforms.edrHeadroom, 1.0)
 

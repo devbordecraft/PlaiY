@@ -193,6 +193,28 @@ struct PlayerView: View {
                 viewModel.play()
             }
         }
+        #if os(tvOS)
+        .onPlayPauseCommand {
+            handleKeyAction { viewModel.togglePlayPause() }
+        }
+        .onMoveCommand { direction in
+            switch direction {
+            case .left:
+                handleKeyAction { viewModel.seekRelative(seconds: -10) }
+            case .right:
+                handleKeyAction { viewModel.seekRelative(seconds: 10) }
+            case .up:
+                handleKeyAction { viewModel.setVolume(min(viewModel.volume + 0.05, 1.0)) }
+            case .down:
+                handleKeyAction { viewModel.setVolume(max(viewModel.volume - 0.05, 0.0)) }
+            @unknown default:
+                break
+            }
+        }
+        .onExitCommand {
+            onBack()
+        }
+        #else
         .onKeyPress(.space) {
             handleKeyAction { viewModel.togglePlayPause() }
             return .handled
@@ -251,6 +273,7 @@ struct PlayerView: View {
             handleKeyAction { viewModel.resetDisplaySettings() }
             return .handled
         }
+        #endif
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
@@ -275,6 +298,10 @@ struct PlayerView: View {
                 scrollMonitor = nil
             }
         }
+        #endif
+        #if os(iOS)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
         #endif
     }
 

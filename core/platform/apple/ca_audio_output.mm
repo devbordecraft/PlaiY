@@ -1,5 +1,9 @@
 #import <AudioToolbox/AudioToolbox.h>
+#if TARGET_OS_OSX
 #import <CoreAudio/CoreAudio.h>
+#else
+#import <AVFAudio/AVFAudio.h>
+#endif
 
 #include "ca_audio_output.h"
 #include "audio/audio_passthrough.h"
@@ -75,6 +79,7 @@ CAAudioOutput::~CAAudioOutput() {
 // ---- Device channel query ----
 
 int CAAudioOutput::max_device_channels() const {
+#if TARGET_OS_OSX
     AudioObjectPropertyAddress addr = {
         kAudioHardwarePropertyDefaultOutputDevice,
         kAudioObjectPropertyScopeGlobal,
@@ -108,6 +113,14 @@ int CAAudioOutput::max_device_channels() const {
     int result = std::min(std::max(total, 2), 8);
     PY_LOG_INFO(TAG, "Default output device max channels: %d", result);
     return result;
+#else
+    // iOS/tvOS: query via AVAudioSession
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSInteger maxCh = [session maximumOutputNumberOfChannels];
+    int result = std::min(std::max(static_cast<int>(maxCh), 2), 8);
+    PY_LOG_INFO(TAG, "AVAudioSession max output channels: %d", result);
+    return result;
+#endif
 }
 
 // ---- Channel layout helper ----
@@ -129,6 +142,21 @@ Error CAAudioOutput::open(int sample_rate, int channels) {
     impl_->sample_rate = sample_rate;
     impl_->channels = channels;
     impl_->passthrough_mode = false;
+
+#if !TARGET_OS_OSX
+    // iOS/tvOS require explicit AVAudioSession setup before audio playback
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *sessionError = nil;
+    [session setCategory:AVAudioSessionCategoryPlayback
+                    mode:AVAudioSessionModeMoviePlayback
+                 options:0
+                   error:&sessionError];
+    if (sessionError) {
+        PY_LOG_WARN(TAG, "AVAudioSession setCategory failed: %s",
+                    [[sessionError localizedDescription] UTF8String]);
+    }
+    [session setActive:YES error:&sessionError];
+#endif
 
     // Find the default output audio component
     AudioComponentDescription desc = {};

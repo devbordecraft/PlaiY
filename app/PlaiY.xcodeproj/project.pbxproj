@@ -8,31 +8,86 @@
 
 /* Begin PBXBuildFile section */
 		0844F79FBCDC31083722DC07 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
+		08738D349252B6BF3B9BCCAB /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
 		08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
+		0A3215BE7E8A81B8886EB448 /* PlatformTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A077A165BC093BAC4F219D3A /* PlatformTypes.swift */; };
+		0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
+		0FA38F7B165065229AD65C81 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
+		130DF834DB1D23DD6557CB86 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
+		1858118A083E6BFA252902D9 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
+		1B47148518CC9CCF37D04B9F /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
+		229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
+		24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
+		2544ED48649D0ABF8557C1ED /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
+		259C643A39AC08496B6E0EA9 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
+		29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
 		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
+		2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
+		39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
+		3B21956E3701C0F7D5C6FDBA /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
+		3F9D2AD57A1B39344332BCE6 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
+		3FBCF0FC5FA79A2719225C38 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
+		441A41FD6B5258C9639D21B7 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
 		46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
+		50189BD14F4F69D217B78C81 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
+		525814C9FECD19A1D806314F /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */; };
+		53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
+		59A465F92D44A1C49313D082 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
+		6535157B0ACB395CCC675993 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
 		67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
+		67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
+		68A82B207E24F91787B02B60 /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
+		6A0F24D92E7D1D7A2346F0FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
+		7D40A9E38CC9771AA4D625E7 /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
+		80568C9928578EB526752B5B /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
+		81A0175401452966DBDC87CD /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
 		83545C0D32833ACFE12379B3 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
 		8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
 		8DA705B09C731208699611A9 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
+		91A28C441EF1293D30284BCF /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
+		96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
 		98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
+		9858FFB6B6B45698B64D58A2 /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
+		9EB5E9D576649846E397DD7A /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
+		9F9C3A4A32C249495F41BD91 /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
+		A1D079DF61673E3E9C992F90 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
+		A2D0C4EA7980B7F32D1383A5 /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
+		A2E284ABBD5EE2667F577161 /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
+		AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
+		B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
+		C1ED694DD7BD6AC7E857218B /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */; };
 		C4FD58DB467D65B3843D9A7F /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
 		C5BFB243D1153CBA63F184AD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
+		C72FDABAF60B8AC1AFEBB61C /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
+		C7641745468D4FDE312D1A7B /* PlatformTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A077A165BC093BAC4F219D3A /* PlatformTypes.swift */; };
+		CA433238B540E42BE64F28F5 /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
+		CABBA61A7118102BC8E1BCD5 /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
+		CCA2A68999C94F8A19F90B9A /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
+		D25FC2DD6F96D28385BE2EF1 /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
+		D71BD686F1B98796D06CAF15 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
 		D7FE81C235F565B33C070DFD /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
+		DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
+		E0A10C2A440A397EA93D6597 /* PlatformTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A077A165BC093BAC4F219D3A /* PlatformTypes.swift */; };
 		E1565D0064E80D10029AD72F /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */; };
+		E44CA4BFDA6391B6D7D4B141 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
+		E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
+		EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
 		F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
+		F13BD1A6F5020058D746CBFC /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		F29C5021A7BA1EBF91C32B92 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
+		F6D3650B995537C477D7C974 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
+		F91E6A4441C28BCA4C94303F /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,22 +98,29 @@
 		19D4B941118178244122189A /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
 		203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormatting.swift; sourceTree = "<group>"; };
 		20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
+		25D428FFE767625A57745F50 /* PlaiY-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		2E13F471AA3B2426876CCB66 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
+		605D92FB022572469E826CE1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
+		6969ACD6B001ECEDE1F998F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailManager.swift; sourceTree = "<group>"; };
 		8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingManager.swift; sourceTree = "<group>"; };
 		91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
+		A077A165BC093BAC4F219D3A /* PlatformTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformTypes.swift; sourceTree = "<group>"; };
 		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
+		A3D7002606B6C0F0F4FEA950 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AE562E44D72724E927A7FACC /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
 		C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettings.swift; sourceTree = "<group>"; };
 		CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = metal_shaders.metal; sourceTree = "<group>"; };
+		D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D888DC06954A914994F0D3EC /* TrackSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelectionView.swift; sourceTree = "<group>"; };
 		E70C6C424D83AFFE819F2081 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBCE734B22E27E48EA38CB20 /* PYLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PYLog.swift; sourceTree = "<group>"; };
@@ -76,6 +138,7 @@
 				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
 				8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */,
 				07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */,
+				A077A165BC093BAC4F219D3A /* PlatformTypes.swift */,
 				19D4B941118178244122189A /* PlayerBridge.swift */,
 				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
 				EBCE734B22E27E48EA38CB20 /* PYLog.swift */,
@@ -94,6 +157,8 @@
 		0F2713753C634882BCDB2376 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				25D428FFE767625A57745F50 /* PlaiY-iOS.app */,
+				D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */,
 				E70C6C424D83AFFE819F2081 /* PlaiY.app */,
 			);
 			name = Products;
@@ -133,6 +198,24 @@
 			path = Metal;
 			sourceTree = "<group>";
 		};
+		50BE73C931A139446BF95F60 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				A3D7002606B6C0F0F4FEA950 /* Info.plist */,
+				605D92FB022572469E826CE1 /* PlaiY.entitlements */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		754432C17732B6F3F99A7373 /* tvOS */ = {
+			isa = PBXGroup;
+			children = (
+				6969ACD6B001ECEDE1F998F1 /* Info.plist */,
+				AE562E44D72724E927A7FACC /* PlaiY.entitlements */,
+			);
+			path = tvOS;
+			sourceTree = "<group>";
+		};
 		92E3C42B6B105BF9AD48A0D4 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
@@ -146,8 +229,10 @@
 			isa = PBXGroup;
 			children = (
 				2EE389503B740443F5DB79B3 /* apple */,
+				50BE73C931A139446BF95F60 /* iOS */,
 				92E3C42B6B105BF9AD48A0D4 /* macOS */,
 				00D0426CAA8CA1C0D2915B36 /* Shared */,
+				754432C17732B6F3F99A7373 /* tvOS */,
 				0F2713753C634882BCDB2376 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -170,6 +255,40 @@
 			);
 			productName = PlaiY;
 			productReference = E70C6C424D83AFFE819F2081 /* PlaiY.app */;
+			productType = "com.apple.product-type.application";
+		};
+		5514F19E42D2DE7401968BE6 /* PlaiY-tvOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 295F7A701B04856120013567 /* Build configuration list for PBXNativeTarget "PlaiY-tvOS" */;
+			buildPhases = (
+				9B9B620850B0783531BA9FCC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "PlaiY-tvOS";
+			packageProductDependencies = (
+			);
+			productName = "PlaiY-tvOS";
+			productReference = D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D2B6D6427B45FEABA7CE9C89 /* PlaiY-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9995C7BEBBFE7C15FA6A474F /* Build configuration list for PBXNativeTarget "PlaiY-iOS" */;
+			buildPhases = (
+				20CFA3255CCDE6BCD9AA14B0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "PlaiY-iOS";
+			packageProductDependencies = (
+			);
+			productName = "PlaiY-iOS";
+			productReference = 25D428FFE767625A57745F50 /* PlaiY-iOS.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -198,11 +317,47 @@
 			projectRoot = "";
 			targets = (
 				12E70D21735AFAA18A380B49 /* PlaiY */,
+				D2B6D6427B45FEABA7CE9C89 /* PlaiY-iOS */,
+				5514F19E42D2DE7401968BE6 /* PlaiY-tvOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		20CFA3255CCDE6BCD9AA14B0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91A28C441EF1293D30284BCF /* AppSettings.swift in Sources */,
+				29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */,
+				AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */,
+				96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */,
+				C72FDABAF60B8AC1AFEBB61C /* LibraryView.swift in Sources */,
+				0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */,
+				9858FFB6B6B45698B64D58A2 /* MediaItemView.swift in Sources */,
+				F91E6A4441C28BCA4C94303F /* MetalPlayerView.swift in Sources */,
+				9F9C3A4A32C249495F41BD91 /* MetalViewCoordinator.swift in Sources */,
+				50189BD14F4F69D217B78C81 /* NowPlayingManager.swift in Sources */,
+				259C643A39AC08496B6E0EA9 /* PYLog.swift in Sources */,
+				130DF834DB1D23DD6557CB86 /* PlaiYApp.swift in Sources */,
+				C7641745468D4FDE312D1A7B /* PlatformTypes.swift in Sources */,
+				1858118A083E6BFA252902D9 /* PlayerBridge.swift in Sources */,
+				80568C9928578EB526752B5B /* PlayerControlsView.swift in Sources */,
+				D71BD686F1B98796D06CAF15 /* PlayerView.swift in Sources */,
+				F6D3650B995537C477D7C974 /* PlayerViewModel.swift in Sources */,
+				2544ED48649D0ABF8557C1ED /* ResumeStore.swift in Sources */,
+				6A0F24D92E7D1D7A2346F0FC /* SettingsView.swift in Sources */,
+				1B47148518CC9CCF37D04B9F /* SubtitleOverlayView.swift in Sources */,
+				229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */,
+				C1ED694DD7BD6AC7E857218B /* TimeFormatting.swift in Sources */,
+				08738D349252B6BF3B9BCCAB /* TrackInfo.swift in Sources */,
+				A2D0C4EA7980B7F32D1383A5 /* TrackSelectionView.swift in Sources */,
+				3FBCF0FC5FA79A2719225C38 /* VideoDisplaySettings.swift in Sources */,
+				CCA2A68999C94F8A19F90B9A /* VideoDisplaySettingsStore.swift in Sources */,
+				81A0175401452966DBDC87CD /* metal_shaders.metal in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2A6EB93FFCA7610DBA1A42CE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -219,6 +374,7 @@
 				F29C5021A7BA1EBF91C32B92 /* NowPlayingManager.swift in Sources */,
 				7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */,
 				98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */,
+				0A3215BE7E8A81B8886EB448 /* PlatformTypes.swift in Sources */,
 				08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */,
 				97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */,
 				0844F79FBCDC31083722DC07 /* PlayerView.swift in Sources */,
@@ -233,6 +389,40 @@
 				8DA705B09C731208699611A9 /* VideoDisplaySettings.swift in Sources */,
 				D7FE81C235F565B33C070DFD /* VideoDisplaySettingsStore.swift in Sources */,
 				34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B9B620850B0783531BA9FCC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9EB5E9D576649846E397DD7A /* AppSettings.swift in Sources */,
+				53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */,
+				24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */,
+				F13BD1A6F5020058D746CBFC /* DebugOverlayView.swift in Sources */,
+				DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */,
+				59A465F92D44A1C49313D082 /* LibraryViewModel.swift in Sources */,
+				CA433238B540E42BE64F28F5 /* MediaItemView.swift in Sources */,
+				68A82B207E24F91787B02B60 /* MetalPlayerView.swift in Sources */,
+				CABBA61A7118102BC8E1BCD5 /* MetalViewCoordinator.swift in Sources */,
+				6535157B0ACB395CCC675993 /* NowPlayingManager.swift in Sources */,
+				2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */,
+				EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */,
+				E0A10C2A440A397EA93D6597 /* PlatformTypes.swift in Sources */,
+				E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */,
+				0FA38F7B165065229AD65C81 /* PlayerControlsView.swift in Sources */,
+				3B21956E3701C0F7D5C6FDBA /* PlayerView.swift in Sources */,
+				E44CA4BFDA6391B6D7D4B141 /* PlayerViewModel.swift in Sources */,
+				D25FC2DD6F96D28385BE2EF1 /* ResumeStore.swift in Sources */,
+				A1D079DF61673E3E9C992F90 /* SettingsView.swift in Sources */,
+				39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */,
+				B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */,
+				525814C9FECD19A1D806314F /* TimeFormatting.swift in Sources */,
+				67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */,
+				A2E284ABBD5EE2667F577161 /* TrackSelectionView.swift in Sources */,
+				3F9D2AD57A1B39344332BCE6 /* VideoDisplaySettings.swift in Sources */,
+				7D40A9E38CC9771AA4D625E7 /* VideoDisplaySettingsStore.swift in Sources */,
+				441A41FD6B5258C9639D21B7 /* metal_shaders.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +453,7 @@
 					/opt/homebrew/lib,
 					/usr/local/lib,
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-lplaiy_core",
@@ -345,14 +536,134 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		2D7D96AC69E234F262D6C548 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_ENTITLEMENTS = tvOS/PlaiY.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/include",
+					"$(PROJECT_DIR)/../deps/tvos/include",
+				);
+				INFOPLIST_FILE = tvOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../build/tvos-Debug/core",
+					"$(PROJECT_DIR)/../build/tvos-Release/core",
+					"$(PROJECT_DIR)/../deps/tvos/lib",
+				);
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lplaiy_core",
+					"-lavformat",
+					"-lavcodec",
+					"-lavutil",
+					"-lswresample",
+					"-lswscale",
+					"-lavfilter",
+					"-lass",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+					"-llzma",
+					"-lxml2",
+					"-framework VideoToolbox",
+					"-framework CoreMedia",
+					"-framework CoreVideo",
+					"-framework CoreFoundation",
+					"-framework CoreAudio",
+					"-framework AudioToolbox",
+					"-framework Metal",
+					"-framework MetalKit",
+					"-framework QuartzCore",
+					"-framework IOSurface",
+					"-framework MediaPlayer",
+					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv;
+				PRODUCT_NAME = PlaiY;
+				SDKROOT = appletvos;
+				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		390BEFFAF68C068B787329CA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/PlaiY.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/include",
+					"$(PROJECT_DIR)/../deps/ios/include",
+				);
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../build/ios-Debug/core",
+					"$(PROJECT_DIR)/../build/ios-Release/core",
+					"$(PROJECT_DIR)/../deps/ios/lib",
+				);
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lplaiy_core",
+					"-lavformat",
+					"-lavcodec",
+					"-lavutil",
+					"-lswresample",
+					"-lswscale",
+					"-lavfilter",
+					"-lass",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+					"-llzma",
+					"-lxml2",
+					"-framework VideoToolbox",
+					"-framework CoreMedia",
+					"-framework CoreVideo",
+					"-framework CoreFoundation",
+					"-framework CoreAudio",
+					"-framework AudioToolbox",
+					"-framework Metal",
+					"-framework MetalKit",
+					"-framework QuartzCore",
+					"-framework IOSurface",
+					"-framework MediaPlayer",
+					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
+				PRODUCT_NAME = PlaiY;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -407,15 +718,16 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};
@@ -443,6 +755,7 @@
 					/opt/homebrew/lib,
 					/usr/local/lib,
 				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				OTHER_LDFLAGS = (
 					"-lc++",
 					"-lplaiy_core",
@@ -480,9 +793,137 @@
 			};
 			name = Debug;
 		};
+		6660153929DB3AA4981B9D93 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = LaunchImage;
+				CODE_SIGN_ENTITLEMENTS = tvOS/PlaiY.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/include",
+					"$(PROJECT_DIR)/../deps/tvos/include",
+				);
+				INFOPLIST_FILE = tvOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../build/tvos-Debug/core",
+					"$(PROJECT_DIR)/../build/tvos-Release/core",
+					"$(PROJECT_DIR)/../deps/tvos/lib",
+				);
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lplaiy_core",
+					"-lavformat",
+					"-lavcodec",
+					"-lavutil",
+					"-lswresample",
+					"-lswscale",
+					"-lavfilter",
+					"-lass",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+					"-llzma",
+					"-lxml2",
+					"-framework VideoToolbox",
+					"-framework CoreMedia",
+					"-framework CoreVideo",
+					"-framework CoreFoundation",
+					"-framework CoreAudio",
+					"-framework AudioToolbox",
+					"-framework Metal",
+					"-framework MetalKit",
+					"-framework QuartzCore",
+					"-framework IOSurface",
+					"-framework MediaPlayer",
+					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv;
+				PRODUCT_NAME = PlaiY;
+				SDKROOT = appletvos;
+				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		877F4C2175D35984B0EA4641 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = iOS/PlaiY.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				HEADER_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../core/include",
+					"$(PROJECT_DIR)/../deps/ios/include",
+				);
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(PROJECT_DIR)/../build/ios-Debug/core",
+					"$(PROJECT_DIR)/../build/ios-Release/core",
+					"$(PROJECT_DIR)/../deps/ios/lib",
+				);
+				OTHER_LDFLAGS = (
+					"-lc++",
+					"-lplaiy_core",
+					"-lavformat",
+					"-lavcodec",
+					"-lavutil",
+					"-lswresample",
+					"-lswscale",
+					"-lavfilter",
+					"-lass",
+					"-lz",
+					"-lbz2",
+					"-liconv",
+					"-llzma",
+					"-lxml2",
+					"-framework VideoToolbox",
+					"-framework CoreMedia",
+					"-framework CoreVideo",
+					"-framework CoreFoundation",
+					"-framework CoreAudio",
+					"-framework AudioToolbox",
+					"-framework Metal",
+					"-framework MetalKit",
+					"-framework QuartzCore",
+					"-framework IOSurface",
+					"-framework MediaPlayer",
+					"-framework Security",
+					"-framework AVFoundation",
+					"-framework CoreMotion",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app;
+				PRODUCT_NAME = PlaiY;
+				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = BridgingHeader.h;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		295F7A701B04856120013567 /* Build configuration list for PBXNativeTarget "PlaiY-tvOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6660153929DB3AA4981B9D93 /* Debug */,
+				2D7D96AC69E234F262D6C548 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		6359FB4A0363479A6F553601 /* Build configuration list for PBXProject "PlaiY" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -497,6 +938,15 @@
 			buildConfigurations = (
 				5623AA90B192EC6BE9E8C916 /* Debug */,
 				044A2F4235C9DD37CF52BF2D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9995C7BEBBFE7C15FA6A474F /* Build configuration list for PBXNativeTarget "PlaiY-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				877F4C2175D35984B0EA4641 /* Debug */,
+				390BEFFAF68C068B787329CA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

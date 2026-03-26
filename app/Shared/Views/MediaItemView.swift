@@ -2,14 +2,14 @@ import SwiftUI
 
 struct MediaItemView: View {
     let item: LibraryItem
-    @State private var thumbnail: NSImage?
+    @State private var thumbnail: PlatformImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Thumbnail
             ZStack {
                 if let thumbnail {
-                    Image(nsImage: thumbnail)
+                    thumbnailImage(thumbnail)
                         .resizable()
                         .aspectRatio(16.0/9.0, contentMode: .fill)
                         .clipped()
@@ -91,6 +91,14 @@ struct MediaItemView: View {
                 NSCursor.pop()
             }
         }
+        #endif
+    }
+
+    private func thumbnailImage(_ image: PlatformImage) -> Image {
+        #if os(macOS)
+        Image(nsImage: image)
+        #else
+        Image(uiImage: image)
         #endif
     }
 }

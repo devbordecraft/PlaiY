@@ -3,13 +3,45 @@ options:
   bundleIdPrefix: com.plaiy
   deploymentTarget:
     macOS: "26.0"
+    iOS: "26.0"
+    tvOS: "26.0"
   xcodeVersion: "18.0"
   minimumXcodeGenVersion: "2.38"
 
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "26.0"
+
+# Shared linker flags for all Apple platforms
+_ldflags: &ldflags
+  - -lc++
+  - -lplaiy_core
+  - -lavformat
+  - -lavcodec
+  - -lavutil
+  - -lswresample
+  - -lswscale
+  - -lavfilter
+  - -lass
+  - -lz
+  - -lbz2
+  - -liconv
+  - -llzma
+  - -lxml2
+  - -framework VideoToolbox
+  - -framework CoreMedia
+  - -framework CoreVideo
+  - -framework CoreFoundation
+  - -framework CoreAudio
+  - -framework AudioToolbox
+  - -framework Metal
+  - -framework MetalKit
+  - -framework QuartzCore
+  - -framework IOSurface
+  - -framework MediaPlayer
+  - -framework Security
+  - -framework AVFoundation
+  - -framework CoreMotion
 
 targets:
   PlaiY:
@@ -29,6 +61,7 @@ targets:
         PRODUCT_NAME: PlaiY
         INFOPLIST_FILE: macOS/Info.plist
         SWIFT_OBJC_BRIDGING_HEADER: BridgingHeader.h
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
         HEADER_SEARCH_PATHS:
           - $(PROJECT_DIR)/../core/include
           - /opt/homebrew/include
@@ -38,35 +71,66 @@ targets:
           - $(PROJECT_DIR)/../build/apple-release/core
           - /opt/homebrew/lib
           - /usr/local/lib
-        OTHER_LDFLAGS:
-          - -lc++
-          - -lplaiy_core
-          - -lavformat
-          - -lavcodec
-          - -lavutil
-          - -lswresample
-          - -lswscale
-          - -lavfilter
-          - -lass
-          - -lz
-          - -lbz2
-          - -liconv
-          - -llzma
-          - -lxml2
-          - -framework VideoToolbox
-          - -framework CoreMedia
-          - -framework CoreVideo
-          - -framework CoreFoundation
-          - -framework CoreAudio
-          - -framework AudioToolbox
-          - -framework Metal
-          - -framework MetalKit
-          - -framework QuartzCore
-          - -framework IOSurface
-          - -framework MediaPlayer
-          - -framework Security
-          - -framework AVFoundation
-          - -framework CoreMotion
+        OTHER_LDFLAGS: *ldflags
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_ENTITLEMENTS: macOS/PlaiY.entitlements
+
+  PlaiY-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Shared
+        type: group
+      - path: iOS
+        type: group
+      - path: ../core/platform/apple/metal_shaders.metal
+        type: file
+        buildPhase: sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plaiy.app
+        PRODUCT_NAME: PlaiY
+        INFOPLIST_FILE: iOS/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: BridgingHeader.h
+        IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        HEADER_SEARCH_PATHS:
+          - $(PROJECT_DIR)/../core/include
+          - $(PROJECT_DIR)/../deps/ios/include
+        LIBRARY_SEARCH_PATHS:
+          - $(PROJECT_DIR)/../build/ios-Debug/core
+          - $(PROJECT_DIR)/../build/ios-Release/core
+          - $(PROJECT_DIR)/../deps/ios/lib
+        OTHER_LDFLAGS: *ldflags
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_ENTITLEMENTS: iOS/PlaiY.entitlements
+
+  PlaiY-tvOS:
+    type: application
+    platform: tvOS
+    sources:
+      - path: Shared
+        type: group
+      - path: tvOS
+        type: group
+      - path: ../core/platform/apple/metal_shaders.metal
+        type: file
+        buildPhase: sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plaiy.app.tv
+        PRODUCT_NAME: PlaiY
+        INFOPLIST_FILE: tvOS/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: BridgingHeader.h
+        TVOS_DEPLOYMENT_TARGET: "26.0"
+        HEADER_SEARCH_PATHS:
+          - $(PROJECT_DIR)/../core/include
+          - $(PROJECT_DIR)/../deps/tvos/include
+        LIBRARY_SEARCH_PATHS:
+          - $(PROJECT_DIR)/../build/tvos-Debug/core
+          - $(PROJECT_DIR)/../build/tvos-Release/core
+          - $(PROJECT_DIR)/../deps/tvos/lib
+        OTHER_LDFLAGS: *ldflags
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_ENTITLEMENTS: tvOS/PlaiY.entitlements

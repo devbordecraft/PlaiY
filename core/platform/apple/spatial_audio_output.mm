@@ -1,6 +1,5 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMotion/CoreMotion.h>
-#import <CoreAudio/CoreAudio.h>
 #import <AudioToolbox/AudioToolbox.h>
 
 #include "spatial_audio_output.h"

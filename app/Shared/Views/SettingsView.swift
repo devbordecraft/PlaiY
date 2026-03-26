@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -7,6 +8,10 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var libraryVM: LibraryViewModel
     let onDismiss: () -> Void
+
+    #if os(iOS)
+    @State private var showFolderPicker = false
+    #endif
 
     private static let languageCodes = ["", "eng", "jpn", "fra", "deu", "spa", "ita", "por",
                                          "rus", "kor", "zho", "ara", "hin", "tha", "pol", "tur",
@@ -72,7 +77,9 @@ struct SettingsView: View {
                 }
             }
 
+            #if os(macOS)
             Toggle("Audio Passthrough", isOn: $settings.audioPassthrough)
+            #endif
         }
     }
 
@@ -135,12 +142,24 @@ struct SettingsView: View {
                 }
             }
 
+            #if !os(tvOS)
             Button {
                 pickFolder()
             } label: {
                 Label("Add Folder", systemImage: "plus")
             }
+            #endif
         }
+        #if os(iOS)
+        .fileImporter(isPresented: $showFolderPicker,
+                      allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result {
+                guard url.startAccessingSecurityScopedResource() else { return }
+                libraryVM.addFolder(url.path)
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        #endif
     }
 
     // MARK: - Folder Picker
@@ -156,6 +175,8 @@ struct SettingsView: View {
         if panel.runModal() == .OK, let url = panel.url {
             libraryVM.addFolder(url.path)
         }
+        #elseif os(iOS)
+        showFolderPicker = true
         #endif
     }
 }
