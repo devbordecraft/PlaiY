@@ -38,8 +38,8 @@ final class PlaybackTransport {
     // Written by PlayerViewModel, read by MetalViewCoordinator to manage display link rate
     nonisolated(unsafe) var isPlaying: Bool = false
 
-    // Seek preview (written by thumb queue, read by controls view)
-    nonisolated(unsafe) var seekPreviewImage: CGImage?
+    // Seek preview (written on MainActor via DispatchQueue.main.async, read by controls view)
+    var seekPreviewImage: CGImage?
 
     // Interaction flags (written by controls, read by auto-hide timer)
     var isHoveringTimeline = false

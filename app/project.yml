@@ -10,7 +10,7 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: "6.3"
 
 # Shared linker flags for all Apple platforms
 _ldflags: &ldflags

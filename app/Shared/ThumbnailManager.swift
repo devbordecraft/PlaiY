@@ -6,8 +6,8 @@ import AppKit
 import UIKit
 #endif
 
-class ThumbnailManager {
-    nonisolated(unsafe) static let shared = ThumbnailManager()
+final class ThumbnailManager: @unchecked Sendable {
+    static let shared = ThumbnailManager()
 
     private let cacheDir: URL
     private let queue = OperationQueue()
