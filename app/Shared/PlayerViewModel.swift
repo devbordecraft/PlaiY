@@ -35,6 +35,9 @@ final class PlaybackTransport {
     nonisolated(unsafe) var pendingCropDetection = false
     nonisolated(unsafe) var onCropDetected: (@Sendable (CropInsets) -> Void)?
 
+    // Written by PlayerViewModel, read by MetalViewCoordinator to manage display link rate
+    nonisolated(unsafe) var isPlaying: Bool = false
+
     // Seek preview (written by thumb queue, read by controls view)
     nonisolated(unsafe) var seekPreviewImage: CGImage?
 
@@ -199,11 +202,13 @@ class PlayerViewModel: ObservableObject {
     func play() {
         bridge.play()
         isPlaying = true
+        transport.isPlaying = true
     }
 
     func pause() {
         bridge.pause()
         isPlaying = false
+        transport.isPlaying = false
     }
 
     func togglePlayPause() {
@@ -273,6 +278,7 @@ class PlayerViewModel: ObservableObject {
         bridge.cancelSeekThumbnails()
         bridge.stop()
         isPlaying = false
+        transport.isPlaying = false
         currentPosition = 0
         transport.currentPosition = 0
         playbackSpeed = 1.0
@@ -299,6 +305,7 @@ class PlayerViewModel: ObservableObject {
         // End-of-stream detection (only @Published fire here)
         if bridge.state == PY_STATE_STOPPED.rawValue {
             isPlaying = false
+            transport.isPlaying = false
             playbackEnded = true
             return
         }

@@ -1,4 +1,5 @@
 #include "plaiy/clock.h"
+#include <thread>
 
 namespace py {
 
@@ -21,9 +22,9 @@ void Clock::end_write() {
 Clock::State Clock::read_state() const {
     State s;
     uint32_t seq0, seq1;
+    int retries = 0;
     do {
         seq0 = seq_.load(std::memory_order_acquire);
-        // Copy the state snapshot
         s.audio_pts_us = state_.audio_pts_us;
         s.last_update  = state_.last_update;
         s.paused       = state_.paused;
@@ -31,6 +32,9 @@ Clock::State Clock::read_state() const {
         s.rate         = state_.rate;
         std::atomic_thread_fence(std::memory_order_acquire);
         seq1 = seq_.load(std::memory_order_relaxed);
+        if ((seq0 != seq1 || (seq0 & 1)) && ++retries > 2) {
+            std::this_thread::yield();
+        }
     } while (seq0 != seq1 || (seq0 & 1));
     return s;
 }

@@ -79,46 +79,25 @@ float3 hlgEOTF(float3 hlg) {
     float b = 0.28466892;
     float c = 0.55991073;
 
-    float3 linear;
-    for (int i = 0; i < 3; i++) {
-        float v = hlg[i];
-        if (v <= 0.5) {
-            linear[i] = (v * v) / 3.0;
-        } else {
-            linear[i] = (exp((v - c) / a) + b) / 12.0;
-        }
-    }
-    return linear * 1000.0; // HLG reference white ~1000 cd/m2
+    float3 low  = (hlg * hlg) / 3.0;
+    float3 high = (exp((hlg - c) / a) + b) / 12.0;
+    return mix(low, high, step(float3(0.5), hlg)) * 1000.0; // HLG reference white ~1000 cd/m2
 }
 
 // sRGB/BT.709 gamma encode (linear -> gamma)
 float3 srgbGamma(float3 linear) {
-    float3 result;
-    for (int i = 0; i < 3; i++) {
-        float v = linear[i];
-        if (v <= 0.0031308) {
-            result[i] = 12.92 * v;
-        } else {
-            result[i] = 1.055 * pow(v, 1.0 / 2.4) - 0.055;
-        }
-    }
-    return result;
+    float3 low  = 12.92 * linear;
+    float3 high = 1.055 * pow(linear, float3(1.0 / 2.4)) - 0.055;
+    return mix(low, high, step(float3(0.0031308), linear));
 }
 
 // sRGB/BT.709 inverse gamma (gamma-encoded -> linear)
 // Needed because CAMetalLayer uses extendedLinearDisplayP3 colorspace,
 // so all shader output must be linear light.
 float3 srgbToLinear(float3 srgb) {
-    float3 result;
-    for (int i = 0; i < 3; i++) {
-        float v = srgb[i];
-        if (v <= 0.04045) {
-            result[i] = v / 12.92;
-        } else {
-            result[i] = pow((v + 0.055) / 1.055, 2.4);
-        }
-    }
-    return result;
+    float3 low  = srgb / 12.92;
+    float3 high = pow((srgb + 0.055) / 1.055, float3(2.4));
+    return mix(low, high, step(float3(0.04045), srgb));
 }
 
 // Tone mapping for HDR content: maps linear light (cd/m2) to EDR output [0, edrHeadroom].
@@ -129,19 +108,11 @@ float3 hdrToneMap(float3 linearCdm2, float sdrWhite, float maxLum, float edrHead
     float3 x = linearCdm2 / sdrWhite;
     float peak = edrHeadroom;
 
-    float3 mapped;
-    for (int i = 0; i < 3; i++) {
-        float v = x[i];
-        if (v <= 1.0) {
-            // SDR range: pass through linearly (preserves SDR content perfectly)
-            mapped[i] = v;
-        } else {
-            // HDR range: compress [1, inf) -> [1, peak) using Reinhard on the excess
-            float excess = v - 1.0;
-            float headroom = peak - 1.0;
-            mapped[i] = 1.0 + headroom * excess / (excess + headroom);
-        }
-    }
+    // SDR range (v <= 1): pass through. HDR range (v > 1): Reinhard on excess.
+    float headroom = peak - 1.0;
+    float3 excess = x - 1.0;
+    float3 compressed = 1.0 + headroom * excess / (excess + headroom);
+    float3 mapped = mix(x, compressed, step(float3(1.0), x));
 
     return clamp(mapped, 0.0, peak);
 }
@@ -360,6 +331,8 @@ fragment float4 fragmentBiplanar(
         }
     }
     // Apply transfer function and tone mapping
+    float sdrWhite = max(uniforms.sdrWhite, 1.0);
+
     if (uniforms.transferFunc == 1) {
         // PQ content (HDR10 / HDR10+ / Dolby Vision)
         rgb = clamp(rgb, 0.0, 1.0);
@@ -377,7 +350,6 @@ fragment float4 fragmentBiplanar(
                                      doviUniforms.pivots[2], doviUniforms.polyOrder[2],
                                      doviUniforms.polyCoef[2]);
             float3 linear = pqEOTF(reshaped);
-            float sdrWhite = max(uniforms.sdrWhite, 1.0);
 
             // Apply DV trim parameters (L2): colorist's mastering intent
             linear = doviTrimSOP(linear, doviUniforms.trimSlope,
@@ -402,7 +374,6 @@ fragment float4 fragmentBiplanar(
             }
             // Bezier output is PQ-normalized for target display; apply EOTF
             float3 linear = pqEOTF(norm);
-            float sdrWhite = max(uniforms.sdrWhite, 1.0);
 
             // Use per-frame maxscl for scene-adaptive tone mapping
             float sceneMax = max(max(uniforms.maxscl[0], uniforms.maxscl[1]),
@@ -412,7 +383,6 @@ fragment float4 fragmentBiplanar(
         } else {
             // Static HDR10: BT.2390 EETF
             float3 linear = pqEOTF(rgb);
-            float sdrWhite = max(uniforms.sdrWhite, 1.0);
             float maxLum = max(uniforms.maxLuminance, 1000.0);
 
             // Convert source max luminance to PQ for BT.2390
@@ -435,7 +405,6 @@ fragment float4 fragmentBiplanar(
         // HLG: same clamp needed
         rgb = clamp(rgb, 0.0, 1.0);
         float3 linear = hlgEOTF(rgb);
-        float sdrWhite = max(uniforms.sdrWhite, 1.0);
         float maxLum = max(uniforms.maxLuminance, 1000.0);
         rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
     } else {

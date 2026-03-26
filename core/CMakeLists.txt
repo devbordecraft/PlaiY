@@ -72,6 +72,19 @@ add_library(plaiy_core STATIC ${CORE_SOURCES})
 
 target_compile_options(plaiy_core PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
 
+target_precompile_headers(plaiy_core PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:cstdint>"
+    "$<$<COMPILE_LANGUAGE:CXX>:cstdarg>"
+    "$<$<COMPILE_LANGUAGE:CXX>:string>"
+    "$<$<COMPILE_LANGUAGE:CXX>:vector>"
+    "$<$<COMPILE_LANGUAGE:CXX>:memory>"
+    "$<$<COMPILE_LANGUAGE:CXX>:atomic>"
+    "$<$<COMPILE_LANGUAGE:CXX>:mutex>"
+    "$<$<COMPILE_LANGUAGE:CXX>:thread>"
+    "$<$<COMPILE_LANGUAGE:CXX>:chrono>"
+    "$<$<COMPILE_LANGUAGE:CXX>:functional>"
+)
+
 target_include_directories(plaiy_core
     PUBLIC include
     PRIVATE src

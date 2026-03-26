@@ -22,7 +22,7 @@ public:
     void set_pts_only_output(bool enabled);
 
 private:
-    void fill_frame(const AVFrame* av_frame, VideoFrame& out);
+    bool fill_frame(const AVFrame* av_frame, VideoFrame& out);
 
     AVCodecContext* codec_ctx_ = nullptr;
     AVFrame* av_frame_ = nullptr;

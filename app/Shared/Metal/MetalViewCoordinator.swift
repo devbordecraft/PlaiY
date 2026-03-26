@@ -96,6 +96,17 @@ class MetalViewCoordinator {
     // setting CAEDRMetadata on every frame.
     private var currentHDRMode: Int32 = -1 // -1 = unset, 0 = SDR, 1 = PQ, 2 = HLG
 
+    // Cached EDR headroom — updated on screen change instead of per-frame
+    private var cachedEDRHeadroom: Float = 1.0
+    private var screenObserver: NSObjectProtocol?
+
+    // Periodic texture cache flush counter
+    private var framesSinceFlush: Int = 0
+
+    // Display link rate management — drop to 4fps when paused to save power
+    private weak var mtkView: MTKView?
+    private var wasPlaying = true
+
     init(playerBridge: PlayerBridge, transport: PlaybackTransport, mtkView: MTKView) {
         guard let device = mtkView.device,
               let commandQueue = device.makeCommandQueue() else {
@@ -111,7 +122,30 @@ class MetalViewCoordinator {
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
         self.textureCache = cache
 
+        self.mtkView = mtkView
         setupPipeline(mtkView: mtkView)
+
+        #if os(macOS)
+        updateEDRHeadroom(window: mtkView.window)
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                self?.updateEDRHeadroom(window: nil)
+            }
+        #endif
+    }
+
+    deinit {
+        if let obs = screenObserver { NotificationCenter.default.removeObserver(obs) }
+    }
+
+    private func updateEDRHeadroom(window: NSWindow?) {
+        #if os(macOS)
+        let screen = window?.screen ?? NSScreen.main
+        cachedEDRHeadroom = Float(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1.0)
+        #else
+        cachedEDRHeadroom = Float(UIScreen.main.currentEDRHeadroom)
+        #endif
     }
 
     private func setupPipeline(mtkView: MTKView) {
@@ -155,6 +189,11 @@ class MetalViewCoordinator {
         // internal clock directly. Passing 0 avoids a redundant Clock mutex
         // acquisition on every display-link tick (120Hz).
         guard let framePtr = playerBridge.acquireVideoFrame(targetPts: 0) else {
+            // Release textures so IOSurface-backed buffers are freed after stop
+            if activeYTexture != nil {
+                activeYTexture = nil
+                activeUVTexture = nil
+            }
             lastRenderedPts = Int64.min
             guard let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor else { return }
@@ -172,6 +211,19 @@ class MetalViewCoordinator {
             return
         }
         lastRenderedPts = currentPts
+
+        // Adjust display link rate when playback state changes.
+        // Drop to 4fps when paused to save power; restore full rate on play.
+        let isPlaying = transport.isPlaying
+        if isPlaying != wasPlaying {
+            wasPlaying = isPlaying
+            #if os(macOS)
+            let fps = isPlaying ? (mtkView?.window?.screen?.maximumFramesPerSecond ?? 120) : 4
+            #else
+            let fps = isPlaying ? UIScreen.main.maximumFramesPerSecond : 4
+            #endif
+            mtkView?.preferredFramesPerSecond = fps
+        }
 
         // Get CVPixelBuffer from the frame
         guard let pixelBuffer = PlayerBridge.framePixelBuffer(framePtr) else {
@@ -254,15 +306,16 @@ class MetalViewCoordinator {
             uniforms.maxLuminance = max(uniforms.maxLuminance, Float(maxCLL))
         }
 
-        // Query EDR headroom from the display.
+        // Use cached EDR headroom (updated on screen change, not per-frame).
+        // Refresh the cache if the window just became available.
         #if os(macOS)
-        if let screen = view.window?.screen {
-            uniforms.edrHeadroom = Float(screen.maximumPotentialExtendedDynamicRangeColorComponentValue)
+        if cachedEDRHeadroom <= 1.0, let window = view.window {
+            updateEDRHeadroom(window: window)
         }
         #else
-        uniforms.edrHeadroom = Float(UIScreen.main.currentEDRHeadroom)
+        cachedEDRHeadroom = Float(UIScreen.main.currentEDRHeadroom)
         #endif
-        uniforms.edrHeadroom = max(uniforms.edrHeadroom, 1.0)
+        uniforms.edrHeadroom = max(cachedEDRHeadroom, 1.0)
 
         // Populate HDR10+ per-frame dynamic metadata
         if PlayerBridge.frameHasHDR10Plus(framePtr) {
@@ -430,6 +483,13 @@ class MetalViewCoordinator {
 
         commandBuffer.present(drawable)
         commandBuffer.commit()
+
+        // Periodically flush the texture cache to release unused textures
+        framesSinceFlush += 1
+        if framesSinceFlush >= 300 {
+            framesSinceFlush = 0
+            CVMetalTextureCacheFlush(textureCache, 0)
+        }
     }
 
     private func computeViewport(

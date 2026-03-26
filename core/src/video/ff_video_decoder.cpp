@@ -179,12 +179,16 @@ Error FFVideoDecoder::receive_frame(VideoFrame& out) {
         return Error::Ok();
     }
 
-    fill_frame(av_frame_, out);
+    if (!fill_frame(av_frame_, out)) {
+        out = VideoFrame{};
+        av_frame_unref(av_frame_);
+        return {ErrorCode::DecoderError, "fill_frame failed"};
+    }
     av_frame_unref(av_frame_);
     return Error::Ok();
 }
 
-void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
+bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     out.width = av_frame->width;
     out.height = av_frame->height;
     out.hardware_frame = false;
@@ -209,6 +213,10 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     out.hdr_metadata = track_info_.hdr_metadata;
     out.sar_num = track_info_.sar_num;
     out.sar_den = track_info_.sar_den;
+
+    // Extract per-frame dynamic metadata (HDR10+ / Dolby Vision).
+    // Skip entirely for SDR content — the side data calls are wasted work.
+    if (track_info_.hdr_metadata.type != HDRType::SDR) {
 
     // Extract HDR10+ per-frame dynamic metadata
     {
@@ -296,6 +304,8 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
         }
     }
 
+    } // HDR metadata extraction
+
 #ifdef __APPLE__
     // On Apple, wrap the decoded frame in a CVPixelBuffer so the Metal
     // renderer can create textures from it. The renderer only handles
@@ -355,7 +365,7 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
         if (ret != kCVReturnSuccess || !pool) {
             PY_LOG_ERROR(TAG, "CVPixelBufferPoolCreate failed: %d", ret);
             cv_pool_ = nullptr;
-            return;
+            return false;
         }
         cv_pool_ = pool;
         pool_width_ = av_frame->width;
@@ -368,7 +378,7 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
 
     if (cvret != kCVReturnSuccess || !pixel_buffer) {
         PY_LOG_ERROR(TAG, "CVPixelBufferPoolCreatePixelBuffer failed: %d", cvret);
-        return;
+        return false;
     }
 
     CVPixelBufferLockBaseAddress(pixel_buffer, 0);
@@ -404,7 +414,7 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
             CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
             CVPixelBufferRelease(pixel_buffer);
             PY_LOG_WARN(TAG, "sws_scale failed: %d", sws_ret);
-            return;
+            return false;
         }
     }
 
@@ -445,6 +455,7 @@ void FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
         dst += plane_size;
     }
 #endif
+    return true;
 }
 
 } // namespace py

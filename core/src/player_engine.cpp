@@ -128,7 +128,7 @@ struct PlayerEngine::Impl {
 
     // For seek
     std::atomic<bool> seeking{false};
-    int64_t seek_target_us = 0;
+    std::atomic<int64_t> seek_target_us{0};
 
     // For audio track switching
     std::atomic<bool> audio_track_changed{false};
@@ -232,7 +232,7 @@ void PlayerEngine::play() {
     auto s = impl_->state.load();
     if (s != PlaybackState::Ready && s != PlaybackState::Paused) return;
 
-    if (!impl_->running.load()) {
+    if (!impl_->running.load(std::memory_order_relaxed)) {
         // Start threads
         impl_->running.store(true);
         impl_->video_packet_queue.reset();
@@ -249,7 +249,7 @@ void PlayerEngine::play() {
         // of 0 so the clock matches where the demuxer will seek to.
         if (impl_->active_video_stream >= 0) {
             impl_->waiting_for_first_frame.store(true);
-            int64_t start_pts = impl_->seeking.load() ? impl_->seek_target_us : 0;
+            int64_t start_pts = impl_->seeking.load(std::memory_order_relaxed) ? impl_->seek_target_us.load(std::memory_order_relaxed) : 0;
             impl_->clock.seek_to(start_pts);
         }
     }
@@ -268,7 +268,7 @@ void PlayerEngine::pause() {
 }
 
 void PlayerEngine::seek(int64_t timestamp_us) {
-    impl_->seek_target_us = timestamp_us;
+    impl_->seek_target_us.store(timestamp_us, std::memory_order_relaxed);
     impl_->seeking.store(true);
 
     // Freeze clock and hold audio until the video renderer presents its first
@@ -941,10 +941,10 @@ void PlayerEngine::set_error_callback(ErrorCallback cb) {
 void PlayerEngine::Impl::demux_loop() {
     PY_LOG_INFO(TAG, "Demux thread started");
 
-    while (running.load()) {
+    while (running.load(std::memory_order_relaxed)) {
         // Handle seek
-        if (seeking.load()) {
-            demuxer->seek(seek_target_us);
+        if (seeking.load(std::memory_order_relaxed)) {
+            demuxer->seek(seek_target_us.load(std::memory_order_relaxed));
 
             // Flush subtitles again after demuxer has seeked, to discard any
             // stale packets that were fed between the main thread's flush and
@@ -1014,7 +1014,7 @@ void PlayerEngine::Impl::video_decode_loop() {
     // queue is full (the moved-from VideoFrame is destroyed). This caused
     // periodic stuttering every ~2 seconds.
     auto drain_frames = [&]() -> bool {
-        while (running.load()) {
+        while (running.load(std::memory_order_relaxed)) {
             VideoFrame frame;
             Error err = video_decoder->receive_frame(frame);
             if (err.code == ErrorCode::OutputNotReady) break;
@@ -1025,7 +1025,7 @@ void PlayerEngine::Impl::video_decode_loop() {
             }
 
             if (skip_to_target) {
-                if (frame.pts_us < seek_target_us) continue;
+                if (frame.pts_us < seek_target_us.load(std::memory_order_relaxed)) continue;
                 skip_to_target = false;
                 video_decoder->set_skip_mode(false);
                 if (frame.pts_only) continue; // PTS-only from skip mode; next will be full
@@ -1039,7 +1039,7 @@ void PlayerEngine::Impl::video_decode_loop() {
         return true;
     };
 
-    while (running.load()) {
+    while (running.load(std::memory_order_relaxed)) {
         // Drain any frames completed by the async decoder from previous iterations.
         // This is critical for VT: after send_packet, the GPU decodes asynchronously
         // and frames arrive via callback. We must collect them before blocking on
@@ -1068,7 +1068,7 @@ void PlayerEngine::Impl::video_decode_loop() {
             video_decoder->flush();
             video_frame_queue.flush();
             skip_to_target = true;
-            video_decoder->set_seek_target(seek_target_us);
+            video_decoder->set_seek_target(seek_target_us.load(std::memory_order_relaxed));
             video_decoder->set_skip_mode(true);
             continue;
         }
@@ -1119,12 +1119,12 @@ void PlayerEngine::Impl::audio_decode_loop() {
     std::vector<float> resample_buf; // reused across frames
     AudioTempoFilter tempo_filter;
 
-    while (running.load()) {
+    while (running.load(std::memory_order_relaxed)) {
         Packet pkt;
         if (!audio_packet_queue.pop(pkt)) break;
 
         // Handle speed change from the main thread
-        if (speed_changed.load()) {
+        if (speed_changed.load(std::memory_order_relaxed)) {
             speed_changed.store(false);
             double new_speed = playback_speed.load();
             tempo_filter.close();
@@ -1140,7 +1140,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
             }
             tempo_filter.flush();
 
-            if (audio_track_changed.load()) {
+            if (audio_track_changed.load(std::memory_order_relaxed)) {
                 audio_track_changed.store(false);
 
                 int new_stream;
@@ -1216,7 +1216,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
         if (send_ret < 0 && send_ret != AVERROR(EAGAIN)) continue;
 
         // Drain all available decoded frames
-        while (running.load()) {
+        while (running.load(std::memory_order_relaxed)) {
             int ret = avcodec_receive_frame(ctx, av_frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
@@ -1230,6 +1230,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                     break;
                 }
                 resampler_initialized = true;
+                resample_buf.reserve(static_cast<size_t>(out_rate) * static_cast<size_t>(out_channels) / 10); // 100ms
                 // Init tempo filter if speed != 1.0
                 double spd = playback_speed.load();
                 if (std::abs(spd - 1.0) > 0.001) {
@@ -1246,7 +1247,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
             // After seek, skip audio before the target so the clock
             // unfreezes at the right position instead of jumping backward.
             if (skip_to_target) {
-                if (pts_us < seek_target_us) {
+                if (pts_us < seek_target_us.load(std::memory_order_relaxed)) {
                     av_frame_unref(av_frame);
                     continue;
                 }
@@ -1264,10 +1265,10 @@ void PlayerEngine::Impl::audio_decode_loop() {
                     std::unique_lock lock(audio_ring_flush_mutex);
                     audio_ring_not_full.wait(lock, [&] {
                         return audio_ring.available_write() >= to_write ||
-                               !running.load() || audio_restart_requested.load();
+                               !running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed);
                     });
                 }
-                if (!running.load() || audio_restart_requested.load()) return;
+                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) return;
 
                 audio_ring.write(resample_buf.data(), to_write);
 
@@ -1278,7 +1279,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
             // Route through tempo filter if active, otherwise direct resample
             if (tempo_filter.tempo() != 1.0) {
                 tempo_filter.send_frame(av_frame);
-                while (running.load()) {
+                while (running.load(std::memory_order_relaxed)) {
                     int tret = tempo_filter.receive_frame(tempo_frame);
                     if (tret < 0) break;
 
@@ -1342,7 +1343,9 @@ void PlayerEngine::Impl::passthrough_write_loop() {
 
     if (!audio_output) return;
 
-    while (running.load()) {
+    std::vector<uint8_t> mat_buf;
+
+    while (running.load(std::memory_order_relaxed)) {
         Packet pkt;
         if (!audio_packet_queue.pop(pkt)) break;
 
@@ -1354,7 +1357,7 @@ void PlayerEngine::Impl::passthrough_write_loop() {
                 passthrough_ring_size = 0;
             }
 
-            if (audio_track_changed.load()) {
+            if (audio_track_changed.load(std::memory_order_relaxed)) {
                 audio_track_changed.store(false);
                 PY_LOG_WARN(TAG, "Track change during passthrough — exiting passthrough loop");
                 break;
@@ -1368,7 +1371,7 @@ void PlayerEngine::Impl::passthrough_write_loop() {
         // For TrueHD, run through MAT framer for HDMI encapsulation
         const uint8_t* write_data = pkt.data.data();
         size_t write_size = pkt.data.size();
-        std::vector<uint8_t> mat_buf;
+        mat_buf.clear();
         if (mat_framer) {
             auto mat_err = mat_framer->frame_packet(pkt.data.data(), pkt.data.size(), pkt.pts, mat_buf);
             if (mat_err) {
@@ -1393,9 +1396,9 @@ void PlayerEngine::Impl::passthrough_write_loop() {
 
             audio_ring_not_full.wait(lock, [&] {
                 return passthrough_ring_size + to_write <= capacity ||
-                       !running.load() || audio_restart_requested.load();
+                       !running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed);
             });
-            if (!running.load() || audio_restart_requested.load()) break;
+            if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) break;
 
             const uint8_t* src = write_data;
             size_t first_chunk = std::min(to_write, capacity - passthrough_ring_write);

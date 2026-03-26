@@ -208,7 +208,7 @@ void DVSeekDecoder::transition_to_ff_replay() {
 
     // Flush VT after the replay loop so the WaitForAsynchronousFrames call
     // overlaps with the FFmpeg send_packet work above, reducing total latency.
-    vt_decoder_->flush();
+    if (vt_decoder_) vt_decoder_->flush();
 
     mode_ = Mode::FFReplay;
 }
