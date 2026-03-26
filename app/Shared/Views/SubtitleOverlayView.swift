@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SubtitleOverlayView: View {
     @EnvironmentObject var settings: AppSettings
-    let transport: PlaybackTransport
+    let subtitle: SubtitleData?
 
     // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
     @MainActor private static var cachedDataHash: Int = 0
@@ -16,7 +16,7 @@ struct SubtitleOverlayView: View {
         VStack {
             Spacer()
 
-            if let subtitle = transport.currentSubtitle {
+            if let subtitle = subtitle {
                 switch subtitle {
                 case .text(let text):
                     Text(text)

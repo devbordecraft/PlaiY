@@ -52,10 +52,10 @@ final class PlaybackTransport {
         isHoveringTimeline || isDraggingTimeline || isHoveringVolume || isHoveringControls
     }
 
-    /// True only when the user is actively scrubbing the timeline.
+    /// True only when the user is actively dragging the timeline.
     /// Used by tick() to avoid overwriting the scrub position.
     var isScrubbing: Bool {
-        isHoveringTimeline || isDraggingTimeline
+        isDraggingTimeline
     }
 
     var positionFraction: Double {
@@ -345,11 +345,14 @@ class PlayerViewModel: ObservableObject {
     func selectSubtitleTrack(streamIndex: Int) {
         bridge.selectSubtitleTrack(Int32(streamIndex))
         activeSubtitleStream = streamIndex
+        // Force immediate subtitle refresh so the user sees the result
+        transport.currentSubtitle = bridge.getSubtitle(at: bridge.position)
     }
 
     func disableSubtitles() {
         bridge.selectSubtitleTrack(-1)
         activeSubtitleStream = -1
+        transport.currentSubtitle = nil
     }
 
     func setPassthrough(_ enabled: Bool) {

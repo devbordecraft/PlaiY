@@ -124,7 +124,7 @@ struct PlayerEngine::Impl {
     // Track indices
     int active_video_stream = -1;
     int active_audio_stream = -1;
-    int active_subtitle_stream = -1;
+    std::atomic<int> active_subtitle_stream{-1};
 
     // For seek
     std::atomic<bool> seeking{false};
@@ -408,12 +408,20 @@ void PlayerEngine::select_audio_track(int stream_index) {
 }
 
 void PlayerEngine::select_subtitle_track(int stream_index) {
-    impl_->active_subtitle_stream = stream_index;
+    // Disable routing first so the demux thread stops feeding the old track
+    impl_->active_subtitle_stream.store(-1, std::memory_order_release);
+
+    // Flush stale state from the previous track
+    impl_->subtitle_manager->flush();
+
     if (stream_index >= 0 && stream_index < static_cast<int>(impl_->media_info.tracks.size())) {
         impl_->subtitle_manager->set_embedded_track(impl_->media_info.tracks[static_cast<size_t>(stream_index)]);
     } else {
         impl_->subtitle_manager->close();
     }
+
+    // Enable routing for the new track
+    impl_->active_subtitle_stream.store(stream_index, std::memory_order_release);
 }
 
 int PlayerEngine::audio_track_count() const {
@@ -437,7 +445,7 @@ int PlayerEngine::active_audio_stream() const {
 }
 
 int PlayerEngine::active_subtitle_stream() const {
-    return impl_->active_subtitle_stream;
+    return impl_->active_subtitle_stream.load(std::memory_order_relaxed);
 }
 
 void PlayerEngine::setup_audio_output(const TrackInfo& track) {
@@ -942,7 +950,7 @@ void PlayerEngine::Impl::demux_loop() {
     PY_LOG_INFO(TAG, "Demux thread started");
 
     while (running.load(std::memory_order_relaxed)) {
-        // Handle seek
+        // Handle full seek
         if (seeking.load(std::memory_order_relaxed)) {
             demuxer->seek(seek_target_us.load(std::memory_order_relaxed));
 
@@ -991,7 +999,7 @@ void PlayerEngine::Impl::demux_loop() {
             if (!video_packet_queue.push(std::move(pkt))) break;
         } else if (pkt.stream_index == active_audio_stream) {
             if (!audio_packet_queue.push(std::move(pkt))) break;
-        } else if (pkt.stream_index == active_subtitle_stream) {
+        } else if (pkt.stream_index == active_subtitle_stream.load(std::memory_order_acquire)) {
             subtitle_manager->feed_packet(pkt);
         }
     }

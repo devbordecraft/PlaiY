@@ -47,8 +47,15 @@ void DVSeekDecoder::close() {
 }
 
 void DVSeekDecoder::flush() {
-    if (ff_decoder_) ff_decoder_->flush();
-    if (vt_decoder_) vt_decoder_->flush();
+    // Defer FFmpeg flush to transition_to_ff_replay() where it's actually needed.
+    // Only flush FFmpeg here when VT is unavailable (FFmpeg handles skip-to-target).
+    if (!vt_decoder_ && ff_decoder_) ff_decoder_->flush();
+
+    // Lightweight clear: don't block on WaitForAsynchronousFrames.
+    // Stale VT callback frames will have PTS < seek_target and get discarded
+    // by the VTSeekSkip receive_frame logic.
+    if (vt_decoder_) vt_decoder_->clear_frames();
+
     replay_buffer_.clear();
     mode_ = Mode::Normal;
 }
@@ -66,6 +73,7 @@ void DVSeekDecoder::set_seek_target(int64_t target_pts_us) {
 void DVSeekDecoder::set_skip_mode(bool skip) {
     if (skip) {
         replay_buffer_.clear();
+        frame_duration_us_ = 0;
         if (vt_decoder_) {
             // Use VT for fast hardware skip-to-target
             mode_ = Mode::VTSeekSkip;
@@ -84,6 +92,10 @@ void DVSeekDecoder::set_skip_mode(bool skip) {
         if (mode_ == Mode::Normal) {
             // Was using FFmpeg fallback path
             ff_decoder_->set_skip_mode(false);
+        } else if (mode_ == Mode::FFReplay) {
+            // Don't interrupt FFReplay — it will transition to Normal
+            // after draining the target frame with correct RPU.
+            return;
         }
         mode_ = Mode::Normal;
     }
@@ -106,11 +118,20 @@ Error DVSeekDecoder::send_packet(const Packet& pkt) {
             return ff_decoder_->send_packet(pkt);
         }
 
-        // Buffer the packet for potential FFmpeg replay
         if (!pkt.is_flush) {
-            replay_buffer_.push_back(pkt);  // copies the packet
-            if (replay_buffer_.size() > REPLAY_BUFFER_SIZE) {
+            // Keyframe-anchored: reset buffer on each keyframe so FFmpeg
+            // replay always starts from a decodable reference point.
+            if (pkt.is_keyframe) {
+                replay_buffer_.clear();
+            }
+            replay_buffer_.push_back(pkt);
+            if (replay_buffer_.size() > MAX_REPLAY_PACKETS) {
                 replay_buffer_.pop_front();
+            }
+
+            // Capture frame duration for RPU margin calculation
+            if (frame_duration_us_ == 0 && pkt.duration > 0 && pkt.time_base_den > 0) {
+                frame_duration_us_ = pkt.duration * 1000000LL * pkt.time_base_num / pkt.time_base_den;
             }
         }
         return Error::Ok();
@@ -125,8 +146,13 @@ Error DVSeekDecoder::send_packet(const Packet& pkt) {
 
 Error DVSeekDecoder::receive_frame(VideoFrame& out) {
     switch (mode_) {
-    case Mode::Normal:
-        return ff_decoder_->receive_frame(out);
+    case Mode::Normal: {
+        Error err = ff_decoder_->receive_frame(out);
+        if (!err && out.dovi.present) {
+            last_rpu_ = out.dovi;
+        }
+        return err;
+    }
 
     case Mode::VTSeekSkip: {
         // Drain VT frames, checking PTS
@@ -143,9 +169,20 @@ Error DVSeekDecoder::receive_frame(VideoFrame& out) {
             PY_LOG_DEBUG(TAG, "VT found target: frame PTS=%lld >= target=%lld",
                          static_cast<long long>(out.pts_us),
                          static_cast<long long>(seek_target_us_));
-            transition_to_ff_replay();
 
-            // Drain FFmpeg replay frames to find the target
+            if (last_rpu_.present) {
+                // Stamp cached RPU onto VT frame for instant display.
+                // DV metadata changes slowly — this is visually identical
+                // to the correct RPU for same-scene seeks.
+                out.dovi = last_rpu_;
+                PY_LOG_DEBUG(TAG, "Using cached RPU for instant display");
+                transition_to_ff_replay();
+                return Error::Ok();
+            }
+
+            // No cached RPU (first seek after open) — fall back to
+            // waiting for FFmpeg replay to produce the target with RPU.
+            transition_to_ff_replay();
             return receive_frame(out);
         }
 
@@ -164,11 +201,12 @@ Error DVSeekDecoder::receive_frame(VideoFrame& out) {
             Error err = ff_decoder_->receive_frame(out);
             if (err) return err;
 
-            // When approaching the target, disable pts_only so the target
-            // frame itself gets full fill_frame with RPU metadata.
-            // 50ms margin covers ~1-2 frames at any common framerate.
-            if (replay_pts_only_active_ && out.pts_us >= seek_target_us_ - 50000) {
+            // When approaching the target, disable pts_only and fast replay
+            // so the target frame gets full fill_frame with RPU metadata.
+            int64_t margin = frame_duration_us_ > 0 ? frame_duration_us_ : 50000;
+            if (replay_pts_only_active_ && out.pts_us >= seek_target_us_ - margin) {
                 ff_decoder_->set_pts_only_output(false);
+                ff_decoder_->set_fast_replay_mode(false);
                 replay_pts_only_active_ = false;
                 // This frame was decoded as pts_only; discard and continue
                 // so the next frame gets full RPU extraction.
@@ -191,13 +229,11 @@ void DVSeekDecoder::transition_to_ff_replay() {
     PY_LOG_DEBUG(TAG, "Transitioning to FFmpeg replay with %zu buffered packets",
                  replay_buffer_.size());
 
-    // Flush FFmpeg decoder state from before the seek
     ff_decoder_->flush();
     ff_decoder_->set_pts_only_output(true);
+    ff_decoder_->set_fast_replay_mode(true);
     replay_pts_only_active_ = true;
 
-    // Replay buffered packets through FFmpeg for RPU extraction.
-    // VT in-flight GPU work completes concurrently during this loop.
     for (const auto& pkt : replay_buffer_) {
         Error err = ff_decoder_->send_packet(pkt);
         if (err && err.code != ErrorCode::NeedMoreInput) {
@@ -206,9 +242,8 @@ void DVSeekDecoder::transition_to_ff_replay() {
     }
     replay_buffer_.clear();
 
-    // Flush VT after the replay loop so the WaitForAsynchronousFrames call
-    // overlaps with the FFmpeg send_packet work above, reducing total latency.
-    if (vt_decoder_) vt_decoder_->flush();
+    // Lightweight clear — don't block on WaitForAsynchronousFrames.
+    if (vt_decoder_) vt_decoder_->clear_frames();
 
     mode_ = Mode::FFReplay;
 }

@@ -102,6 +102,8 @@ void FFVideoDecoder::close() {
 void FFVideoDecoder::flush() {
     if (codec_ctx_) {
         avcodec_flush_buffers(codec_ctx_);
+        codec_ctx_->skip_loop_filter = AVDISCARD_DEFAULT;
+        codec_ctx_->skip_idct = AVDISCARD_DEFAULT;
     }
     skip_mode_ = false;
     pts_only_output_ = false;
@@ -109,6 +111,17 @@ void FFVideoDecoder::flush() {
 
 void FFVideoDecoder::set_pts_only_output(bool enabled) {
     pts_only_output_ = enabled;
+}
+
+void FFVideoDecoder::set_fast_replay_mode(bool enabled) {
+    if (!codec_ctx_) return;
+    if (enabled) {
+        codec_ctx_->skip_loop_filter = AVDISCARD_ALL;
+        codec_ctx_->skip_idct = AVDISCARD_NONREF;
+    } else {
+        codec_ctx_->skip_loop_filter = AVDISCARD_DEFAULT;
+        codec_ctx_->skip_idct = AVDISCARD_DEFAULT;
+    }
 }
 
 void FFVideoDecoder::set_skip_mode(bool skip) {

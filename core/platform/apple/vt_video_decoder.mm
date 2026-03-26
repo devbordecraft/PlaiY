@@ -209,6 +209,11 @@ void VTVideoDecoder::flush() {
                             codec_id == AV_CODEC_ID_HEVC) ? 4 : 0;
 }
 
+void VTVideoDecoder::clear_frames() {
+    std::lock_guard lock(impl_->frame_mutex);
+    impl_->decoded_frames.clear();
+}
+
 void VTVideoDecoder::drain() {
     // Wait for all in-flight async decodes to complete, then lower the
     // reorder depth so receive_frame emits every remaining buffered frame.

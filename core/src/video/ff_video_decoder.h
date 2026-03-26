@@ -20,6 +20,7 @@ public:
     Error receive_frame(VideoFrame& out) override;
     void set_skip_mode(bool skip) override;
     void set_pts_only_output(bool enabled);
+    void set_fast_replay_mode(bool enabled);
 
 private:
     bool fill_frame(const AVFrame* av_frame, VideoFrame& out);

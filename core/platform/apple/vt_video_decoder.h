@@ -19,6 +19,7 @@ public:
     Error receive_frame(VideoFrame& out) override;
 
     void set_reorder_depth(int depth);
+    void clear_frames();
 
 private:
     struct Impl;

@@ -39,13 +39,17 @@ private:
     std::unique_ptr<FFVideoDecoder> ff_decoder_;
     std::unique_ptr<VTVideoDecoder> vt_decoder_;  // nullptr if VT init fails
 
-    // Packet ring buffer: stores recent packets during VT seek phase
-    // so they can be replayed through FFmpeg for RPU extraction.
-    static constexpr size_t REPLAY_BUFFER_SIZE = 16;
+    // Keyframe-anchored replay buffer: cleared on each keyframe so FFmpeg
+    // replay always starts from a decodable point. Sized for the largest
+    // common HEVC GOP (~5s at 24fps = 120 frames).
+    static constexpr size_t MAX_REPLAY_PACKETS = 128;
     std::deque<Packet> replay_buffer_;
 
     int64_t seek_target_us_ = 0;
+    int64_t frame_duration_us_ = 0;
     bool replay_pts_only_active_ = false;
+
+    DoviMetadata last_rpu_;  // Cached RPU from most recent Normal-mode frame
 
     void transition_to_ff_replay();
 };
