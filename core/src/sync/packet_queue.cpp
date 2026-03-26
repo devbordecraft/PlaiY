@@ -36,6 +36,7 @@ void PacketQueue::flush() {
     total_bytes_ = 0;
     queue_.clear();
     not_full_.notify_all();
+    not_empty_.notify_all();
 }
 
 void PacketQueue::abort() {

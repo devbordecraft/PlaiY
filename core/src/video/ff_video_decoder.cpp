@@ -104,6 +104,11 @@ void FFVideoDecoder::flush() {
         avcodec_flush_buffers(codec_ctx_);
     }
     skip_mode_ = false;
+    pts_only_output_ = false;
+}
+
+void FFVideoDecoder::set_pts_only_output(bool enabled) {
+    pts_only_output_ = enabled;
 }
 
 void FFVideoDecoder::set_skip_mode(bool skip) {
@@ -160,7 +165,7 @@ Error FFVideoDecoder::receive_frame(VideoFrame& out) {
     if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};
     if (ret < 0) return {ErrorCode::DecoderError, "receive_frame failed"};
 
-    if (skip_mode_) {
+    if (skip_mode_ || pts_only_output_) {
         // Skip mode: extract only PTS for skip-to-target comparison.
         // Avoids metadata extraction, CVPixelBuffer alloc, and sws_scale.
         out = VideoFrame{};

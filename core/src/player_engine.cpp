@@ -761,6 +761,9 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         s.hdr_type = static_cast<int>(vt.hdr_metadata.type);
         s.color_space = vt.color_space;
         s.transfer_func = vt.color_trc;
+        s.dv_profile = vt.dv_profile;
+        s.dv_level = vt.dv_level;
+        s.dv_bl_compatibility_id = vt.dv_bl_signal_compatibility_id;
     }
 
     // Audio info
@@ -790,12 +793,27 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         s.audio_dts_hd = is_dts_hd_stream(at.codec_id, at.codec_profile);
     }
 
-    // Hardware decode — check from presented frame
+    // Hardware decode and per-frame metadata — check from presented frame
     {
         std::lock_guard lock(impl_->presented_frame_mutex);
         if (impl_->presented_frame) {
             s.hardware_decode = impl_->presented_frame->hardware_frame;
             s.video_pts_us = impl_->presented_frame->pts_us;
+
+            const auto& dovi = impl_->presented_frame->dovi;
+            s.dv_rpu_present = dovi.present;
+            if (dovi.present) {
+                s.dv_min_pq = dovi.min_pq;
+                s.dv_max_pq = dovi.max_pq;
+                s.dv_avg_pq = dovi.avg_pq;
+                s.dv_source_min_pq = dovi.source_min_pq;
+                s.dv_source_max_pq = dovi.source_max_pq;
+                s.dv_trim_slope = dovi.trim_slope;
+                s.dv_trim_offset = dovi.trim_offset;
+                s.dv_trim_power = dovi.trim_power;
+                s.dv_trim_chroma_weight = dovi.trim_chroma_weight;
+                s.dv_trim_saturation_gain = dovi.trim_saturation_gain;
+            }
         }
     }
 

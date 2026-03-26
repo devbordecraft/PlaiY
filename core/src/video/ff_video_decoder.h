@@ -19,6 +19,7 @@ public:
     Error send_packet(const Packet& pkt) override;
     Error receive_frame(VideoFrame& out) override;
     void set_skip_mode(bool skip) override;
+    void set_pts_only_output(bool enabled);
 
 private:
     void fill_frame(const AVFrame* av_frame, VideoFrame& out);
@@ -28,6 +29,7 @@ private:
     AVPacket* reuse_pkt_ = nullptr;
     TrackInfo track_info_;
     bool skip_mode_ = false;
+    bool pts_only_output_ = false;
     int saved_skip_frame_ = 0;  // AVDISCARD_DEFAULT
 
     // Cached swscale context — recreated only when format/resolution changes

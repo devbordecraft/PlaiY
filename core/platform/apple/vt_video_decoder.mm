@@ -191,6 +191,11 @@ void VTVideoDecoder::close() {
     impl_->decoded_frames.clear();
 }
 
+void VTVideoDecoder::set_reorder_depth(int depth) {
+    std::lock_guard lock(impl_->frame_mutex);
+    impl_->reorder_depth = depth;
+}
+
 void VTVideoDecoder::flush() {
     if (impl_->session) {
         VTDecompressionSessionWaitForAsynchronousFrames(impl_->session);

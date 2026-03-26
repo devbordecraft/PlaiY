@@ -227,6 +227,20 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     out.hdr_type = s.hdr_type;
     out.color_space = s.color_space;
     out.transfer_func = s.transfer_func;
+    out.dv_profile = s.dv_profile;
+    out.dv_level = s.dv_level;
+    out.dv_bl_compatibility_id = s.dv_bl_compatibility_id;
+    out.dv_rpu_present = s.dv_rpu_present;
+    out.dv_min_pq = s.dv_min_pq;
+    out.dv_max_pq = s.dv_max_pq;
+    out.dv_avg_pq = s.dv_avg_pq;
+    out.dv_source_min_pq = s.dv_source_min_pq;
+    out.dv_source_max_pq = s.dv_source_max_pq;
+    out.dv_trim_slope = s.dv_trim_slope;
+    out.dv_trim_offset = s.dv_trim_offset;
+    out.dv_trim_power = s.dv_trim_power;
+    out.dv_trim_chroma_weight = s.dv_trim_chroma_weight;
+    out.dv_trim_saturation_gain = s.dv_trim_saturation_gain;
     return out;
 }
 

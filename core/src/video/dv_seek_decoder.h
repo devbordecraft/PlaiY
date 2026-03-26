@@ -45,6 +45,7 @@ private:
     std::deque<Packet> replay_buffer_;
 
     int64_t seek_target_us_ = 0;
+    bool replay_pts_only_active_ = false;
 
     void transition_to_ff_replay();
 };

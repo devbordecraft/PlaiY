@@ -18,6 +18,8 @@ public:
     Error send_packet(const Packet& pkt) override;
     Error receive_frame(VideoFrame& out) override;
 
+    void set_reorder_depth(int depth);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

@@ -158,6 +158,22 @@ typedef struct {
     int hdr_type;
     int color_space;
     int transfer_func;
+
+    // Dolby Vision
+    uint8_t dv_profile;
+    uint8_t dv_level;
+    uint8_t dv_bl_compatibility_id;
+    bool dv_rpu_present;
+    float dv_min_pq;
+    float dv_max_pq;
+    float dv_avg_pq;
+    float dv_source_min_pq;
+    float dv_source_max_pq;
+    float dv_trim_slope;
+    float dv_trim_offset;
+    float dv_trim_power;
+    float dv_trim_chroma_weight;
+    float dv_trim_saturation_gain;
 } PYPlaybackStats;
 
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p);

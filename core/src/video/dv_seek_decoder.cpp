@@ -69,6 +69,10 @@ void DVSeekDecoder::set_skip_mode(bool skip) {
         if (vt_decoder_) {
             // Use VT for fast hardware skip-to-target
             mode_ = Mode::VTSeekSkip;
+            // During seek-skip we only need PTS values, not display order.
+            // Zero the reorder depth so frames emit immediately without
+            // waiting for the 4-frame accumulation threshold.
+            vt_decoder_->set_reorder_depth(0);
             PY_LOG_DEBUG(TAG, "Seek: VT skip mode enabled, target=%lld",
                          static_cast<long long>(seek_target_us_));
         } else {
@@ -154,15 +158,30 @@ Error DVSeekDecoder::receive_frame(VideoFrame& out) {
     }
 
     case Mode::FFReplay: {
-        Error err = ff_decoder_->receive_frame(out);
-        if (err) return err;
+        // Drain pre-target frames in a tight loop to avoid returning each
+        // one to the decode loop (saves lock contention and queue overhead).
+        while (true) {
+            Error err = ff_decoder_->receive_frame(out);
+            if (err) return err;
 
-        // Once we get a frame at or past the target, it has full RPU metadata.
-        // Transition back to normal mode — the decode loop will push this frame.
-        if (out.pts_us >= seek_target_us_) {
-            mode_ = Mode::Normal;
+            // When approaching the target, disable pts_only so the target
+            // frame itself gets full fill_frame with RPU metadata.
+            // 50ms margin covers ~1-2 frames at any common framerate.
+            if (replay_pts_only_active_ && out.pts_us >= seek_target_us_ - 50000) {
+                ff_decoder_->set_pts_only_output(false);
+                replay_pts_only_active_ = false;
+                // This frame was decoded as pts_only; discard and continue
+                // so the next frame gets full RPU extraction.
+                continue;
+            }
+
+            if (out.pts_us >= seek_target_us_) {
+                mode_ = Mode::Normal;
+                return Error::Ok();
+            }
+
+            // Pre-target pts_only frame: discard and keep draining
         }
-        return Error::Ok();
     }
     }
     return {ErrorCode::InvalidState, "Unknown DVSeekDecoder mode"};
@@ -174,8 +193,11 @@ void DVSeekDecoder::transition_to_ff_replay() {
 
     // Flush FFmpeg decoder state from before the seek
     ff_decoder_->flush();
+    ff_decoder_->set_pts_only_output(true);
+    replay_pts_only_active_ = true;
 
-    // Replay buffered packets through FFmpeg for RPU extraction
+    // Replay buffered packets through FFmpeg for RPU extraction.
+    // VT in-flight GPU work completes concurrently during this loop.
     for (const auto& pkt : replay_buffer_) {
         Error err = ff_decoder_->send_packet(pkt);
         if (err && err.code != ErrorCode::NeedMoreInput) {
@@ -184,7 +206,8 @@ void DVSeekDecoder::transition_to_ff_replay() {
     }
     replay_buffer_.clear();
 
-    // Flush the VT decoder — we're done with it for this seek
+    // Flush VT after the replay loop so the WaitForAsynchronousFrames call
+    // overlaps with the FFmpeg send_packet work above, reducing total latency.
     vt_decoder_->flush();
 
     mode_ = Mode::FFReplay;

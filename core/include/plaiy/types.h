@@ -337,6 +337,22 @@ struct PlaybackStats {
     int hdr_type = 0;              // 0=SDR, 1=HDR10, 2=HDR10+, 3=HLG, 4=DV
     int color_space = 0;
     int transfer_func = 0;
+
+    // Dolby Vision (only populated when hdr_type == 4)
+    uint8_t dv_profile = 0;
+    uint8_t dv_level = 0;
+    uint8_t dv_bl_compatibility_id = 0;
+    bool dv_rpu_present = false;       // current frame has RPU metadata
+    float dv_min_pq = 0.0f;           // L1 min brightness (PQ-normalized)
+    float dv_max_pq = 0.0f;           // L1 max brightness (PQ-normalized)
+    float dv_avg_pq = 0.0f;           // L1 avg brightness (PQ-normalized)
+    float dv_source_min_pq = 0.0f;    // source signal min
+    float dv_source_max_pq = 0.0f;    // source signal max
+    float dv_trim_slope = 0.0f;       // L2 trim slope
+    float dv_trim_offset = 0.0f;      // L2 trim offset
+    float dv_trim_power = 0.0f;       // L2 trim power
+    float dv_trim_chroma_weight = 0.0f;
+    float dv_trim_saturation_gain = 0.0f;
 };
 
 // Media library item

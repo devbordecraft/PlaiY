@@ -38,6 +38,30 @@ struct DebugOverlayView: View {
                 row("Speed", String(format: "%.2gx", stats.playback_speed))
             }
 
+            if stats.hdr_type == 4 {
+                section("Dolby Vision") {
+                    row("Profile", "P\(stats.dv_profile).\(stats.dv_level) (BL compat \(stats.dv_bl_compatibility_id))")
+                    row("RPU", stats.dv_rpu_present ? "Active" : "None")
+                    if stats.dv_rpu_present {
+                        row("L1 Min", String(format: "%.1f nits", pqToNits(stats.dv_min_pq)))
+                        row("L1 Max", String(format: "%.0f nits", pqToNits(stats.dv_max_pq)))
+                        row("L1 Avg", String(format: "%.1f nits", pqToNits(stats.dv_avg_pq)))
+                        row("Source", String(format: "%.2f–%.0f nits",
+                                             pqToNits(stats.dv_source_min_pq),
+                                             pqToNits(stats.dv_source_max_pq)))
+                        if stats.dv_trim_slope != 0 {
+                            row("L2 Trim", String(format: "S%.2f O%.2f P%.2f",
+                                                  stats.dv_trim_slope,
+                                                  stats.dv_trim_offset,
+                                                  stats.dv_trim_power))
+                            row("L2 Chroma", String(format: "W%.2f Sat%.2f",
+                                                    stats.dv_trim_chroma_weight,
+                                                    stats.dv_trim_saturation_gain))
+                        }
+                    }
+                }
+            }
+
             section("Container") {
                 row("Format", cString(stats.container_format))
                 if stats.bitrate > 0 {
@@ -96,6 +120,15 @@ struct DebugOverlayView: View {
                 String(cString: cstr)
             }
         }
+    }
+
+    private func pqToNits(_ pq: Float) -> Double {
+        // ST.2084 EOTF: PQ-normalized [0,1] → nits [0, 10000]
+        let p = pow(Double(pq), 1.0 / 78.84375)
+        let num = max(p - 0.8359375, 0.0)
+        let den = 18.8515625 - 18.6875 * p
+        let linear = den > 0 ? pow(num / den, 1.0 / 0.1593017578125) : 0.0
+        return linear * 10000.0
     }
 
     private func formatTime(_ us: Int64) -> String {
