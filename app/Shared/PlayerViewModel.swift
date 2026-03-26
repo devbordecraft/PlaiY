@@ -49,6 +49,12 @@ final class PlaybackTransport {
         isHoveringTimeline || isDraggingTimeline || isHoveringVolume || isHoveringControls
     }
 
+    /// True only when the user is actively scrubbing the timeline.
+    /// Used by tick() to avoid overwriting the scrub position.
+    var isScrubbing: Bool {
+        isHoveringTimeline || isDraggingTimeline
+    }
+
     var positionFraction: Double {
         guard duration > 0 else { return 0 }
         return Double(currentPosition) / Double(duration)
@@ -287,8 +293,8 @@ class PlayerViewModel: ObservableObject {
     func tick() {
         guard isPlaying else { return }
 
-        // Skip during any interaction to avoid churn
-        if transport.isUserInteracting { return }
+        // Skip while the user is scrubbing the timeline to avoid fighting
+        if transport.isScrubbing { return }
 
         // End-of-stream detection (only @Published fire here)
         if bridge.state == PY_STATE_STOPPED.rawValue {

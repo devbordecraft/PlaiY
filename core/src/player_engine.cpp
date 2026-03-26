@@ -245,9 +245,12 @@ void PlayerEngine::play() {
 
         // Freeze clock and hold audio until first video frame is presented,
         // preventing the clock from running ahead of the video pipeline.
+        // If a seek is already pending (e.g. resume), use that target instead
+        // of 0 so the clock matches where the demuxer will seek to.
         if (impl_->active_video_stream >= 0) {
             impl_->waiting_for_first_frame.store(true);
-            impl_->clock.seek_to(0);
+            int64_t start_pts = impl_->seeking.load() ? impl_->seek_target_us : 0;
+            impl_->clock.seek_to(start_pts);
         }
     }
 
@@ -331,6 +334,11 @@ void PlayerEngine::stop() {
     impl_->passthrough_ring_buffer.shrink_to_fit();
     impl_->subtitle_manager->close();
     impl_->demuxer->close();
+
+    {
+        std::lock_guard lock(impl_->presented_frame_mutex);
+        impl_->presented_frame.reset();
+    }
 
     impl_->media_info = {};
     impl_->set_state(PlaybackState::Idle);

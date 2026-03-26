@@ -155,6 +155,7 @@ class MetalViewCoordinator {
         // internal clock directly. Passing 0 avoids a redundant Clock mutex
         // acquisition on every display-link tick (120Hz).
         guard let framePtr = playerBridge.acquireVideoFrame(targetPts: 0) else {
+            lastRenderedPts = Int64.min
             guard let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor else { return }
             drawBlack(descriptor: descriptor, drawable: drawable)
