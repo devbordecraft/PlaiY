@@ -56,6 +56,8 @@ set(CORE_SOURCES
     src/library/ffmpeg_video_opener.cpp
     src/library/thumbnail_generator.cpp
     src/library/seek_thumbnail_generator.cpp
+    src/sources/source_manager.cpp
+    src/sources/local_media_source.cpp
     src/util/logger.cpp
     src/bridge/plaiy_c.cpp
 )
@@ -68,6 +70,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/metal_video_renderer.mm
+        platform/apple/smb_media_source.mm
     )
 endif()
 
@@ -92,6 +95,10 @@ target_include_directories(plaiy_core
     PUBLIC include
     PRIVATE src
 )
+
+if(APPLE)
+    target_include_directories(plaiy_core PRIVATE platform/apple)
+endif()
 
 if(CMAKE_CROSSCOMPILING)
     target_include_directories(plaiy_core PRIVATE
@@ -136,6 +143,7 @@ if(APPLE)
         "-framework IOSurface"
         "-framework AVFoundation"
         "-framework CoreMotion"
+        "-framework NetFS"
     )
     set_source_files_properties(
         platform/apple/vt_video_decoder.mm
@@ -143,6 +151,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/metal_video_renderer.mm
+        platform/apple/smb_media_source.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
 endif()

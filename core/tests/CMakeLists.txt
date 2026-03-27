@@ -9,6 +9,7 @@ add_executable(plaiy_tests
     test_audio_passthrough.cpp
     test_playback_stats.cpp
     test_frame_presenter.cpp
+    test_source_manager.cpp
 )
 
 target_link_libraries(plaiy_tests PRIVATE
@@ -26,6 +27,13 @@ target_include_directories(plaiy_tests PRIVATE
 )
 
 target_link_libraries(plaiy_tests PRIVATE PkgConfig::AVCODEC)
+
+if(APPLE)
+    target_link_libraries(plaiy_tests PRIVATE
+        "-framework Foundation"
+        "-framework NetFS"
+    )
+endif()
 
 include(CTest)
 include(Catch)

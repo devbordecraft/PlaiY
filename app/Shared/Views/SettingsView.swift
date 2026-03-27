@@ -7,6 +7,7 @@ import AppKit
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var libraryVM: LibraryViewModel
+    @EnvironmentObject var sourcesVM: SourcesViewModel
     let onDismiss: () -> Void
 
     #if os(iOS)
@@ -45,6 +46,7 @@ struct SettingsView: View {
                 audioSection
                 subtitleSection
                 librarySection
+                sourcesSection
             }
             .formStyle(.grouped)
         }
@@ -160,6 +162,38 @@ struct SettingsView: View {
             }
         }
         #endif
+    }
+
+    private var sourcesSection: some View {
+        Section("Network Sources") {
+            ForEach(sourcesVM.sources) { source in
+                HStack {
+                    Image(systemName: source.type.systemImage)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading) {
+                        Text(source.displayName)
+                        Text(source.baseURI)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button {
+                        sourcesVM.removeSource(id: source.id)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if sourcesVM.sources.isEmpty {
+                Text("No network sources configured")
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Folder Picker

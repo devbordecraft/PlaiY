@@ -17,6 +17,7 @@ enum PYError {
     PY_ERROR_DECODER = 5,
     PY_ERROR_AUDIO = 6,
     PY_ERROR_SUBTITLE = 7,
+    PY_ERROR_NETWORK = 8,
 };
 
 // ---- Playback state ----
@@ -307,6 +308,42 @@ int  py_player_get_seek_thumbnail_progress(PYPlayer* p);
 int         py_library_get_folder_count(PYLibrary* lib);
 const char* py_library_get_folder(PYLibrary* lib, int index);
 int         py_library_remove_folder(PYLibrary* lib, int index);
+
+// ---- Source Manager ----
+// Manages browsable media sources (local, SMB, NFS, HTTP, Plex, etc.)
+typedef struct PYSourceManager PYSourceManager;
+
+PYSourceManager* py_source_manager_create(void);
+void             py_source_manager_destroy(PYSourceManager* sm);
+
+// Add a source from JSON config: {"source_id","display_name","type","base_uri","username"}
+int              py_source_add(PYSourceManager* sm, const char* config_json);
+int              py_source_remove(PYSourceManager* sm, const char* source_id);
+int              py_source_count(PYSourceManager* sm);
+
+// Get individual source config as JSON. Returned string owned by manager.
+const char*      py_source_get_config_json(PYSourceManager* sm, int index);
+// Get all source configs as JSON array. Returned string owned by manager.
+const char*      py_source_all_configs_json(PYSourceManager* sm);
+// Load sources from JSON array (re-creates source objects).
+int              py_source_load_configs_json(PYSourceManager* sm, const char* json);
+
+// Connect/disconnect a source. Password is passed at connect time (not serialized).
+int              py_source_connect(PYSourceManager* sm, const char* source_id,
+                                    const char* password);
+void             py_source_disconnect(PYSourceManager* sm, const char* source_id);
+bool             py_source_is_connected(PYSourceManager* sm, const char* source_id);
+
+// Browse: returns JSON array of entries: [{"name","uri","is_directory","size"}, ...]
+// Returned string owned by manager, valid until next call.
+const char*      py_source_list_directory(PYSourceManager* sm,
+                                           const char* source_id,
+                                           const char* relative_path);
+
+// Get playable path/URI for an entry. Returned string owned by manager.
+const char*      py_source_playable_path(PYSourceManager* sm,
+                                          const char* source_id,
+                                          const char* entry_uri);
 
 #ifdef __cplusplus
 }

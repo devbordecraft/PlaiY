@@ -170,8 +170,14 @@ class PlayerViewModel: ObservableObject {
         volume = Float(settings.volume)
         bridge.setVolume(volume)
 
-        let url = URL(fileURLWithPath: path)
-        mediaTitle = url.deletingPathExtension().lastPathComponent
+        if path.hasPrefix("/") {
+            let url = URL(fileURLWithPath: path)
+            mediaTitle = url.deletingPathExtension().lastPathComponent
+        } else if let url = URL(string: path) {
+            mediaTitle = url.lastPathComponent
+        } else {
+            mediaTitle = (path as NSString).lastPathComponent
+        }
 
         loadDisplaySettings(for: path)
         transport.onCropDetected = { [weak self] crop in

@@ -23,6 +23,7 @@ enum class ErrorCode {
     SubtitleError,
     OutOfMemory,
     InvalidState,
+    NetworkError,
 };
 
 struct Error {

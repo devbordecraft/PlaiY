@@ -2,6 +2,7 @@
 #include "plaiy/logger.h"
 #include "plaiy/player_engine.h"
 #include "plaiy/media_library.h"
+#include "plaiy/source_manager.h"
 #include "library/thumbnail_generator.h"
 #include "library/seek_thumbnail_generator.h"
 
@@ -675,4 +676,166 @@ int py_library_remove_folder(PYLibrary* lib, int index) {
     if (!lib) return PY_ERROR_INVALID_ARG;
     lib->library.remove_folder(index);
     return PY_OK;
+}
+
+// ---- Source Manager ----
+
+struct PYSourceManager {
+    py::SourceManager manager;
+    std::string cached_configs_json;
+    std::string cached_config_json;
+    std::string cached_listing_json;
+    std::string cached_playable_path;
+};
+
+PYSourceManager* py_source_manager_create(void) {
+    return new PYSourceManager();
+}
+
+void py_source_manager_destroy(PYSourceManager* sm) {
+    delete sm;
+}
+
+int py_source_add(PYSourceManager* sm, const char* config_json) {
+    if (!sm || !config_json) return PY_ERROR_INVALID_ARG;
+
+    try {
+        auto j = json::parse(config_json);
+        py::SourceConfig cfg;
+        cfg.source_id = j.value("source_id", "");
+        cfg.display_name = j.value("display_name", "");
+        cfg.base_uri = j.value("base_uri", "");
+        cfg.username = j.value("username", "");
+
+        std::string type_str = j.value("type", "local");
+        if (type_str == "smb") cfg.type = py::MediaSourceType::SMB;
+        else if (type_str == "nfs") cfg.type = py::MediaSourceType::NFS;
+        else if (type_str == "http") cfg.type = py::MediaSourceType::HTTP;
+        else if (type_str == "plex") cfg.type = py::MediaSourceType::Plex;
+        else cfg.type = py::MediaSourceType::Local;
+
+        py::Error err = sm->manager.add_source(cfg);
+        if (err) return PY_ERROR_INVALID_ARG;
+        return PY_OK;
+    } catch (...) {
+        return PY_ERROR_INVALID_ARG;
+    }
+}
+
+int py_source_remove(PYSourceManager* sm, const char* source_id) {
+    if (!sm || !source_id) return PY_ERROR_INVALID_ARG;
+    sm->manager.remove_source(source_id);
+    return PY_OK;
+}
+
+int py_source_count(PYSourceManager* sm) {
+    if (!sm) return 0;
+    return sm->manager.source_count();
+}
+
+const char* py_source_get_config_json(PYSourceManager* sm, int index) {
+    if (!sm) return "{}";
+    auto* src = sm->manager.source_at(index);
+    if (!src) return "{}";
+
+    const auto& cfg = src->config();
+    json j;
+    j["source_id"] = cfg.source_id;
+    j["display_name"] = cfg.display_name;
+    j["base_uri"] = cfg.base_uri;
+    j["username"] = cfg.username;
+
+    switch (cfg.type) {
+        case py::MediaSourceType::SMB:  j["type"] = "smb"; break;
+        case py::MediaSourceType::NFS:  j["type"] = "nfs"; break;
+        case py::MediaSourceType::HTTP: j["type"] = "http"; break;
+        case py::MediaSourceType::Plex: j["type"] = "plex"; break;
+        default: j["type"] = "local"; break;
+    }
+    j["connected"] = src->is_connected();
+
+    sm->cached_config_json = j.dump();
+    return sm->cached_config_json.c_str();
+}
+
+const char* py_source_all_configs_json(PYSourceManager* sm) {
+    if (!sm) return "[]";
+    sm->cached_configs_json = sm->manager.configs_json();
+    return sm->cached_configs_json.c_str();
+}
+
+int py_source_load_configs_json(PYSourceManager* sm, const char* json_str) {
+    if (!sm || !json_str) return PY_ERROR_INVALID_ARG;
+    py::Error err = sm->manager.load_configs_json(json_str);
+    return err ? PY_ERROR_INVALID_ARG : PY_OK;
+}
+
+int py_source_connect(PYSourceManager* sm, const char* source_id, const char* password) {
+    if (!sm || !source_id) return PY_ERROR_INVALID_ARG;
+
+    auto* src = sm->manager.source_by_id(source_id);
+    if (!src) return PY_ERROR_INVALID_ARG;
+
+    // Inject password into config (it's not serialized)
+    auto& cfg = const_cast<py::SourceConfig&>(src->config());
+    if (password) cfg.password = password;
+
+    py::Error err = src->connect();
+    if (err) {
+        if (err.code == py::ErrorCode::NetworkError) return PY_ERROR_NETWORK;
+        return PY_ERROR_UNKNOWN;
+    }
+    return PY_OK;
+}
+
+void py_source_disconnect(PYSourceManager* sm, const char* source_id) {
+    if (!sm || !source_id) return;
+    auto* src = sm->manager.source_by_id(source_id);
+    if (src) src->disconnect();
+}
+
+bool py_source_is_connected(PYSourceManager* sm, const char* source_id) {
+    if (!sm || !source_id) return false;
+    auto* src = sm->manager.source_by_id(source_id);
+    return src && src->is_connected();
+}
+
+const char* py_source_list_directory(PYSourceManager* sm,
+                                      const char* source_id,
+                                      const char* relative_path) {
+    if (!sm || !source_id) return "[]";
+
+    auto* src = sm->manager.source_by_id(source_id);
+    if (!src) return "[]";
+
+    std::vector<py::SourceEntry> entries;
+    py::Error err = src->list_directory(relative_path ? relative_path : "", entries);
+    if (err) return "[]";
+
+    json arr = json::array();
+    for (const auto& e : entries) {
+        json j;
+        j["name"] = e.name;
+        j["uri"] = e.uri;
+        j["is_directory"] = e.is_directory;
+        j["size"] = e.size;
+        arr.push_back(j);
+    }
+
+    sm->cached_listing_json = arr.dump();
+    return sm->cached_listing_json.c_str();
+}
+
+const char* py_source_playable_path(PYSourceManager* sm,
+                                     const char* source_id,
+                                     const char* entry_uri) {
+    if (!sm || !source_id || !entry_uri) return "";
+
+    auto* src = sm->manager.source_by_id(source_id);
+    if (!src) return "";
+
+    py::SourceEntry entry;
+    entry.uri = entry_uri;
+    sm->cached_playable_path = src->playable_path(entry);
+    return sm->cached_playable_path.c_str();
 }

@@ -42,6 +42,7 @@ _ldflags: &ldflags
   - -framework Security
   - -framework AVFoundation
   - -framework CoreMotion
+  - -framework NetFS
 
 targets:
   PlaiY:
