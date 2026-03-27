@@ -3,6 +3,10 @@
 #include "local_media_source.h"
 
 #ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
+#if defined(__APPLE__) && !TARGET_OS_TV
 #include "smb_media_source.h"
 #endif
 
@@ -130,7 +134,7 @@ std::unique_ptr<IMediaSource> SourceManager::create_source(SourceConfig config) 
     switch (config.type) {
         case MediaSourceType::Local:
             return std::make_unique<LocalMediaSource>(std::move(config));
-#ifdef __APPLE__
+#if defined(__APPLE__) && !TARGET_OS_TV
         case MediaSourceType::SMB:
             return std::make_unique<SMBMediaSource>(std::move(config));
 #endif

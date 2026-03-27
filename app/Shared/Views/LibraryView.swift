@@ -15,7 +15,8 @@ struct LibraryView: View {
     #endif
 
     private let columns = [
-        GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 16)
+        GridItem(.adaptive(minimum: LayoutMetrics.gridMinWidth,
+                           maximum: LayoutMetrics.gridMaxWidth), spacing: 16)
     ]
 
     var body: some View {
@@ -69,7 +70,7 @@ struct LibraryView: View {
                         .font(.title2)
                         .foregroundStyle(.secondary)
                     #if os(tvOS)
-                    Text("Network sources coming soon")
+                    Text("Browse network sources to find media")
                         .foregroundStyle(.tertiary)
                     #else
                     Text("Add a folder or open a file to get started")

@@ -12,7 +12,7 @@ settings:
   base:
     SWIFT_VERSION: "6.3"
 
-# Shared linker flags for all Apple platforms
+# Linker flags for macOS/iOS (includes NetFS for SMB mounting)
 _ldflags: &ldflags
   - -lc++
   - -lplaiy_core
@@ -43,6 +43,37 @@ _ldflags: &ldflags
   - -framework AVFoundation
   - -framework CoreMotion
   - -framework NetFS
+
+# Linker flags for tvOS (no NetFS — SMB uses libsmbclient instead)
+_ldflags_tvos: &ldflags_tvos
+  - -lc++
+  - -lplaiy_core
+  - -lavformat
+  - -lavcodec
+  - -lavutil
+  - -lswresample
+  - -lswscale
+  - -lavfilter
+  - -lass
+  - -lz
+  - -lbz2
+  - -liconv
+  - -llzma
+  - -lxml2
+  - -framework VideoToolbox
+  - -framework CoreMedia
+  - -framework CoreVideo
+  - -framework CoreFoundation
+  - -framework CoreAudio
+  - -framework AudioToolbox
+  - -framework Metal
+  - -framework MetalKit
+  - -framework QuartzCore
+  - -framework IOSurface
+  - -framework MediaPlayer
+  - -framework Security
+  - -framework AVFoundation
+  - -framework CoreMotion
 
 targets:
   PlaiY:
@@ -154,6 +185,26 @@ targets:
           - $(PROJECT_DIR)/../build/tvos-Debug/core
           - $(PROJECT_DIR)/../build/tvos-Release/core
           - $(PROJECT_DIR)/../deps/tvos/lib
-        OTHER_LDFLAGS: *ldflags
+        OTHER_LDFLAGS: *ldflags_tvos
         CODE_SIGN_IDENTITY: "Apple Development"
         CODE_SIGN_ENTITLEMENTS: tvOS/PlaiY.entitlements
+    dependencies:
+      - target: PlaiY-TopShelf
+
+  PlaiY-TopShelf:
+    type: tv-app-extension
+    platform: tvOS
+    sources:
+      - path: TopShelf
+        type: group
+      - path: Shared/ResumeStore.swift
+        type: file
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.plaiy.app.tv.topshelf
+        PRODUCT_NAME: TopShelf
+        INFOPLIST_FILE: TopShelf/Info.plist
+        TVOS_DEPLOYMENT_TARGET: "26.0"
+        SWIFT_VERSION: "6.3"
+        CODE_SIGN_IDENTITY: "Apple Development"
+        CODE_SIGN_ENTITLEMENTS: TopShelf/TopShelf.entitlements

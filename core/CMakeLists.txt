@@ -74,8 +74,10 @@ if(APPLE)
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
-        platform/apple/smb_media_source.mm
     )
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+        list(APPEND CORE_SOURCES platform/apple/smb_media_source.mm)
+    endif()
 endif()
 
 add_library(plaiy_core STATIC ${CORE_SOURCES})
@@ -147,16 +149,21 @@ if(APPLE)
         "-framework IOSurface"
         "-framework AVFoundation"
         "-framework CoreMotion"
-        "-framework NetFS"
     )
     set_source_files_properties(
         platform/apple/vt_video_decoder.mm
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
-        platform/apple/smb_media_source.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+        target_link_libraries(plaiy_core PRIVATE "-framework NetFS")
+        set_source_files_properties(
+            platform/apple/smb_media_source.mm
+            PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
+        )
+    endif()
 endif()
 
 install(TARGETS plaiy_core ARCHIVE DESTINATION lib)

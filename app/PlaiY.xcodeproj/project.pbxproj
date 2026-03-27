@@ -12,6 +12,7 @@
 		08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
 		09F0DC01D5E2432514A48C48 /* ColorFilterUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */; };
 		0A3215BE7E8A81B8886EB448 /* PlatformTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A077A165BC093BAC4F219D3A /* PlatformTypes.swift */; };
+		0ACB26120C08CB1E33BEAC17 /* PlaiY-TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BA9D0A1052DB444F1C8BF7C1 /* PlaiY-TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
 		0CFC59962D9359DCC71B3BF3 /* SourceConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF842F44554B1DF331B0B0A /* SourceConfigTests.swift */; };
 		0FA38F7B165065229AD65C81 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
@@ -26,6 +27,7 @@
 		24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		2544ED48649D0ABF8557C1ED /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		259C643A39AC08496B6E0EA9 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
+		2659FDCF431087D04FCCF0CA /* TVRemoteGestureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A335C3917691C5337C950D /* TVRemoteGestureView.swift */; };
 		29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
 		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
@@ -33,6 +35,7 @@
 		30FE48B046995D7BF5F5AF01 /* SourcesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2859B8BA9FFDB1E85454DAD /* SourcesViewModel.swift */; };
 		3476DEEC7977C8673A0E5D62 /* LibraryItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */; };
 		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
+		37797A475F2B9B213966509A /* TVRemoteGestureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A335C3917691C5337C950D /* TVRemoteGestureView.swift */; };
 		384152C1489E05CB6E1315BF /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		39BFDCC45CF8E7927B8DC47A /* TrackInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDAEF68423AF3437F2668253 /* TrackInfoTests.swift */; };
@@ -52,6 +55,7 @@
 		67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
 		68A82B207E24F91787B02B60 /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		6A0F24D92E7D1D7A2346F0FC /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
+		6A9203721AFAB44C17695B41 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3827F923362873679C629098 /* ContentProvider.swift */; };
 		6D3F5534C4ED24B830A3CE2C /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */; };
 		70A3F4E1453F784F07CD2C4B /* SourceManagerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */; };
 		7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
@@ -75,9 +79,11 @@
 		9858FFB6B6B45698B64D58A2 /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
 		9EB5E9D576649846E397DD7A /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
 		9F9C3A4A32C249495F41BD91 /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
+		9FEF606B339940FC9096A323 /* TVRemoteGestureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A335C3917691C5337C950D /* TVRemoteGestureView.swift */; };
 		A1D079DF61673E3E9C992F90 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */; };
 		A2D0C4EA7980B7F32D1383A5 /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
 		A2E284ABBD5EE2667F577161 /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
+		A48FCEE490F5E986BE4BC1D4 /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
@@ -93,6 +99,7 @@
 		CA433238B540E42BE64F28F5 /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
 		CABBA61A7118102BC8E1BCD5 /* MetalViewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */; };
 		CCA2A68999C94F8A19F90B9A /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
+		D21A7ABB9EAC36261BED44FB /* LayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */; };
 		D25FC2DD6F96D28385BE2EF1 /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
@@ -112,6 +119,7 @@
 		E44CA4BFDA6391B6D7D4B141 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
 		E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
 		ECC24E6BD1F21ED34821C882 /* PlayerBridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */; };
+		EED5907059EC6A940EE22B75 /* LayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */; };
 		EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
 		F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		F0E22522A3428DC87D91D303 /* SourceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1F5AC0A4064E5EB7F33E9A /* SourceBrowserView.swift */; };
@@ -122,10 +130,18 @@
 		F6D3650B995537C477D7C974 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
 		F91E6A4441C28BCA4C94303F /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		F9EA72B4DBFCB027A121FF2D /* MockPlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0D37400892E0FF404C80B /* MockPlayerBridge.swift */; };
+		FC313B4E10CBF50CD3D8BC9D /* LayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */; };
 		FDC949BE282F6623C8635169 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7985FD2B159C59D7CA921B /* KeychainHelper.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		97118C0CE131C51476B67182 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 891FD5599C5EC3FA791A5B10 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A32277A80F440F99D5B6947;
+			remoteInfo = "PlaiY-TopShelf";
+		};
 		9FC856EBF4CC55967F3370E5 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 891FD5599C5EC3FA791A5B10 /* Project object */;
@@ -134,6 +150,20 @@
 			remoteInfo = PlaiY;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		888D2D76E194057AB2DBFF77 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				0ACB26120C08CB1E33BEAC17 /* PlaiY-TopShelf.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettingsStore.swift; sourceTree = "<group>"; };
@@ -150,10 +180,13 @@
 		25D428FFE767625A57745F50 /* PlaiY-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		28BE4FCAB1AAD2A1C89CADFA /* TimeFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormattingTests.swift; sourceTree = "<group>"; };
 		2959BC28D55EDB4E02F90CCA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		29A335C3917691C5337C950D /* TVRemoteGestureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVRemoteGestureView.swift; sourceTree = "<group>"; };
 		2B7985FD2B159C59D7CA921B /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		2E13F471AA3B2426876CCB66 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		3827F923362873679C629098 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
 		3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConfig.swift; sourceTree = "<group>"; };
+		5206B0B7315CCF3BBB96D988 /* TopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TopShelf.entitlements; sourceTree = "<group>"; };
 		59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRUniformBuilder.swift; sourceTree = "<group>"; };
 		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
@@ -175,10 +208,12 @@
 		A3D7002606B6C0F0F4FEA950 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSourceView.swift; sourceTree = "<group>"; };
 		AE562E44D72724E927A7FACC /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
+		BA9D0A1052DB444F1C8BF7C1 /* PlaiY-TopShelf.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "PlaiY-TopShelf.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridgeProtocol.swift; sourceTree = "<group>"; };
 		BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalPlayerView.swift; sourceTree = "<group>"; };
 		C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettings.swift; sourceTree = "<group>"; };
 		CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LayoutMetrics.swift; sourceTree = "<group>"; };
 		CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = metal_shaders.metal; sourceTree = "<group>"; };
 		D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D888DC06954A914994F0D3EC /* TrackSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelectionView.swift; sourceTree = "<group>"; };
@@ -190,6 +225,7 @@
 		F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		F793BF28CF63B6D50E101247 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
 		FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugOverlayView.swift; sourceTree = "<group>"; };
+		FFE25C6348E3E16EC59AD3A2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -199,6 +235,7 @@
 				91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */,
 				5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */,
 				2B7985FD2B159C59D7CA921B /* KeychainHelper.swift */,
+				CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */,
 				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
 				8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */,
 				07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */,
@@ -226,6 +263,7 @@
 			isa = PBXGroup;
 			children = (
 				25D428FFE767625A57745F50 /* PlaiY-iOS.app */,
+				BA9D0A1052DB444F1C8BF7C1 /* PlaiY-TopShelf.appex */,
 				D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */,
 				E70C6C424D83AFFE819F2081 /* PlaiY.app */,
 				13AC9DF9C7A70B3CFCCD9AB3 /* PlaiYTests.xctest */,
@@ -263,6 +301,7 @@
 				0F1F5AC0A4064E5EB7F33E9A /* SourceBrowserView.swift */,
 				5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */,
 				D888DC06954A914994F0D3EC /* TrackSelectionView.swift */,
+				29A335C3917691C5337C950D /* TVRemoteGestureView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -313,6 +352,16 @@
 			path = macOS;
 			sourceTree = "<group>";
 		};
+		C7E803AD4898AE0E9C0C9454 /* TopShelf */ = {
+			isa = PBXGroup;
+			children = (
+				3827F923362873679C629098 /* ContentProvider.swift */,
+				FFE25C6348E3E16EC59AD3A2 /* Info.plist */,
+				5206B0B7315CCF3BBB96D988 /* TopShelf.entitlements */,
+			);
+			path = TopShelf;
+			sourceTree = "<group>";
+		};
 		C8D1E1C292BC4759D95D85F2 = {
 			isa = PBXGroup;
 			children = (
@@ -321,6 +370,7 @@
 				92E3C42B6B105BF9AD48A0D4 /* macOS */,
 				2727EA4B15E0B0E9F0EE977D /* PlaiYTests */,
 				00D0426CAA8CA1C0D2915B36 /* Shared */,
+				C7E803AD4898AE0E9C0C9454 /* TopShelf */,
 				754432C17732B6F3F99A7373 /* tvOS */,
 				0F2713753C634882BCDB2376 /* Products */,
 			);
@@ -359,10 +409,12 @@
 			buildConfigurationList = 295F7A701B04856120013567 /* Build configuration list for PBXNativeTarget "PlaiY-tvOS" */;
 			buildPhases = (
 				9B9B620850B0783531BA9FCC /* Sources */,
+				888D2D76E194057AB2DBFF77 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				179B3169EDFBA747255DEDA4 /* PBXTargetDependency */,
 			);
 			name = "PlaiY-tvOS";
 			packageProductDependencies = (
@@ -370,6 +422,23 @@
 			productName = "PlaiY-tvOS";
 			productReference = D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */;
 			productType = "com.apple.product-type.application";
+		};
+		8A32277A80F440F99D5B6947 /* PlaiY-TopShelf */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F23E559E50D5A4DDCF4B514A /* Build configuration list for PBXNativeTarget "PlaiY-TopShelf" */;
+			buildPhases = (
+				BEC23B277F2C0657F1196BF6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "PlaiY-TopShelf";
+			packageProductDependencies = (
+			);
+			productName = "PlaiY-TopShelf";
+			productReference = BA9D0A1052DB444F1C8BF7C1 /* PlaiY-TopShelf.appex */;
+			productType = "com.apple.product-type.tv-app-extension";
 		};
 		B0C69054710D5E1FBDA29D55 /* PlaiYTests */ = {
 			isa = PBXNativeTarget;
@@ -432,6 +501,7 @@
 			projectRoot = "";
 			targets = (
 				12E70D21735AFAA18A380B49 /* PlaiY */,
+				8A32277A80F440F99D5B6947 /* PlaiY-TopShelf */,
 				D2B6D6427B45FEABA7CE9C89 /* PlaiY-iOS */,
 				5514F19E42D2DE7401968BE6 /* PlaiY-tvOS */,
 				B0C69054710D5E1FBDA29D55 /* PlaiYTests */,
@@ -467,6 +537,7 @@
 				96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */,
 				7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */,
 				FDC949BE282F6623C8635169 /* KeychainHelper.swift in Sources */,
+				D21A7ABB9EAC36261BED44FB /* LayoutMetrics.swift in Sources */,
 				C72FDABAF60B8AC1AFEBB61C /* LibraryView.swift in Sources */,
 				0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */,
 				9858FFB6B6B45698B64D58A2 /* MediaItemView.swift in Sources */,
@@ -488,6 +559,7 @@
 				DBF2723AED277A69E663D567 /* SourceManagerBridge.swift in Sources */,
 				30FE48B046995D7BF5F5AF01 /* SourcesViewModel.swift in Sources */,
 				1B47148518CC9CCF37D04B9F /* SubtitleOverlayView.swift in Sources */,
+				9FEF606B339940FC9096A323 /* TVRemoteGestureView.swift in Sources */,
 				229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */,
 				C1ED694DD7BD6AC7E857218B /* TimeFormatting.swift in Sources */,
 				08738D349252B6BF3B9BCCAB /* TrackInfo.swift in Sources */,
@@ -510,6 +582,7 @@
 				2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */,
 				384152C1489E05CB6E1315BF /* HDRUniformBuilder.swift in Sources */,
 				E100C777BB1798DEACC4DB4B /* KeychainHelper.swift in Sources */,
+				EED5907059EC6A940EE22B75 /* LayoutMetrics.swift in Sources */,
 				2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */,
 				7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */,
 				67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */,
@@ -531,6 +604,7 @@
 				F3AFE327297D75F1D1545128 /* SourceManagerBridge.swift in Sources */,
 				F600BA41FF9C15DB714758D8 /* SourcesViewModel.swift in Sources */,
 				D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */,
+				2659FDCF431087D04FCCF0CA /* TVRemoteGestureView.swift in Sources */,
 				46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */,
 				E1565D0064E80D10029AD72F /* TimeFormatting.swift in Sources */,
 				215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */,
@@ -553,6 +627,7 @@
 				F13BD1A6F5020058D746CBFC /* DebugOverlayView.swift in Sources */,
 				D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */,
 				5312B4CCA03C36909AF0A4A3 /* KeychainHelper.swift in Sources */,
+				FC313B4E10CBF50CD3D8BC9D /* LayoutMetrics.swift in Sources */,
 				DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */,
 				59A465F92D44A1C49313D082 /* LibraryViewModel.swift in Sources */,
 				CA433238B540E42BE64F28F5 /* MediaItemView.swift in Sources */,
@@ -574,6 +649,7 @@
 				70A3F4E1453F784F07CD2C4B /* SourceManagerBridge.swift in Sources */,
 				8C1F10FC293503EA3C2C8A4B /* SourcesViewModel.swift in Sources */,
 				39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */,
+				37797A475F2B9B213966509A /* TVRemoteGestureView.swift in Sources */,
 				B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */,
 				525814C9FECD19A1D806314F /* TimeFormatting.swift in Sources */,
 				67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */,
@@ -584,9 +660,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BEC23B277F2C0657F1196BF6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A9203721AFAB44C17695B41 /* ContentProvider.swift in Sources */,
+				A48FCEE490F5E986BE4BC1D4 /* ResumeStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		179B3169EDFBA747255DEDA4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A32277A80F440F99D5B6947 /* PlaiY-TopShelf */;
+			targetProxy = 97118C0CE131C51476B67182 /* PBXContainerItemProxy */;
+		};
 		ECE9537A0B8BFEB451A947C6 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 12E70D21735AFAA18A380B49 /* PlaiY */;
@@ -790,7 +880,6 @@
 					"-framework Security",
 					"-framework AVFoundation",
 					"-framework CoreMotion",
-					"-framework NetFS",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv;
 				PRODUCT_NAME = PlaiY;
@@ -1038,7 +1127,6 @@
 					"-framework Security",
 					"-framework AVFoundation",
 					"-framework CoreMotion",
-					"-framework NetFS",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv;
 				PRODUCT_NAME = PlaiY;
@@ -1071,6 +1159,27 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_VERSION = 6.3;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PlaiY.app/Contents/MacOS/PlaiY";
+			};
+			name = Release;
+		};
+		7ADE6841517053ABFBE18570 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TopShelf/TopShelf.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				INFOPLIST_FILE = TopShelf/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv.topshelf;
+				PRODUCT_NAME = TopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.3;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};
@@ -1134,6 +1243,27 @@
 			};
 			name = Debug;
 		};
+		E619B2973B9786193CBE2F51 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = TopShelf/TopShelf.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				INFOPLIST_FILE = TopShelf/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.plaiy.app.tv.topshelf;
+				PRODUCT_NAME = TopShelf;
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.3;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1178,6 +1308,15 @@
 			buildConfigurations = (
 				877F4C2175D35984B0EA4641 /* Debug */,
 				390BEFFAF68C068B787329CA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F23E559E50D5A4DDCF4B514A /* Build configuration list for PBXNativeTarget "PlaiY-TopShelf" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E619B2973B9786193CBE2F51 /* Debug */,
+				7ADE6841517053ABFBE18570 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

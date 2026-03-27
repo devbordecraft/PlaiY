@@ -77,6 +77,7 @@ struct TimelineSectionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(.spring(response: 0.2, dampingFraction: 0.75), value: isActive)
                 .contentShape(Rectangle())
+                #if !os(tvOS)
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let location):
@@ -121,6 +122,7 @@ struct TimelineSectionView: View {
                             isDragging = false
                         }
                 )
+                #endif
 
                 if let image = currentThumb, isActive {
                     let thumbWidth: CGFloat = 240
@@ -299,6 +301,7 @@ struct VolumeControlView: View {
             .buttonStyle(PlayerButtonStyle())
             .foregroundStyle(.white)
 
+            #if !os(tvOS)
             Slider(
                 value: Binding(
                     get: { Double(localVolume) },
@@ -313,7 +316,11 @@ struct VolumeControlView: View {
             .frame(width: isHovering && !passthroughActive ? 100 : 0)
             .opacity(isHovering && !passthroughActive ? 1 : 0)
             .tint(.white)
+            #endif
         }
+        #if os(tvOS)
+        .frame(width: 44, alignment: .leading)
+        #else
         .frame(width: 160, alignment: .leading)
         .onHover { hovering in
             withAnimation(.spring(response: 0.2, dampingFraction: 0.75)) {
@@ -326,6 +333,7 @@ struct VolumeControlView: View {
                 onSetVolume(localVolume)
             }
         }
+        #endif
         .onAppear {
             localVolume = initialVolume
         }

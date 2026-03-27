@@ -8,7 +8,8 @@ struct SourceBrowserView: View {
     @State private var showAddSource = false
 
     private let columns = [
-        GridItem(.adaptive(minimum: 200, maximum: 300), spacing: 16)
+        GridItem(.adaptive(minimum: LayoutMetrics.gridMinWidth,
+                           maximum: LayoutMetrics.gridMaxWidth), spacing: 16)
     ]
 
     var body: some View {
@@ -91,6 +92,9 @@ struct SourceBrowserView: View {
             .padding(.vertical, 6)
             .glassEffect(isSelected ? .regular.interactive() : .regular, in: .capsule)
         }
+        #if os(tvOS)
+        .buttonStyle(.bordered)
+        #else
         .buttonStyle(.plain)
         .contextMenu {
             Button(connected ? "Disconnect" : "Connect") {
@@ -104,6 +108,7 @@ struct SourceBrowserView: View {
                 sourcesVM.removeSource(id: source.id)
             }
         }
+        #endif
     }
 
     // MARK: - Content
@@ -179,7 +184,11 @@ struct SourceBrowserView: View {
                         Image(systemName: "house")
                             .font(.caption)
                     }
+                    #if os(tvOS)
+                    .buttonStyle(.bordered)
+                    #else
                     .buttonStyle(.plain)
+                    #endif
 
                     ForEach(Array(sourcesVM.navigationPath.enumerated()), id: \.offset) { index, component in
                         Image(systemName: "chevron.right")
@@ -193,7 +202,11 @@ struct SourceBrowserView: View {
                                 relativePath: target.joined(separator: "/")
                             )
                         }
+                        #if os(tvOS)
+                        .buttonStyle(.bordered)
+                        #else
                         .buttonStyle(.plain)
+                        #endif
                         .font(.caption)
                     }
 
@@ -282,9 +295,15 @@ struct SourceBrowserView: View {
                     .lineLimit(2)
             }
             .padding(8)
+            #if !os(tvOS)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+            #endif
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(.plain)
+        #endif
         #if os(macOS)
         .onHover { hovering in
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -319,9 +338,15 @@ struct SourceBrowserView: View {
                 }
             }
             .padding(8)
+            #if !os(tvOS)
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+            #endif
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(.plain)
+        #endif
         #if os(macOS)
         .onHover { hovering in
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }

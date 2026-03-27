@@ -37,9 +37,12 @@ enum SourceType: Int, Codable, CaseIterable, Sendable {
         }
     }
 
-    // Only SMB is available in the initial release
     var isAvailable: Bool {
+        #if os(tvOS)
+        self == .smb
+        #else
         self == .local || self == .smb
+        #endif
     }
 }
 

@@ -12,62 +12,118 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            switch screen {
-            case .player:
-                if let path = selectedFilePath {
-                    PlayerView(
-                        viewModel: playerVM,
-                        resumePosition: settings.resumePlayback ? ResumeStore.position(for: path) : nil,
-                        autoplay: settings.autoplayOnOpen,
-                        onBack: {
-                            if settings.resumePlayback {
-                                ResumeStore.save(
-                                    path: path,
-                                    positionUs: playerVM.currentPosition,
-                                    durationUs: playerVM.duration
-                                )
-                            }
-                            settings.volume = Double(playerVM.volume)
-                            playerVM.stop()
-                            screen = .library
-                            selectedFilePath = nil
-                        }
-                    )
-                    .onAppear {
-                        playerVM.open(path: path, settings: settings)
-                    }
-                    .onChange(of: playerVM.playbackEnded) { ended in
-                        if ended {
-                            if settings.resumePlayback {
-                                ResumeStore.clear(path: path)
-                            }
-                            settings.volume = Double(playerVM.volume)
-                            playerVM.stop()
-                            screen = .library
-                            selectedFilePath = nil
-                        }
-                    }
-                }
+            if screen == .player, let path = selectedFilePath {
+                playerView(path: path)
+            } else {
+                #if os(tvOS)
+                tvBrowseView
+                #else
+                desktopBrowseView
+                #endif
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 800, minHeight: 500)
+        #endif
+        .onAppear {
+            sourcesVM.loadSavedSources()
+        }
+        .onOpenURL { url in
+            guard url.scheme == "plaiy", url.host == "play",
+                  let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  let path = components.queryItems?.first(where: { $0.name == "path" })?.value
+            else { return }
+            selectedFilePath = path
+            screen = .player
+        }
+    }
 
+    // MARK: - Player
+
+    private func playerView(path: String) -> some View {
+        PlayerView(
+            viewModel: playerVM,
+            resumePosition: settings.resumePlayback ? ResumeStore.position(for: path) : nil,
+            autoplay: settings.autoplayOnOpen,
+            onBack: {
+                if settings.resumePlayback {
+                    ResumeStore.save(
+                        path: path,
+                        positionUs: playerVM.currentPosition,
+                        durationUs: playerVM.duration,
+                        title: playerVM.mediaTitle
+                    )
+                }
+                settings.volume = Double(playerVM.volume)
+                playerVM.stop()
+                screen = .sources
+                selectedFilePath = nil
+            }
+        )
+        .onAppear {
+            playerVM.open(path: path, settings: settings)
+        }
+        .onChange(of: playerVM.playbackEnded) { ended in
+            if ended {
+                if settings.resumePlayback {
+                    ResumeStore.clear(path: path)
+                }
+                settings.volume = Double(playerVM.volume)
+                playerVM.stop()
+                screen = .sources
+                selectedFilePath = nil
+            }
+        }
+    }
+
+    // MARK: - tvOS TabView
+
+    #if os(tvOS)
+    private var tvBrowseView: some View {
+        TabView {
+            Tab("Sources", systemImage: "network") {
+                SourceBrowserView(
+                    sourcesVM: sourcesVM,
+                    onSelect: { uri in
+                        selectedFilePath = uri
+                        screen = .player
+                    },
+                    onSettings: {}
+                )
+            }
+
+            Tab("Library", systemImage: "film.stack") {
+                LibraryView(
+                    onSelect: { path in
+                        selectedFilePath = path
+                        screen = .player
+                    },
+                    onSettings: {}
+                )
+                .environmentObject(libraryVM)
+            }
+
+            Tab("Settings", systemImage: "gearshape") {
+                SettingsView(onDismiss: {})
+                    .environmentObject(settings)
+                    .environmentObject(libraryVM)
+                    .environmentObject(sourcesVM)
+            }
+        }
+    }
+    #endif
+
+    // MARK: - Desktop/iOS browse view
+
+    #if !os(tvOS)
+    private var desktopBrowseView: some View {
+        Group {
+            switch screen {
             case .settings:
                 SettingsView(onDismiss: { screen = .library })
                     .environmentObject(settings)
                     .environmentObject(libraryVM)
                     .environmentObject(sourcesVM)
-
-            case .library:
-                browseContainer {
-                    LibraryView(
-                        onSelect: { path in
-                            selectedFilePath = path
-                            screen = .player
-                        },
-                        onSettings: {
-                            screen = .settings
-                        }
-                    )
-                    .environmentObject(libraryVM)
-                }
 
             case .sources:
                 browseContainer {
@@ -82,13 +138,21 @@ struct ContentView: View {
                         }
                     )
                 }
+
+            default:
+                browseContainer {
+                    LibraryView(
+                        onSelect: { path in
+                            selectedFilePath = path
+                            screen = .player
+                        },
+                        onSettings: {
+                            screen = .settings
+                        }
+                    )
+                    .environmentObject(libraryVM)
+                }
             }
-        }
-        #if os(macOS)
-        .frame(minWidth: 800, minHeight: 500)
-        #endif
-        .onAppear {
-            sourcesVM.loadSavedSources()
         }
     }
 
@@ -123,4 +187,5 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
     }
+    #endif
 }

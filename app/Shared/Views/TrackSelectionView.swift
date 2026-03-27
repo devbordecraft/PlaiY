@@ -9,11 +9,13 @@ struct TrackSelectionView: View {
             // Tap-to-dismiss background
             Color.black.opacity(0.3)
                 .ignoresSafeArea()
+                #if !os(tvOS)
                 .onTapGesture {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                         isPresented = false
                     }
                 }
+                #endif
 
             // Side panel
             ScrollView {
@@ -145,11 +147,18 @@ struct TrackSelectionView: View {
                 }
                 .padding(20)
             }
-            .frame(width: 280)
+            .frame(width: LayoutMetrics.panelWidth)
             .glassEffect(.regular, in: .rect(cornerRadius: 0))
             .environment(\.colorScheme, .dark)
             .transition(.move(edge: .trailing))
         }
+        #if os(tvOS)
+        .onExitCommand {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                isPresented = false
+            }
+        }
+        #endif
     }
 
     @ViewBuilder
@@ -185,7 +194,11 @@ struct TrackSelectionView: View {
             .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
+        #if os(tvOS)
+        .buttonStyle(.card)
+        #else
         .buttonStyle(.plain)
+        #endif
     }
 }
 

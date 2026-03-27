@@ -17,7 +17,12 @@ struct PlayerView: View {
     #if os(macOS)
     @State private var scrollMonitor: Any?
     #endif
+    #if os(tvOS)
+    enum PlayerFocus: Hashable { case video, controls }
+    @FocusState private var playerFocus: PlayerFocus?
+    #else
     @FocusState private var isPlayerFocused: Bool
+    #endif
 
     var body: some View {
         ZStack {
@@ -69,6 +74,27 @@ struct PlayerView: View {
                         }
                 )
 
+            // ── tvOS Siri Remote gesture layer ──
+            #if os(tvOS)
+            TVRemoteGestureView(
+                onSwipeSeek: { seconds in
+                    handleKeyAction { viewModel.seekRelative(seconds: seconds) }
+                },
+                onTap: {
+                    if showControls {
+                        handleKeyAction { viewModel.togglePlayPause() }
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showControls = true
+                        }
+                        scheduleHideControls()
+                    }
+                }
+            )
+            .ignoresSafeArea()
+            .allowsHitTesting(!showControls)
+            #endif
+
             // ── Controls overlay ──
             // Always in view tree; visibility via opacity preserves hover state.
             VStack {
@@ -89,10 +115,12 @@ struct PlayerView: View {
                         }
                     }
                 )
+                #if !os(tvOS)
                 .onHover { hovering in
                     viewModel.transport.isHoveringControls = hovering
                     if !hovering { scheduleHideControls() }
                 }
+                #endif
 
                 Spacer()
 
@@ -111,10 +139,12 @@ struct PlayerView: View {
                     onTimelineDragEnded: { viewModel.timelineDragEnded() },
                     onTimeText: { viewModel.timeText(for: $0) }
                 )
+                #if !os(tvOS)
                 .onHover { hovering in
                     viewModel.transport.isHoveringControls = hovering
                     if !hovering { scheduleHideControls() }
                 }
+                #endif
             }
             .opacity(showControls ? 1 : 0)
             .allowsHitTesting(showControls)
@@ -146,6 +176,7 @@ struct PlayerView: View {
             }
         }
         .background(.black)
+        #if !os(tvOS)
         .onContinuousHover { phase in
             switch phase {
             case .active:
@@ -161,11 +192,20 @@ struct PlayerView: View {
                 break
             }
         }
+        #endif
         .focusable()
+        #if os(tvOS)
+        .focused($playerFocus, equals: .video)
+        #else
         .focused($isPlayerFocused)
+        #endif
         .focusEffectDisabled()
         .onAppear {
+            #if os(tvOS)
+            playerFocus = .video
+            #else
             isPlayerFocused = true
+            #endif
             scheduleHideControls()
             #if os(macOS)
             scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [self] event in
@@ -196,7 +236,14 @@ struct PlayerView: View {
         }
         #if os(tvOS)
         .onPlayPauseCommand {
-            handleKeyAction { viewModel.togglePlayPause() }
+            if showControls {
+                handleKeyAction { viewModel.togglePlayPause() }
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showControls = true
+                }
+                scheduleHideControls()
+            }
         }
         .onMoveCommand { direction in
             switch direction {
@@ -213,7 +260,21 @@ struct PlayerView: View {
             }
         }
         .onExitCommand {
-            onBack()
+            if showSettings {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showSettings = false
+                }
+                scheduleHideControls()
+            } else if showControls {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showControls = false
+                }
+            } else {
+                onBack()
+            }
+        }
+        .onChange(of: showControls) { visible in
+            playerFocus = visible ? .controls : .video
         }
         #else
         .onKeyPress(.space) {
