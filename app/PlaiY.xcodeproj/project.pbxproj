@@ -21,6 +21,7 @@
 		14ACA52268C07A3A17C2E9E6 /* PlexAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08DADFD7E921DE10F509F231 /* PlexAuth.swift */; };
 		1858118A083E6BFA252902D9 /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
 		1B47148518CC9CCF37D04B9F /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
+		1BED360F89786695CF6176BE /* PlayQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA82CDE08702A80B59C30143 /* PlayQueueView.swift */; };
 		1D8C9A37C65C57C507DD7FDC /* SourceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1F5AC0A4064E5EB7F33E9A /* SourceBrowserView.swift */; };
 		215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
 		229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
@@ -33,6 +34,7 @@
 		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
+		2FDF3B81A8B1ADA9C860E85B /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
 		30FE48B046995D7BF5F5AF01 /* SourcesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2859B8BA9FFDB1E85454DAD /* SourcesViewModel.swift */; };
 		3476DEEC7977C8673A0E5D62 /* LibraryItemTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */; };
 		34BBAD4B07EDDC4C1C2BC368 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
@@ -41,6 +43,7 @@
 		39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */; };
 		39BFDCC45CF8E7927B8DC47A /* TrackInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDAEF68423AF3437F2668253 /* TrackInfoTests.swift */; };
 		3B21956E3701C0F7D5C6FDBA /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
+		3BAB250485098E38A499E0C0 /* PlayQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 601FB575A66BFC1D0AE911DA /* PlayQueueTests.swift */; };
 		3F9D2AD57A1B39344332BCE6 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
 		3FBCF0FC5FA79A2719225C38 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
 		441A41FD6B5258C9639D21B7 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
@@ -60,7 +63,9 @@
 		6D3F5534C4ED24B830A3CE2C /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */; };
 		70A3F4E1453F784F07CD2C4B /* SourceManagerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */; };
 		7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
+		77AC86D17BCB012CE832A480 /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
 		797727605E3C329324F413F6 /* PlexAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08DADFD7E921DE10F509F231 /* PlexAuth.swift */; };
+		7A786734D0C73E16CEFFCCA9 /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
 		7D40A9E38CC9771AA4D625E7 /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		7FFA630CE049B775AB7C6980 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
@@ -107,11 +112,13 @@
 		D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		D3CBBF538ABD3981BAD4D021 /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */; };
 		D53D3576A70DFE015CD9AEFE /* ResumeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */; };
+		D671D26EA26130C6F1731B12 /* PlayQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA82CDE08702A80B59C30143 /* PlayQueueView.swift */; };
 		D71BD686F1B98796D06CAF15 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
 		D7FE81C235F565B33C070DFD /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
 		DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		DA9CC834A6CC252610EE836E /* ColorFilterUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */; };
+		DB7A32957EB19FAC667A4215 /* PlayQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA82CDE08702A80B59C30143 /* PlayQueueView.swift */; };
 		DBEA2565D31000974373894D /* MetalPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */; };
 		DBF2723AED277A69E663D567 /* SourceManagerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */; };
 		DC86BCC432EE393089FC265E /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
@@ -179,6 +186,7 @@
 		175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumeStore.swift; sourceTree = "<group>"; };
 		19D4B941118178244122189A /* PlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerBridge.swift; sourceTree = "<group>"; };
 		1BA85E71EAE1953A4599D144 /* PlayerViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModelTests.swift; sourceTree = "<group>"; };
+		1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayQueue.swift; sourceTree = "<group>"; };
 		203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeFormatting.swift; sourceTree = "<group>"; };
 		20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalViewCoordinator.swift; sourceTree = "<group>"; };
 		25D428FFE767625A57745F50 /* PlaiY-iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -196,6 +204,7 @@
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
 		5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceManagerBridge.swift; sourceTree = "<group>"; };
+		601FB575A66BFC1D0AE911DA /* PlayQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayQueueTests.swift; sourceTree = "<group>"; };
 		605D92FB022572469E826CE1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
 		6969ACD6B001ECEDE1F998F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -222,6 +231,7 @@
 		D30100538A9FEBA7B9A43D74 /* PlaiY-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "PlaiY-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D888DC06954A914994F0D3EC /* TrackSelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackSelectionView.swift; sourceTree = "<group>"; };
 		D9BE4E8C995773F215FF4005 /* VideoDisplaySettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettingsTests.swift; sourceTree = "<group>"; };
+		DA82CDE08702A80B59C30143 /* PlayQueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayQueueView.swift; sourceTree = "<group>"; };
 		E70C6C424D83AFFE819F2081 /* PlaiY.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlaiY.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBCE734B22E27E48EA38CB20 /* PYLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PYLog.swift; sourceTree = "<group>"; };
 		EDAEF68423AF3437F2668253 /* TrackInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfoTests.swift; sourceTree = "<group>"; };
@@ -247,6 +257,7 @@
 				19D4B941118178244122189A /* PlayerBridge.swift */,
 				BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */,
 				3607CF6035239073AEE20781 /* PlayerViewModel.swift */,
+				1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */,
 				08DADFD7E921DE10F509F231 /* PlexAuth.swift */,
 				EBCE734B22E27E48EA38CB20 /* PYLog.swift */,
 				175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */,
@@ -281,6 +292,7 @@
 			children = (
 				7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */,
 				1BA85E71EAE1953A4599D144 /* PlayerViewModelTests.swift */,
+				601FB575A66BFC1D0AE911DA /* PlayQueueTests.swift */,
 				8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */,
 				8CF842F44554B1DF331B0B0A /* SourceConfigTests.swift */,
 				28BE4FCAB1AAD2A1C89CADFA /* TimeFormattingTests.swift */,
@@ -302,6 +314,7 @@
 				BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */,
 				971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */,
 				F793BF28CF63B6D50E101247 /* PlayerView.swift */,
+				DA82CDE08702A80B59C30143 /* PlayQueueView.swift */,
 				CBEA4FDA4B2389AF3126AB39 /* SettingsView.swift */,
 				0F1F5AC0A4064E5EB7F33E9A /* SourceBrowserView.swift */,
 				5F509227A3C23A5754D3548D /* SubtitleOverlayView.swift */,
@@ -521,6 +534,7 @@
 			files = (
 				3476DEEC7977C8673A0E5D62 /* LibraryItemTests.swift in Sources */,
 				F9EA72B4DBFCB027A121FF2D /* MockPlayerBridge.swift in Sources */,
+				3BAB250485098E38A499E0C0 /* PlayQueueTests.swift in Sources */,
 				C44C5C2D53EAC787D175C3F6 /* PlayerViewModelTests.swift in Sources */,
 				D53D3576A70DFE015CD9AEFE /* ResumeStoreTests.swift in Sources */,
 				0CFC59962D9359DCC71B3BF3 /* SourceConfigTests.swift in Sources */,
@@ -552,6 +566,8 @@
 				259C643A39AC08496B6E0EA9 /* PYLog.swift in Sources */,
 				130DF834DB1D23DD6557CB86 /* PlaiYApp.swift in Sources */,
 				C7641745468D4FDE312D1A7B /* PlatformTypes.swift in Sources */,
+				2FDF3B81A8B1ADA9C860E85B /* PlayQueue.swift in Sources */,
+				DB7A32957EB19FAC667A4215 /* PlayQueueView.swift in Sources */,
 				1858118A083E6BFA252902D9 /* PlayerBridge.swift in Sources */,
 				229C71D626C47A78933F6DA7 /* PlayerBridgeProtocol.swift in Sources */,
 				80568C9928578EB526752B5B /* PlayerControlsView.swift in Sources */,
@@ -598,6 +614,8 @@
 				7D7E1CECB3F17495DB5CB383 /* PYLog.swift in Sources */,
 				98376E3F36BA233ED58845C6 /* PlaiYApp.swift in Sources */,
 				0A3215BE7E8A81B8886EB448 /* PlatformTypes.swift in Sources */,
+				7A786734D0C73E16CEFFCCA9 /* PlayQueue.swift in Sources */,
+				D671D26EA26130C6F1731B12 /* PlayQueueView.swift in Sources */,
 				08A1BD12FC47C34AD0B7EAB2 /* PlayerBridge.swift in Sources */,
 				ECC24E6BD1F21ED34821C882 /* PlayerBridgeProtocol.swift in Sources */,
 				97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */,
@@ -644,6 +662,8 @@
 				2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */,
 				EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */,
 				E0A10C2A440A397EA93D6597 /* PlatformTypes.swift in Sources */,
+				77AC86D17BCB012CE832A480 /* PlayQueue.swift in Sources */,
+				1BED360F89786695CF6176BE /* PlayQueueView.swift in Sources */,
 				E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */,
 				C0643DD0B403D7989A7C6225 /* PlayerBridgeProtocol.swift in Sources */,
 				0FA38F7B165065229AD65C81 /* PlayerControlsView.swift in Sources */,

@@ -3,12 +3,17 @@ import QuartzCore
 
 struct PlayerView: View {
     @ObservedObject var viewModel: PlayerViewModel
+    @ObservedObject var playQueue: PlayQueue
     let resumePosition: Int64?
     let autoplay: Bool
     let onBack: () -> Void
+    var onNextTrack: (() -> Void)?
+    var onPreviousTrack: (() -> Void)?
+    var onJumpToQueueItem: ((Int) -> Void)?
 
     @State private var showControls = true
     @State private var showSettings = false
+    @State private var showQueue = false
     @State private var showResumePrompt = false
     @State private var hideControlsTask: Task<Void, Never>?
     @State private var resumeDismissTask: Task<Void, Never>?
@@ -101,14 +106,27 @@ struct PlayerView: View {
                 TopBarView(
                     mediaTitle: viewModel.mediaTitle,
                     showDebugOverlay: viewModel.showDebugOverlay,
+                    queueItemCount: playQueue.items.count,
                     onBack: onBack,
                     onToggleFullScreen: { toggleFullScreen() },
                     onToggleDebug: { viewModel.showDebugOverlay.toggle() },
                     onToggleSettings: {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showSettings.toggle()
+                            if showSettings { showQueue = false }
                         }
                         if showSettings {
+                            hideControlsTask?.cancel()
+                        } else {
+                            scheduleHideControls()
+                        }
+                    },
+                    onToggleQueue: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            showQueue.toggle()
+                            if showQueue { showSettings = false }
+                        }
+                        if showQueue {
                             hideControlsTask?.cancel()
                         } else {
                             scheduleHideControls()
@@ -160,6 +178,18 @@ struct PlayerView: View {
                 TrackSelectionView(
                     viewModel: viewModel,
                     isPresented: $showSettings
+                )
+            }
+
+            // Queue panel overlay
+            if showQueue {
+                PlayQueueView(
+                    queue: playQueue,
+                    isPresented: $showQueue,
+                    onJumpTo: { index in
+                        guard index != playQueue.currentIndex else { return }
+                        onJumpToQueueItem?(index)
+                    }
                 )
             }
 
@@ -335,6 +365,29 @@ struct PlayerView: View {
             handleKeyAction { viewModel.resetDisplaySettings() }
             return .handled
         }
+        .onKeyPress(KeyEquivalent("n")) {
+            if let next = onNextTrack {
+                handleKeyAction { next() }
+                return .handled
+            }
+            return .ignored
+        }
+        .onKeyPress(KeyEquivalent("p")) {
+            if let prev = onPreviousTrack {
+                handleKeyAction { prev() }
+                return .handled
+            }
+            return .ignored
+        }
+        .onKeyPress(KeyEquivalent("l")) {
+            handleKeyAction {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    showQueue.toggle()
+                    if showQueue { showSettings = false }
+                }
+            }
+            return .handled
+        }
         #endif
         .gesture(
             MagnifyGesture()
@@ -460,10 +513,12 @@ private struct ResumePromptView: View {
 private struct TopBarView: View {
     let mediaTitle: String
     let showDebugOverlay: Bool
+    let queueItemCount: Int
     let onBack: () -> Void
     let onToggleFullScreen: () -> Void
     let onToggleDebug: () -> Void
     let onToggleSettings: () -> Void
+    let onToggleQueue: () -> Void
 
     var body: some View {
         GlassEffectContainer {
@@ -491,6 +546,16 @@ private struct TopBarView: View {
                 .buttonStyle(PlayerButtonStyle())
                 .foregroundStyle(.white)
                 #endif
+
+                if queueItemCount > 1 {
+                    Button(action: onToggleQueue) {
+                        Image(systemName: "list.bullet")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                    }
+                    .buttonStyle(PlayerButtonStyle())
+                    .foregroundStyle(.white)
+                }
 
                 Button(action: onToggleDebug) {
                     Image(systemName: "ant")

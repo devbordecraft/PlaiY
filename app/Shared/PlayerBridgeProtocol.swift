@@ -54,6 +54,7 @@ protocol PlayerBridgeProtocol: AnyObject, Sendable {
 
     // Callbacks
     func setDeviceChangeCallback(_ callback: @escaping () -> Void)
+    func setStateCallback(_ callback: @escaping (Int32) -> Void)
 
     // Seek thumbnails
     func startSeekThumbnails(interval: Int32)

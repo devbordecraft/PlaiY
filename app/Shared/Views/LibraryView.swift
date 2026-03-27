@@ -7,6 +7,7 @@ import AppKit
 struct LibraryView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
     let onSelect: (String) -> Void
+    var onPlayAll: ([(path: String, name: String)]) -> Void = { _ in }
     let onSettings: () -> Void
 
     #if os(iOS)
@@ -44,6 +45,16 @@ struct LibraryView: View {
                             .font(.title2)
                     }
                     .buttonStyle(.bordered)
+
+                    if !libraryVM.items.isEmpty {
+                        Button {
+                            let items = libraryVM.items.map { (path: $0.filePath, name: $0.title) }
+                            onPlayAll(items)
+                        } label: {
+                            Label("Play All", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.bordered)
+                    }
 
                     #if !os(tvOS)
                     Button("Add Folder") {

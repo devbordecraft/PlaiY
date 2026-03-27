@@ -141,6 +141,9 @@ PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p);
 typedef void (*PYDeviceChangeCallback)(void* userdata);
 void        py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata);
 
+typedef void (*PYStateChangeCallback)(int state, void* userdata);
+void        py_player_set_state_callback(PYPlayer* p, PYStateChangeCallback cb, void* userdata);
+
 // ---- Spatial audio ----
 // Mode: 0 = Auto (default), 1 = Off, 2 = Force Spatial
 void        py_player_set_spatial_audio_mode(PYPlayer* p, int mode);

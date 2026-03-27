@@ -9,10 +9,18 @@ private func deviceChangeTrampoline(_ userdata: UnsafeMutableRawPointer?) {
     cb()
 }
 
+@c
+private func stateChangeTrampoline(_ state: Int32, _ userdata: UnsafeMutableRawPointer?) {
+    guard let userdata else { return }
+    guard let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? (Int32) -> Void else { return }
+    cb(state)
+}
+
 /// Swift wrapper around the C bridge API (plaiy_c.h)
 final class PlayerBridge: @unchecked Sendable {
     private let handle: OpaquePointer
     private var deviceCallbackContext: UnsafeMutableRawPointer?
+    private var stateCallbackContext: UnsafeMutableRawPointer?
 
     init() {
         handle = py_player_create()
@@ -20,6 +28,9 @@ final class PlayerBridge: @unchecked Sendable {
 
     deinit {
         if let ctx = deviceCallbackContext {
+            Unmanaged<AnyObject>.fromOpaque(ctx).release()
+        }
+        if let ctx = stateCallbackContext {
             Unmanaged<AnyObject>.fromOpaque(ctx).release()
         }
         py_player_destroy(handle)
@@ -167,6 +178,15 @@ final class PlayerBridge: @unchecked Sendable {
         let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
         deviceCallbackContext = context
         py_player_set_device_change_callback(handle, deviceChangeTrampoline, context)
+    }
+
+    func setStateCallback(_ callback: @escaping (Int32) -> Void) {
+        if let prev = stateCallbackContext {
+            Unmanaged<AnyObject>.fromOpaque(prev).release()
+        }
+        let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
+        stateCallbackContext = context
+        py_player_set_state_callback(handle, stateChangeTrampoline, context)
     }
 
     // MARK: - Spatial audio

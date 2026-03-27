@@ -88,6 +88,8 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     func mediaInfoJSON() -> String { stubMediaInfoJSON }
 
     func setDeviceChangeCallback(_ callback: @escaping () -> Void) {}
+    func setStateCallback(_ callback: @escaping (Int32) -> Void) { lastStateCallback = callback }
+    var lastStateCallback: ((Int32) -> Void)?
 
     func startSeekThumbnails(interval: Int32) { startSeekThumbnailsCalled = true }
     func cancelSeekThumbnails() { cancelSeekThumbnailsCalled = true }

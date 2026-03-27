@@ -136,7 +136,9 @@ class PlayerViewModel: ObservableObject {
     private var hoverEndWork: DispatchWorkItem?
 
 
-    func open(path: String, settings: AppSettings) {
+    func open(path: String, settings: AppSettings,
+              onNextTrack: (() -> Void)? = nil,
+              onPreviousTrack: (() -> Void)? = nil) {
         playbackEnded = false
         playbackSpeed = 1.0
 
@@ -206,12 +208,25 @@ class PlayerViewModel: ObservableObject {
             disableSubtitles()
         }
 
+        bridge.setStateCallback { [weak self] state in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if state == PY_STATE_STOPPED.rawValue {
+                    self.isPlaying = false
+                    self.transport.isPlaying = false
+                    self.playbackEnded = true
+                }
+            }
+        }
+
         let interval: Int32 = transport.duration > 7_200_000_000 ? 30 : 10
         bridge.startSeekThumbnails(interval: interval)
 
-        NowPlayingManager.shared.setup(onPlayPause: { [weak self] in
-            self?.togglePlayPause()
-        })
+        NowPlayingManager.shared.setup(
+            onPlayPause: { [weak self] in self?.togglePlayPause() },
+            onNextTrack: onNextTrack,
+            onPreviousTrack: onPreviousTrack
+        )
     }
 
     func play() {

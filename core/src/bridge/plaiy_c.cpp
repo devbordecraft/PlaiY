@@ -22,6 +22,8 @@ struct PYPlayer {
     std::string video_path;
     PYDeviceChangeCallback device_cb = nullptr;
     void* device_ud = nullptr;
+    PYStateChangeCallback state_cb = nullptr;
+    void* state_ud = nullptr;
 };
 
 PYPlayer* py_player_create(void) {
@@ -185,6 +187,20 @@ void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb
         });
     } else {
         p->engine.set_device_change_callback(nullptr);
+    }
+}
+
+void py_player_set_state_callback(PYPlayer* p, PYStateChangeCallback cb, void* userdata) {
+    if (!p) return;
+    p->state_cb = cb;
+    p->state_ud = userdata;
+
+    if (cb) {
+        p->engine.set_state_callback([p](py::PlaybackState s){
+            if (p->state_cb) p->state_cb(static_cast<int>(s), p->state_ud);
+        });
+    } else {
+        p->engine.set_state_callback(nullptr);
     }
 }
 

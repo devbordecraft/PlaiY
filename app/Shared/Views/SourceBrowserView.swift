@@ -3,6 +3,7 @@ import SwiftUI
 struct SourceBrowserView: View {
     @ObservedObject var sourcesVM: SourcesViewModel
     let onSelect: (String) -> Void
+    let onPlayAll: ([(path: String, name: String)]) -> Void
     let onSettings: () -> Void
 
     @State private var showAddSource = false
@@ -217,6 +218,17 @@ struct SourceBrowserView: View {
 
                     Spacer()
 
+                    if hasMediaFiles {
+                        Button {
+                            let items = mediaFileItems
+                            onPlayAll(items)
+                        } label: {
+                            Label("Play All", systemImage: "play.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
                     Button {
                         sourcesVM.navigateUp()
                     } label: {
@@ -357,5 +369,21 @@ struct SourceBrowserView: View {
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
         #endif
+    }
+
+    // MARK: - Play All helpers
+
+    private var hasMediaFiles: Bool {
+        sourcesVM.currentEntries.contains { !$0.isDirectory }
+    }
+
+    private var mediaFileItems: [(path: String, name: String)] {
+        sourcesVM.currentEntries
+            .filter { !$0.isDirectory }
+            .map { entry in
+                let path = sourcesVM.playablePath(for: entry)
+                let name = (entry.name as NSString).deletingPathExtension
+                return (path: path, name: name)
+            }
     }
 }

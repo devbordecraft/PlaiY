@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @StateObject private var playerVM = PlayerViewModel()
     @StateObject private var sourcesVM = SourcesViewModel()
+    @StateObject private var playQueue = PlayQueue()
 
     enum Screen { case library, sources, settings, player }
     @State private var screen: Screen = .library
@@ -43,6 +44,7 @@ struct ContentView: View {
     private func playerView(path: String) -> some View {
         PlayerView(
             viewModel: playerVM,
+            playQueue: playQueue,
             resumePosition: settings.resumePlayback ? ResumeStore.position(for: path) : nil,
             autoplay: settings.autoplayOnOpen,
             onBack: {
@@ -56,24 +58,125 @@ struct ContentView: View {
                 }
                 settings.volume = Double(playerVM.volume)
                 playerVM.stop()
+                playQueue.clear()
                 screen = .sources
                 selectedFilePath = nil
-            }
+            },
+            onNextTrack: { skipToNext() },
+            onPreviousTrack: { skipToPrevious() },
+            onJumpToQueueItem: { index in jumpToQueueItem(at: index) }
         )
         .onAppear {
-            playerVM.open(path: path, settings: settings)
+            playerVM.open(path: path, settings: settings,
+                          onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+                          onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
         }
         .onChange(of: playerVM.playbackEnded) { ended in
             if ended {
-                if settings.resumePlayback {
-                    ResumeStore.clear(path: path)
-                }
-                settings.volume = Double(playerVM.volume)
-                playerVM.stop()
-                screen = .sources
-                selectedFilePath = nil
+                handlePlaybackEnded(finishedPath: path)
             }
         }
+    }
+
+    private func handlePlaybackEnded(finishedPath: String) {
+        // Clear resume for finished file (it was watched to the end)
+        if settings.resumePlayback {
+            ResumeStore.clear(path: finishedPath)
+        }
+
+        if let next = playQueue.advance() {
+            // Auto-advance to next track
+            playerVM.stop()
+            selectedFilePath = next.path
+            playerVM.open(path: next.path, settings: settings,
+                          onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+                          onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
+            // Silent auto-resume
+            if settings.resumePlayback, let resumePos = ResumeStore.position(for: next.path) {
+                playerVM.bridge.seek(to: resumePos)
+            }
+            playerVM.play()
+        } else {
+            // Queue exhausted or single file -- navigate back
+            settings.volume = Double(playerVM.volume)
+            playerVM.stop()
+            playQueue.clear()
+            screen = .sources
+            selectedFilePath = nil
+        }
+    }
+
+    private func skipToNext() {
+        guard let current = playQueue.currentItem else { return }
+        guard let next = playQueue.advance() else { return }
+        if settings.resumePlayback {
+            ResumeStore.save(
+                path: current.path,
+                positionUs: playerVM.currentPosition,
+                durationUs: playerVM.duration,
+                title: playerVM.mediaTitle
+            )
+        }
+        playerVM.stop()
+        selectedFilePath = next.path
+        playerVM.open(path: next.path, settings: settings,
+                      onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+                      onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
+        if settings.resumePlayback, let resumePos = ResumeStore.position(for: next.path) {
+            playerVM.bridge.seek(to: resumePos)
+        }
+        playerVM.play()
+    }
+
+    private func playAllFromSource(_ items: [(path: String, name: String)]) {
+        guard !items.isEmpty else { return }
+        playQueue.setQueue(items, startIndex: 0)
+        selectedFilePath = items[0].path
+        screen = .player
+    }
+
+    private func jumpToQueueItem(at index: Int) {
+        guard let current = playQueue.currentItem else { return }
+        guard let target = playQueue.jumpTo(index: index) else { return }
+        if settings.resumePlayback {
+            ResumeStore.save(
+                path: current.path,
+                positionUs: playerVM.currentPosition,
+                durationUs: playerVM.duration,
+                title: playerVM.mediaTitle
+            )
+        }
+        playerVM.stop()
+        selectedFilePath = target.path
+        playerVM.open(path: target.path, settings: settings,
+                      onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+                      onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
+        if settings.resumePlayback, let resumePos = ResumeStore.position(for: target.path) {
+            playerVM.bridge.seek(to: resumePos)
+        }
+        playerVM.play()
+    }
+
+    private func skipToPrevious() {
+        guard let current = playQueue.currentItem else { return }
+        guard let prev = playQueue.goBack() else { return }
+        if settings.resumePlayback {
+            ResumeStore.save(
+                path: current.path,
+                positionUs: playerVM.currentPosition,
+                durationUs: playerVM.duration,
+                title: playerVM.mediaTitle
+            )
+        }
+        playerVM.stop()
+        selectedFilePath = prev.path
+        playerVM.open(path: prev.path, settings: settings,
+                      onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+                      onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
+        if settings.resumePlayback, let resumePos = ResumeStore.position(for: prev.path) {
+            playerVM.bridge.seek(to: resumePos)
+        }
+        playerVM.play()
     }
 
     // MARK: - tvOS TabView
@@ -88,6 +191,7 @@ struct ContentView: View {
                         selectedFilePath = uri
                         screen = .player
                     },
+                    onPlayAll: { items in playAllFromSource(items) },
                     onSettings: {}
                 )
             }
@@ -98,6 +202,7 @@ struct ContentView: View {
                         selectedFilePath = path
                         screen = .player
                     },
+                    onPlayAll: { items in playAllFromSource(items) },
                     onSettings: {}
                 )
                 .environmentObject(libraryVM)
@@ -133,6 +238,7 @@ struct ContentView: View {
                             selectedFilePath = uri
                             screen = .player
                         },
+                        onPlayAll: { items in playAllFromSource(items) },
                         onSettings: {
                             screen = .settings
                         }
@@ -146,6 +252,7 @@ struct ContentView: View {
                             selectedFilePath = path
                             screen = .player
                         },
+                        onPlayAll: { items in playAllFromSource(items) },
                         onSettings: {
                             screen = .settings
                         }
