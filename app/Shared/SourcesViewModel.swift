@@ -5,6 +5,7 @@ class SourcesViewModel: ObservableObject {
     @Published var sources: [SourceConfig] = []
     @Published var currentEntries: [SourceEntry] = []
     @Published var navigationPath: [String] = []
+    @Published var navigationDisplayNames: [String] = []
     @Published var currentSourceId: String?
     @Published var isLoading = false
     @Published var isConnecting = false
@@ -50,6 +51,12 @@ class SourcesViewModel: ObservableObject {
         saveSources()
     }
 
+    func addSourceAndConnect(_ config: SourceConfig, password: String) {
+        let sourceId = config.id
+        addSource(config, password: password)
+        connect(sourceId: sourceId)
+    }
+
     func removeSource(id: String) {
         bridge.disconnect(sourceId: id)
         bridge.removeSource(id: id)
@@ -61,6 +68,7 @@ class SourcesViewModel: ObservableObject {
             currentSourceId = nil
             currentEntries = []
             navigationPath = []
+            navigationDisplayNames = []
         }
     }
 
@@ -80,6 +88,7 @@ class SourcesViewModel: ObservableObject {
                 if success {
                     self.currentSourceId = sourceId
                     self.navigationPath = []
+                    self.navigationDisplayNames = []
                     self.browse(sourceId: sourceId, relativePath: "")
                 } else {
                     self.error = "Connection failed — check address and credentials"
@@ -94,6 +103,7 @@ class SourcesViewModel: ObservableObject {
             currentSourceId = nil
             currentEntries = []
             navigationPath = []
+            navigationDisplayNames = []
         }
     }
 
@@ -124,31 +134,42 @@ class SourcesViewModel: ObservableObject {
     func navigateInto(_ entry: SourceEntry) {
         guard let sourceId = currentSourceId, entry.isDirectory else { return }
 
-        // Compute relative path from the mount point
-        // The entry.uri is an absolute path; we need the relative part
         if let config = sources.first(where: { $0.id == sourceId }) {
-            // For mounted sources, the base is the mount path, which may differ
-            // from the config URI. We track navigation by appending to the path stack.
-            let currentPath = navigationPath.joined(separator: "/")
-            let nextComponent = entry.name
-            navigationPath.append(nextComponent)
-            let newPath = navigationPath.joined(separator: "/")
+            let newPath: String
+            if config.type == .plex {
+                // Plex: entry.uri contains the structured navigation key
+                navigationPath.append(entry.uri)
+                newPath = entry.uri
+            } else {
+                // Filesystem sources: build path from name components
+                navigationPath.append(entry.name)
+                newPath = navigationPath.joined(separator: "/")
+            }
+            navigationDisplayNames.append(entry.name)
             browse(sourceId: sourceId, relativePath: newPath)
-            _ = currentPath  // suppress unused
-            _ = config
         }
     }
 
     func navigateUp() {
         guard let sourceId = currentSourceId, !navigationPath.isEmpty else { return }
         navigationPath.removeLast()
-        let path = navigationPath.joined(separator: "/")
-        browse(sourceId: sourceId, relativePath: path)
+        navigationDisplayNames.removeLast()
+
+        if let config = sources.first(where: { $0.id == sourceId }) {
+            let path: String
+            if config.type == .plex {
+                path = navigationPath.last ?? ""
+            } else {
+                path = navigationPath.joined(separator: "/")
+            }
+            browse(sourceId: sourceId, relativePath: path)
+        }
     }
 
     func navigateToRoot() {
         guard let sourceId = currentSourceId else { return }
         navigationPath = []
+        navigationDisplayNames = []
         browse(sourceId: sourceId, relativePath: "")
     }
 

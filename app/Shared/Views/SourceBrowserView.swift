@@ -190,16 +190,21 @@ struct SourceBrowserView: View {
                     .buttonStyle(.plain)
                     #endif
 
-                    ForEach(Array(sourcesVM.navigationPath.enumerated()), id: \.offset) { index, component in
+                    ForEach(Array(sourcesVM.navigationDisplayNames.enumerated()), id: \.offset) { index, displayName in
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        Button(component) {
-                            let target = Array(sourcesVM.navigationPath.prefix(index + 1))
-                            sourcesVM.navigationPath = target
+                        Button(displayName) {
+                            let targetPath = Array(sourcesVM.navigationPath.prefix(index + 1))
+                            let targetNames = Array(sourcesVM.navigationDisplayNames.prefix(index + 1))
+                            sourcesVM.navigationPath = targetPath
+                            sourcesVM.navigationDisplayNames = targetNames
+
+                            let isPlex = sourcesVM.sources.first(where: { $0.id == sourcesVM.currentSourceId })?.type == .plex
+                            let relativePath = isPlex ? (targetPath.last ?? "") : targetPath.joined(separator: "/")
                             sourcesVM.browse(
                                 sourceId: sourcesVM.currentSourceId ?? "",
-                                relativePath: target.joined(separator: "/")
+                                relativePath: relativePath
                             )
                         }
                         #if os(tvOS)

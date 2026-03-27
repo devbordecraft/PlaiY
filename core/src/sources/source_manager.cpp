@@ -1,9 +1,11 @@
 #include "plaiy/source_manager.h"
 #include "plaiy/logger.h"
 #include "local_media_source.h"
+#include "plex_media_source.h"
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
+#include "ns_http_client.h"
 #endif
 
 #if defined(__APPLE__) && !TARGET_OS_TV
@@ -138,6 +140,15 @@ std::unique_ptr<IMediaSource> SourceManager::create_source(SourceConfig config) 
         case MediaSourceType::SMB:
             return std::make_unique<SMBMediaSource>(std::move(config));
 #endif
+        case MediaSourceType::Plex: {
+#if defined(__APPLE__)
+            auto http = std::make_unique<NSHttpClient>();
+            return std::make_unique<PlexMediaSource>(std::move(config), std::move(http));
+#else
+            PY_LOG_WARN(TAG, "Plex not yet supported on this platform");
+            return nullptr;
+#endif
+        }
         default:
             PY_LOG_WARN(TAG, "Unsupported source type: %s",
                         source_type_to_string(config.type).c_str());

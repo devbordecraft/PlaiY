@@ -63,6 +63,7 @@ set(CORE_SOURCES
     src/library/seek_thumbnail_generator.cpp
     src/sources/source_manager.cpp
     src/sources/local_media_source.cpp
+    src/sources/plex_media_source.cpp
     src/util/logger.cpp
     src/bridge/plaiy_c.cpp
 )
@@ -74,6 +75,7 @@ if(APPLE)
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
+        platform/apple/ns_http_client.mm
     )
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
         list(APPEND CORE_SOURCES platform/apple/smb_media_source.mm)
@@ -155,6 +157,7 @@ if(APPLE)
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
+        platform/apple/ns_http_client.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")

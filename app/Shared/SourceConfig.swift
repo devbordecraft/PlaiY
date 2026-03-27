@@ -39,9 +39,9 @@ enum SourceType: Int, Codable, CaseIterable, Sendable {
 
     var isAvailable: Bool {
         #if os(tvOS)
-        self == .smb
+        self == .smb || self == .plex
         #else
-        self == .local || self == .smb
+        self == .local || self == .smb || self == .plex
         #endif
     }
 }
@@ -71,6 +71,33 @@ struct SourceConfig: Identifiable, Codable, Sendable {
         self.type = type
         self.baseURI = baseURI
         self.username = username
+    }
+
+    // Encode type as string ("plex") not integer (4) — the C++ bridge expects strings
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(type.jsonString, forKey: .type)
+        try container.encode(baseURI, forKey: .baseURI)
+        try container.encode(username, forKey: .username)
+    }
+
+    // Decode type from either string or integer for backwards compatibility
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        baseURI = try container.decode(String.self, forKey: .baseURI)
+        username = try container.decode(String.self, forKey: .username)
+
+        if let typeStr = try? container.decode(String.self, forKey: .type) {
+            type = SourceType.allCases.first { $0.jsonString == typeStr } ?? .local
+        } else if let rawVal = try? container.decode(Int.self, forKey: .type) {
+            type = SourceType(rawValue: rawVal) ?? .local
+        } else {
+            type = .local
+        }
     }
 }
 

@@ -34,7 +34,7 @@ final class SourceConfigTests: XCTestCase {
         XCTAssertTrue(SourceType.smb.isAvailable)
         XCTAssertFalse(SourceType.nfs.isAvailable)
         XCTAssertFalse(SourceType.http.isAvailable)
-        XCTAssertFalse(SourceType.plex.isAvailable)
+        XCTAssertTrue(SourceType.plex.isAvailable)
     }
 
     func testSourceTypeRawValues() {

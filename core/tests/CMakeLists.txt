@@ -10,6 +10,7 @@ add_executable(plaiy_tests
     test_playback_stats.cpp
     test_frame_presenter.cpp
     test_source_manager.cpp
+    test_plex_media_source.cpp
     test_audio_filter_chain.cpp
 )
 
