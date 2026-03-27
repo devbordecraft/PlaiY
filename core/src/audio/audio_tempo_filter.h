@@ -1,6 +1,6 @@
 #pragma once
 
-#include "plaiy/error.h"
+#include "audio_filter.h"
 
 struct AVFrame;
 struct AVFilterGraph;
@@ -9,34 +9,34 @@ struct AVCodecContext;
 
 namespace py {
 
-class AudioTempoFilter {
+class AudioTempoFilter : public IAudioFilter {
 public:
     AudioTempoFilter();
-    ~AudioTempoFilter();
+    ~AudioTempoFilter() override;
 
-    // Build the atempo filter graph for the given codec format and tempo.
-    // tempo is the playback speed multiplier (e.g. 2.0 = double speed).
-    Error open(AVCodecContext* codec_ctx, double tempo);
-    void close();
+    // IAudioFilter interface
+    const char* name() const override { return "tempo"; }
+    AudioFilterStage stage() const override { return AudioFilterStage::PreResample; }
 
-    // Push a decoded AVFrame into the filter graph.
-    // Returns 0 on success, AVERROR(EAGAIN) if need to drain first.
-    int send_frame(AVFrame* frame);
+    Error open_avframe(AVCodecContext* codec_ctx) override;
+    int send_frame(AVFrame* frame) override;
+    int receive_frame(AVFrame* frame) override;
+    void flush() override;
+    void close() override;
 
-    // Pull a tempo-adjusted AVFrame from the filter graph.
-    // Returns 0 on success, AVERROR(EAGAIN) if need more input, AVERROR_EOF on end.
-    int receive_frame(AVFrame* frame);
-
-    // Flush internal buffers (call on seek or rate change).
-    void flush();
-
+    // Tempo-specific configuration
+    void set_tempo(double tempo);
     double tempo() const { return tempo_; }
 
 private:
+    Error rebuild_graph();
+
     AVFilterGraph* graph_ = nullptr;
     AVFilterContext* src_ctx_ = nullptr;
     AVFilterContext* sink_ctx_ = nullptr;
+    AVCodecContext* codec_ctx_ = nullptr;  // borrowed, not owned
     double tempo_ = 1.0;
+    double pending_tempo_ = 1.0;
 };
 
 } // namespace py

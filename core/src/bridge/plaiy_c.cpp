@@ -45,6 +45,48 @@ void py_player_set_subtitle_font_scale(PYPlayer* p, double scale) {
     p->engine.set_subtitle_font_scale(scale);
 }
 
+// ---- Audio filters ----
+
+void py_player_set_eq_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_eq_enabled(enabled); }
+bool py_player_is_eq_enabled(PYPlayer* p) { return p ? p->engine.is_eq_enabled() : false; }
+void py_player_set_eq_band(PYPlayer* p, int band, float gain_db) { if (p) p->engine.set_eq_band(band, gain_db); }
+float py_player_get_eq_band(PYPlayer* p, int band) { return p ? p->engine.eq_band(band) : 0.0f; }
+void py_player_set_eq_preset(PYPlayer* p, int preset) { if (p) p->engine.set_eq_preset(preset); }
+int py_player_get_eq_preset(PYPlayer* p) { return p ? p->engine.eq_preset() : 0; }
+
+void py_player_set_compressor_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_compressor_enabled(enabled); }
+bool py_player_is_compressor_enabled(PYPlayer* p) { return p ? p->engine.is_compressor_enabled() : false; }
+void py_player_set_compressor_threshold(PYPlayer* p, float db) { if (p) p->engine.set_compressor_threshold(db); }
+void py_player_set_compressor_ratio(PYPlayer* p, float ratio) { if (p) p->engine.set_compressor_ratio(ratio); }
+void py_player_set_compressor_attack(PYPlayer* p, float ms) { if (p) p->engine.set_compressor_attack(ms); }
+void py_player_set_compressor_release(PYPlayer* p, float ms) { if (p) p->engine.set_compressor_release(ms); }
+void py_player_set_compressor_makeup(PYPlayer* p, float db) { if (p) p->engine.set_compressor_makeup(db); }
+
+void py_player_set_dialogue_boost_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_dialogue_boost_enabled(enabled); }
+bool py_player_is_dialogue_boost_enabled(PYPlayer* p) { return p ? p->engine.is_dialogue_boost_enabled() : false; }
+void py_player_set_dialogue_boost_amount(PYPlayer* p, float amount) { if (p) p->engine.set_dialogue_boost_amount(amount); }
+float py_player_get_dialogue_boost_amount(PYPlayer* p) { return p ? p->engine.dialogue_boost_amount() : 0.0f; }
+
+// ---- Video filters (GPU) ----
+
+void py_player_set_brightness(PYPlayer* p, float value) { if (p) p->engine.set_brightness(value); }
+float py_player_get_brightness(PYPlayer* p) { return p ? p->engine.brightness() : 0.0f; }
+void py_player_set_contrast(PYPlayer* p, float value) { if (p) p->engine.set_contrast(value); }
+float py_player_get_contrast(PYPlayer* p) { return p ? p->engine.contrast() : 1.0f; }
+void py_player_set_saturation(PYPlayer* p, float value) { if (p) p->engine.set_saturation(value); }
+float py_player_get_saturation(PYPlayer* p) { return p ? p->engine.saturation() : 1.0f; }
+void py_player_set_sharpness(PYPlayer* p, float value) { if (p) p->engine.set_sharpness(value); }
+float py_player_get_sharpness(PYPlayer* p) { return p ? p->engine.sharpness() : 0.0f; }
+
+void py_player_reset_video_adjustments(PYPlayer* p) { if (p) p->engine.reset_video_adjustments(); }
+
+// ---- Video filters (CPU: deinterlace) ----
+
+void py_player_set_deinterlace_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_deinterlace_enabled(enabled); }
+bool py_player_is_deinterlace_enabled(PYPlayer* p) { return p ? p->engine.is_deinterlace_enabled() : false; }
+void py_player_set_deinterlace_mode(PYPlayer* p, int mode) { if (p) p->engine.set_deinterlace_mode(mode); }
+int py_player_get_deinterlace_mode(PYPlayer* p) { return p ? p->engine.deinterlace_mode() : 0; }
+
 int py_player_open(PYPlayer* p, const char* path) {
     if (!p || !path) return PY_ERROR_INVALID_ARG;
 

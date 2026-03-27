@@ -25,7 +25,6 @@ AudioPipeline::AudioPipeline(SharedState shared)
 void AudioPipeline::setup(const TrackInfo& track,
                           std::unique_ptr<IAudioOutput>& audio_output,
                           std::unique_ptr<AudioDecoder>& audio_decoder,
-                          std::unique_ptr<AudioResampler>& /*audio_resampler*/,
                           int spatial_audio_mode,
                           bool head_tracking_enabled,
                           bool muted, float volume) {
@@ -155,7 +154,6 @@ void AudioPipeline::setup(const TrackInfo& track,
 void AudioPipeline::restart(const TrackInfo& track,
                             std::unique_ptr<IAudioOutput>& audio_output,
                             std::unique_ptr<AudioDecoder>& audio_decoder,
-                            std::unique_ptr<AudioResampler>& audio_resampler,
                             std::thread& audio_decode_thread,
                             std::function<void()> audio_decode_loop_fn,
                             int spatial_audio_mode,
@@ -185,7 +183,6 @@ void AudioPipeline::restart(const TrackInfo& track,
     }
     audio_output_ptr_ = nullptr;
     audio_decoder.reset();
-    audio_resampler.reset();
     mat_framer_.reset();
     audio_output_mode_ = AudioOutputMode::PCM;
     passthrough_codec_profile_ = -1;
@@ -196,7 +193,7 @@ void AudioPipeline::restart(const TrackInfo& track,
     passthrough_ring_size_ = 0;
 
     // 5. Re-open in the new mode
-    setup(track, audio_output, audio_decoder, audio_resampler,
+    setup(track, audio_output, audio_decoder,
           spatial_audio_mode, head_tracking_enabled, muted, volume);
 
     // 6. Re-enable packet queue and start new audio decode thread

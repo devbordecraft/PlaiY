@@ -298,6 +298,14 @@ struct CropUniforms {
     float2 texScale;   // UV scale for cropped region (default: 1,1)
 };
 
+// Color adjustment uniforms (passed as buffer(3))
+struct ColorFilterUniforms {
+    float brightness;    // [-1, 1], 0 = neutral
+    float contrast;      // [0, 3], 1 = neutral
+    float saturation;    // [0, 3], 1 = neutral
+    float sharpness;     // [0, 1], 0 = off
+};
+
 // ---- NV12/P010 fragment shader (biplanar: Y + UV textures) ----
 
 fragment float4 fragmentBiplanar(
@@ -306,7 +314,8 @@ fragment float4 fragmentBiplanar(
     texture2d<float> textureUV [[texture(1)]],
     constant VideoUniforms& uniforms [[buffer(0)]],
     constant DoviUniforms& doviUniforms [[buffer(1)]],
-    constant CropUniforms& cropUniforms [[buffer(2)]])
+    constant CropUniforms& cropUniforms [[buffer(2)]],
+    constant ColorFilterUniforms& colorFilters [[buffer(3)]])
 {
     constexpr sampler texSampler(mag_filter::linear, min_filter::linear);
 
@@ -445,6 +454,34 @@ fragment float4 fragmentBiplanar(
         // because CAMetalLayer is configured with extendedLinearDisplayP3.
         rgb = clamp(rgb, 0.0, 1.0);
         rgb = srgbToLinear(rgb);
+    }
+
+    // ---- User color adjustments (brightness/contrast/saturation) ----
+    // Applied in linear light after all HDR/SDR processing.
+
+    // Sharpening (unsharp mask via neighboring Y texel sampling)
+    if (colorFilters.sharpness > 0.001) {
+        float2 texelSize = float2(1.0 / textureY.get_width(), 1.0 / textureY.get_height());
+        float2 origUV = cropUniforms.texOrigin + in.texCoord * cropUniforms.texScale;
+        float center = textureY.sample(texSampler, origUV).r;
+        float top    = textureY.sample(texSampler, origUV + float2(0, -texelSize.y)).r;
+        float bottom = textureY.sample(texSampler, origUV + float2(0,  texelSize.y)).r;
+        float left   = textureY.sample(texSampler, origUV + float2(-texelSize.x, 0)).r;
+        float right  = textureY.sample(texSampler, origUV + float2( texelSize.x, 0)).r;
+        float blur = (top + bottom + left + right) * 0.25;
+        float sharp = (center - blur) * colorFilters.sharpness * 2.0;
+        rgb += sharp;
+    }
+
+    // Brightness, contrast, saturation
+    if (colorFilters.brightness != 0.0 || colorFilters.contrast != 1.0 || colorFilters.saturation != 1.0) {
+        rgb += colorFilters.brightness;
+        float mid = uniforms.transferFunc > 0 ? 1.0 : 0.5;
+        rgb = (rgb - mid) * colorFilters.contrast + mid;
+        float lum = dot(rgb, float3(0.2126, 0.7152, 0.0722));
+        rgb = lum + colorFilters.saturation * (rgb - lum);
+        float maxVal = uniforms.transferFunc > 0 ? uniforms.edrHeadroom : 1.0;
+        rgb = clamp(rgb, 0.0, maxVal);
     }
 
     return float4(rgb, 1.0);

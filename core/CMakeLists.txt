@@ -39,9 +39,14 @@ set(CORE_SOURCES
     src/video/video_decoder_factory.cpp
     src/video/ff_video_decoder.cpp
     src/video/dv_seek_decoder.cpp
+    src/video/deinterlace_filter.cpp
     src/audio/audio_decoder.cpp
     src/audio/audio_resampler.cpp
+    src/audio/audio_filter_chain.cpp
     src/audio/audio_tempo_filter.cpp
+    src/audio/equalizer_filter.cpp
+    src/audio/compressor_filter.cpp
+    src/audio/dialogue_boost_filter.cpp
     src/audio/audio_passthrough.cpp
     src/audio/mat_framer.cpp
     src/subtitle/subtitle_manager.cpp

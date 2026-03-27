@@ -90,6 +90,54 @@ final class PlayerBridge: @unchecked Sendable {
         py_player_set_subtitle_font_scale(handle, scale)
     }
 
+    // MARK: - Audio Filters
+
+    // Equalizer
+    @inline(always) func setEQEnabled(_ enabled: Bool) { py_player_set_eq_enabled(handle, enabled) }
+    @inline(always) var isEQEnabled: Bool { py_player_is_eq_enabled(handle) }
+    @inline(always) func setEQBand(_ band: Int32, gain: Float) { py_player_set_eq_band(handle, band, gain) }
+    @inline(always) func eqBand(_ band: Int32) -> Float { py_player_get_eq_band(handle, band) }
+    @inline(always) func setEQPreset(_ preset: Int32) { py_player_set_eq_preset(handle, preset) }
+    @inline(always) var eqPreset: Int32 { py_player_get_eq_preset(handle) }
+
+    // Compressor
+    @inline(always) func setCompressorEnabled(_ enabled: Bool) { py_player_set_compressor_enabled(handle, enabled) }
+    @inline(always) var isCompressorEnabled: Bool { py_player_is_compressor_enabled(handle) }
+    @inline(always) func setCompressorThreshold(_ db: Float) { py_player_set_compressor_threshold(handle, db) }
+    @inline(always) func setCompressorRatio(_ ratio: Float) { py_player_set_compressor_ratio(handle, ratio) }
+    @inline(always) func setCompressorAttack(_ ms: Float) { py_player_set_compressor_attack(handle, ms) }
+    @inline(always) func setCompressorRelease(_ ms: Float) { py_player_set_compressor_release(handle, ms) }
+    @inline(always) func setCompressorMakeup(_ db: Float) { py_player_set_compressor_makeup(handle, db) }
+
+    // Dialogue Boost
+    @inline(always) func setDialogueBoostEnabled(_ enabled: Bool) { py_player_set_dialogue_boost_enabled(handle, enabled) }
+    @inline(always) var isDialogueBoostEnabled: Bool { py_player_is_dialogue_boost_enabled(handle) }
+    @inline(always) func setDialogueBoostAmount(_ amount: Float) { py_player_set_dialogue_boost_amount(handle, amount) }
+    @inline(always) var dialogueBoostAmount: Float { py_player_get_dialogue_boost_amount(handle) }
+
+    // MARK: - Video Filters (GPU)
+
+    @inline(always) func setBrightness(_ value: Float) { py_player_set_brightness(handle, value) }
+    @inline(always) var brightness: Float { py_player_get_brightness(handle) }
+
+    @inline(always) func setContrast(_ value: Float) { py_player_set_contrast(handle, value) }
+    @inline(always) var contrast: Float { py_player_get_contrast(handle) }
+
+    @inline(always) func setSaturation(_ value: Float) { py_player_set_saturation(handle, value) }
+    @inline(always) var saturation: Float { py_player_get_saturation(handle) }
+
+    @inline(always) func setSharpness(_ value: Float) { py_player_set_sharpness(handle, value) }
+    @inline(always) var sharpness: Float { py_player_get_sharpness(handle) }
+
+    @inline(always) func resetVideoAdjustments() { py_player_reset_video_adjustments(handle) }
+
+    // MARK: - Video Filters (CPU: Deinterlace)
+
+    @inline(always) func setDeinterlaceEnabled(_ enabled: Bool) { py_player_set_deinterlace_enabled(handle, enabled) }
+    @inline(always) var isDeinterlaceEnabled: Bool { py_player_is_deinterlace_enabled(handle) }
+    @inline(always) func setDeinterlaceMode(_ mode: Int32) { py_player_set_deinterlace_mode(handle, mode) }
+    @inline(always) var deinterlaceMode: Int32 { py_player_get_deinterlace_mode(handle) }
+
     @inline(always) func setAudioPassthrough(_ enabled: Bool) {
         py_player_set_audio_passthrough(handle, enabled)
     }

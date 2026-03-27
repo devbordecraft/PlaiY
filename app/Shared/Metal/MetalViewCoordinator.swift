@@ -354,9 +354,12 @@ class MetalViewCoordinator {
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(yTex, index: 0)
         encoder.setFragmentTexture(uvTex, index: 1)
+        var colorFilterUniforms = ColorFilterUniformBuilder.build(playerBridge: playerBridge)
+
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)
         encoder.setFragmentBytes(&doviUniforms, length: MemoryLayout<DoviUniforms>.size, index: 1)
         encoder.setFragmentBytes(&cropUniforms, length: MemoryLayout<CropUniforms>.size, index: 2)
+        encoder.setFragmentBytes(&colorFilterUniforms, length: MemoryLayout<ColorFilterUniforms>.size, index: 3)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 

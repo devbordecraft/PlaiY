@@ -67,6 +67,47 @@ public:
     void set_hw_decode_preference(HWDecodePreference pref);
     void set_subtitle_font_scale(double scale);
 
+    // Audio filters
+    // Note: Audio filters are created per decode loop. These methods set
+    // desired values that will be applied when the decode thread starts/restarts.
+    // EQ
+    void set_eq_enabled(bool enabled);
+    bool is_eq_enabled() const;
+    void set_eq_band(int band, float gain_db);
+    float eq_band(int band) const;
+    void set_eq_preset(int preset);
+    int eq_preset() const;
+    // Compressor
+    void set_compressor_enabled(bool enabled);
+    bool is_compressor_enabled() const;
+    void set_compressor_threshold(float db);
+    void set_compressor_ratio(float ratio);
+    void set_compressor_attack(float ms);
+    void set_compressor_release(float ms);
+    void set_compressor_makeup(float db);
+    // Dialogue boost
+    void set_dialogue_boost_enabled(bool enabled);
+    bool is_dialogue_boost_enabled() const;
+    void set_dialogue_boost_amount(float amount);
+    float dialogue_boost_amount() const;
+
+    // Deinterlace (CPU, SW decode path only)
+    void set_deinterlace_enabled(bool enabled);
+    bool is_deinterlace_enabled() const;
+    void set_deinterlace_mode(int mode); // 0=yadif, 1=bwdif
+    int deinterlace_mode() const;
+
+    // Video filters (GPU — brightness/contrast/saturation/sharpness)
+    void set_brightness(float v);
+    float brightness() const;
+    void set_contrast(float v);
+    float contrast() const;
+    void set_saturation(float v);
+    float saturation() const;
+    void set_sharpness(float v);
+    float sharpness() const;
+    void reset_video_adjustments();
+
     PlaybackStats get_playback_stats() const;
 
     // Video frame acquisition for the Metal renderer

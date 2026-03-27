@@ -67,6 +67,45 @@ void        py_player_stop(PYPlayer* p);
 void        py_player_set_hw_decode_pref(PYPlayer* p, int pref);
 void        py_player_set_subtitle_font_scale(PYPlayer* p, double scale);
 
+// ---- Audio filters ----
+// Equalizer (10-band)
+void        py_player_set_eq_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_eq_enabled(PYPlayer* p);
+void        py_player_set_eq_band(PYPlayer* p, int band, float gain_db);
+float       py_player_get_eq_band(PYPlayer* p, int band);
+void        py_player_set_eq_preset(PYPlayer* p, int preset);
+int         py_player_get_eq_preset(PYPlayer* p);
+// Compressor
+void        py_player_set_compressor_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_compressor_enabled(PYPlayer* p);
+void        py_player_set_compressor_threshold(PYPlayer* p, float db);
+void        py_player_set_compressor_ratio(PYPlayer* p, float ratio);
+void        py_player_set_compressor_attack(PYPlayer* p, float ms);
+void        py_player_set_compressor_release(PYPlayer* p, float ms);
+void        py_player_set_compressor_makeup(PYPlayer* p, float db);
+// Dialogue boost
+void        py_player_set_dialogue_boost_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_dialogue_boost_enabled(PYPlayer* p);
+void        py_player_set_dialogue_boost_amount(PYPlayer* p, float amount);
+float       py_player_get_dialogue_boost_amount(PYPlayer* p);
+
+// ---- Video filters (GPU: brightness/contrast/saturation/sharpness) ----
+void        py_player_set_brightness(PYPlayer* p, float value);
+float       py_player_get_brightness(PYPlayer* p);
+void        py_player_set_contrast(PYPlayer* p, float value);
+float       py_player_get_contrast(PYPlayer* p);
+void        py_player_set_saturation(PYPlayer* p, float value);
+float       py_player_get_saturation(PYPlayer* p);
+void        py_player_set_sharpness(PYPlayer* p, float value);
+float       py_player_get_sharpness(PYPlayer* p);
+void        py_player_reset_video_adjustments(PYPlayer* p);
+
+// ---- Video filters (CPU: deinterlace) ----
+void        py_player_set_deinterlace_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_deinterlace_enabled(PYPlayer* p);
+void        py_player_set_deinterlace_mode(PYPlayer* p, int mode); // 0=yadif, 1=bwdif
+int         py_player_get_deinterlace_mode(PYPlayer* p);
+
 int         py_player_get_state(PYPlayer* p);
 int64_t     py_player_get_position(PYPlayer* p);
 int64_t     py_player_get_duration(PYPlayer* p);

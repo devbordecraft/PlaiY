@@ -8,9 +8,13 @@
 
 #include "demuxer/ff_demuxer.h"
 #include "video/video_decoder_factory.h"
+#include "video/deinterlace_filter.h"
 #include "audio/audio_decoder.h"
-#include "audio/audio_resampler.h"
+#include "audio/audio_filter_chain.h"
 #include "audio/audio_tempo_filter.h"
+#include "audio/equalizer_filter.h"
+#include "audio/compressor_filter.h"
+#include "audio/dialogue_boost_filter.h"
 #include "audio/audio_passthrough.h"
 #include "playback_stats.h"
 
@@ -27,6 +31,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -75,7 +80,6 @@ struct PlayerEngine::Impl {
     std::unique_ptr<FFDemuxer> demuxer;
     std::unique_ptr<IVideoDecoder> video_decoder;
     std::unique_ptr<AudioDecoder> audio_decoder;
-    std::unique_ptr<AudioResampler> audio_resampler;
     std::unique_ptr<IAudioOutput> audio_output;
     std::unique_ptr<SubtitleManager> subtitle_manager;
     Clock clock;
@@ -109,6 +113,29 @@ struct PlayerEngine::Impl {
     // Playback speed
     std::atomic<double> playback_speed{1.0};
     std::atomic<bool> speed_changed{false};
+
+    // Audio filter desired state (set by main thread, read by decode thread)
+    std::atomic<bool> eq_enabled{false};
+    std::array<std::atomic<float>, 10> eq_bands{};
+    std::atomic<int> eq_preset{0};
+    std::atomic<bool> compressor_enabled{false};
+    std::atomic<float> compressor_threshold{-24.0f};
+    std::atomic<float> compressor_ratio{4.0f};
+    std::atomic<float> compressor_attack{20.0f};
+    std::atomic<float> compressor_release{250.0f};
+    std::atomic<float> compressor_makeup{0.0f};
+    std::atomic<bool> dialogue_boost_enabled{false};
+    std::atomic<float> dialogue_boost_amount{0.5f};
+
+    // Deinterlace
+    std::atomic<bool> deinterlace_enabled{false};
+    std::atomic<int> deinterlace_mode{0}; // 0=yadif, 1=bwdif
+
+    // Video filter parameters (GPU-side, read by Swift via bridge)
+    std::atomic<float> video_brightness{0.0f};
+    std::atomic<float> video_contrast{1.0f};
+    std::atomic<float> video_saturation{1.0f};
+    std::atomic<float> video_sharpness{0.0f};
 
     // Track indices
     int active_video_stream = -1;
@@ -325,7 +352,6 @@ void PlayerEngine::stop() {
 
     impl_->video_decoder.reset();
     impl_->audio_decoder.reset();
-    impl_->audio_resampler.reset();
     impl_->audio_pipeline->teardown();
     impl_->audio_ring.release();
     impl_->subtitle_manager->close();
@@ -446,7 +472,7 @@ int PlayerEngine::active_subtitle_stream() const {
 
 void PlayerEngine::setup_audio_output(const TrackInfo& track) {
     impl_->audio_pipeline->setup(track, impl_->audio_output,
-                                  impl_->audio_decoder, impl_->audio_resampler,
+                                  impl_->audio_decoder,
                                   impl_->spatial_audio_mode,
                                   impl_->head_tracking_enabled,
                                   impl_->muted, impl_->volume);
@@ -457,7 +483,7 @@ void PlayerEngine::restart_audio_pipeline() {
 
     const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)];
     impl_->audio_pipeline->restart(track, impl_->audio_output,
-                                    impl_->audio_decoder, impl_->audio_resampler,
+                                    impl_->audio_decoder,
                                     impl_->audio_decode_thread,
                                     [this] { impl_->audio_decode_loop(); },
                                     impl_->spatial_audio_mode,
@@ -588,6 +614,55 @@ void PlayerEngine::set_subtitle_font_scale(double scale) {
     impl_->subtitle_manager->set_ass_font_scale(scale);
 }
 
+// Deinterlace
+void PlayerEngine::set_deinterlace_enabled(bool e) { impl_->deinterlace_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::is_deinterlace_enabled() const { return impl_->deinterlace_enabled.load(std::memory_order_relaxed); }
+void PlayerEngine::set_deinterlace_mode(int m) { impl_->deinterlace_mode.store(m, std::memory_order_relaxed); }
+int PlayerEngine::deinterlace_mode() const { return impl_->deinterlace_mode.load(std::memory_order_relaxed); }
+
+// Video filter getters/setters (GPU — atomic read/write, lock-free)
+void PlayerEngine::set_brightness(float v) { impl_->video_brightness.store(v, std::memory_order_relaxed); }
+float PlayerEngine::brightness() const { return impl_->video_brightness.load(std::memory_order_relaxed); }
+void PlayerEngine::set_contrast(float v) { impl_->video_contrast.store(v, std::memory_order_relaxed); }
+float PlayerEngine::contrast() const { return impl_->video_contrast.load(std::memory_order_relaxed); }
+void PlayerEngine::set_saturation(float v) { impl_->video_saturation.store(v, std::memory_order_relaxed); }
+float PlayerEngine::saturation() const { return impl_->video_saturation.load(std::memory_order_relaxed); }
+void PlayerEngine::set_sharpness(float v) { impl_->video_sharpness.store(v, std::memory_order_relaxed); }
+float PlayerEngine::sharpness() const { return impl_->video_sharpness.load(std::memory_order_relaxed); }
+
+void PlayerEngine::reset_video_adjustments() {
+    impl_->video_brightness.store(0.0f, std::memory_order_relaxed);
+    impl_->video_contrast.store(1.0f, std::memory_order_relaxed);
+    impl_->video_saturation.store(1.0f, std::memory_order_relaxed);
+    impl_->video_sharpness.store(0.0f, std::memory_order_relaxed);
+}
+
+// Audio filter methods
+void PlayerEngine::set_eq_enabled(bool e) { impl_->eq_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::is_eq_enabled() const { return impl_->eq_enabled.load(std::memory_order_relaxed); }
+void PlayerEngine::set_eq_band(int band, float gain_db) {
+    if (band >= 0 && band < 10) impl_->eq_bands[static_cast<size_t>(band)].store(gain_db, std::memory_order_relaxed);
+}
+float PlayerEngine::eq_band(int band) const {
+    if (band >= 0 && band < 10) return impl_->eq_bands[static_cast<size_t>(band)].load(std::memory_order_relaxed);
+    return 0.0f;
+}
+void PlayerEngine::set_eq_preset(int preset) { impl_->eq_preset.store(preset, std::memory_order_relaxed); }
+int PlayerEngine::eq_preset() const { return impl_->eq_preset.load(std::memory_order_relaxed); }
+
+void PlayerEngine::set_compressor_enabled(bool e) { impl_->compressor_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::is_compressor_enabled() const { return impl_->compressor_enabled.load(std::memory_order_relaxed); }
+void PlayerEngine::set_compressor_threshold(float db) { impl_->compressor_threshold.store(db, std::memory_order_relaxed); }
+void PlayerEngine::set_compressor_ratio(float r) { impl_->compressor_ratio.store(r, std::memory_order_relaxed); }
+void PlayerEngine::set_compressor_attack(float ms) { impl_->compressor_attack.store(ms, std::memory_order_relaxed); }
+void PlayerEngine::set_compressor_release(float ms) { impl_->compressor_release.store(ms, std::memory_order_relaxed); }
+void PlayerEngine::set_compressor_makeup(float db) { impl_->compressor_makeup.store(db, std::memory_order_relaxed); }
+
+void PlayerEngine::set_dialogue_boost_enabled(bool e) { impl_->dialogue_boost_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::is_dialogue_boost_enabled() const { return impl_->dialogue_boost_enabled.load(std::memory_order_relaxed); }
+void PlayerEngine::set_dialogue_boost_amount(float a) { impl_->dialogue_boost_amount.store(a, std::memory_order_relaxed); }
+float PlayerEngine::dialogue_boost_amount() const { return impl_->dialogue_boost_amount.load(std::memory_order_relaxed); }
+
 PlaybackStats PlayerEngine::get_playback_stats() const {
     StatsContext ctx {
         .media_info = impl_->media_info,
@@ -703,6 +778,10 @@ void PlayerEngine::Impl::video_decode_loop() {
 
     bool skip_to_target = false;
 
+    // Deinterlace filter (SW decode path only)
+    DeinterlaceFilter deint;
+    bool deint_initialized = false;
+
     // Helper: drain completed frames from the decoder into the frame queue.
     // Uses blocking push — with a 64-frame queue, blocks are brief (~1 frame
     // time) and the audio pipeline has its own 128-packet + 4-second ring
@@ -729,6 +808,69 @@ void PlayerEngine::Impl::video_decode_loop() {
                 // Full frame from DVSeekDecoder replay — push it directly
                 if (!video_frame_queue.push(std::move(frame))) return false;
                 continue;
+            }
+
+            // CPU deinterlace: only for SW-decoded frames with plane data (not CVPixelBuffer)
+            if (deinterlace_enabled.load(std::memory_order_relaxed) &&
+                !frame.hardware_frame && frame.planes[0] != nullptr && !frame.pts_only) {
+                // Lazy-init deinterlace filter
+                if (!deint_initialized) {
+                    int pix_fmt_id = 0; // AV_PIX_FMT_NV12
+                    if (frame.pixel_format == PixelFormat::YUV420P) pix_fmt_id = 0; // AV_PIX_FMT_YUV420P
+                    else if (frame.pixel_format == PixelFormat::NV12) pix_fmt_id = 23; // AV_PIX_FMT_NV12
+                    else if (frame.pixel_format == PixelFormat::P010) pix_fmt_id = 166; // AV_PIX_FMT_P010
+                    else if (frame.pixel_format == PixelFormat::YUV420P10) pix_fmt_id = 66; // AV_PIX_FMT_YUV420P10LE
+
+                    deint.set_mode(static_cast<DeinterlaceFilter::Mode>(
+                        deinterlace_mode.load(std::memory_order_relaxed)));
+                    Error di_err = deint.open(frame.width, frame.height, pix_fmt_id, 1, 25);
+                    if (!di_err) deint_initialized = true;
+                }
+
+                if (deint_initialized) {
+                    // Build a temporary AVFrame from VideoFrame plane data
+                    AVFrame* av_frame = av_frame_alloc();
+                    av_frame->width = frame.width;
+                    av_frame->height = frame.height;
+                    av_frame->format = (frame.pixel_format == PixelFormat::YUV420P) ? 0 :
+                                       (frame.pixel_format == PixelFormat::NV12) ? 23 :
+                                       (frame.pixel_format == PixelFormat::P010) ? 166 : 66;
+                    av_frame->pts = frame.pts_us;
+                    for (int i = 0; i < 4; i++) {
+                        av_frame->data[i] = const_cast<uint8_t*>(frame.planes[i]);
+                        av_frame->linesize[i] = frame.strides[i];
+                    }
+
+                    if (deint.send_frame(av_frame) >= 0) {
+                        AVFrame* out = av_frame_alloc();
+                        if (deint.receive_frame(out) >= 0) {
+                            // Update frame plane pointers to the filtered data.
+                            // Allocate new plane_data to own the deinterlaced output.
+                            size_t total = 0;
+                            for (int i = 0; i < 4 && out->linesize[i] > 0; i++) {
+                                total += static_cast<size_t>(out->linesize[i]) *
+                                         static_cast<size_t>(i == 0 ? out->height : out->height / 2);
+                            }
+                            std::shared_ptr<uint8_t[]> new_data(new uint8_t[total]);
+                            size_t offset = 0;
+                            for (int i = 0; i < 4 && out->data[i]; i++) {
+                                int h = (i == 0) ? out->height : out->height / 2;
+                                size_t plane_size = static_cast<size_t>(out->linesize[i]) * static_cast<size_t>(h);
+                                memcpy(new_data.get() + offset, out->data[i], plane_size);
+                                frame.planes[i] = new_data.get() + offset;
+                                frame.strides[i] = out->linesize[i];
+                                offset += plane_size;
+                            }
+                            frame.plane_data = new_data;
+                            frame.pts_us = out->pts;
+                        }
+                        av_frame_free(&out);
+                    }
+
+                    // Clear references to our non-owned data before freeing
+                    for (int i = 0; i < 4; i++) av_frame->data[i] = nullptr;
+                    av_frame_free(&av_frame);
+                }
             }
 
             if (!video_frame_queue.push(std::move(frame))) return false;
@@ -800,21 +942,46 @@ void PlayerEngine::Impl::audio_decode_loop() {
     AVCodecContext* ctx = open_audio_codec(media_info.tracks[static_cast<size_t>(active_audio_stream)]);
     if (!ctx) return;
 
-    // Set up resampler
-    AudioResampler resampler;
+    // Audio filter chain: tempo (pre-resample) → resampler → EQ → compressor → dialogue boost
+    AudioFilterChain filter_chain;
+    auto* tempo = new AudioTempoFilter();
+    filter_chain.add(std::unique_ptr<IAudioFilter>(tempo));
+    auto eq_ptr = std::make_unique<EqualizerFilter>();
+    auto* eq = eq_ptr.get();
+    filter_chain.add(std::move(eq_ptr));
+    auto comp_ptr = std::make_unique<CompressorFilter>();
+    auto* comp = comp_ptr.get();
+    filter_chain.add(std::move(comp_ptr));
+    auto db_ptr = std::make_unique<DialogueBoostFilter>();
+    auto* dialogue = db_ptr.get();
+    filter_chain.add(std::move(db_ptr));
+
+    // Sync initial filter state from PlayerEngine settings
+    auto sync_filter_state = [&]() {
+        eq->set_enabled(eq_enabled.load(std::memory_order_relaxed));
+        for (int i = 0; i < 10; i++)
+            eq->set_band_gain(i, eq_bands[static_cast<size_t>(i)].load(std::memory_order_relaxed));
+        comp->set_enabled(compressor_enabled.load(std::memory_order_relaxed));
+        comp->set_threshold(compressor_threshold.load(std::memory_order_relaxed));
+        comp->set_ratio(compressor_ratio.load(std::memory_order_relaxed));
+        comp->set_attack(compressor_attack.load(std::memory_order_relaxed));
+        comp->set_release(compressor_release.load(std::memory_order_relaxed));
+        comp->set_makeup(compressor_makeup.load(std::memory_order_relaxed));
+        dialogue->set_enabled(dialogue_boost_enabled.load(std::memory_order_relaxed));
+        dialogue->set_amount(dialogue_boost_amount.load(std::memory_order_relaxed));
+    };
+    sync_filter_state();
+
     int out_rate = audio_output->sample_rate();
     int out_channels = audio_output->channels();
-    // We'll init the resampler after first frame decode when we know the actual format
 
     AVFrame* av_frame = av_frame_alloc();
-    AVFrame* tempo_frame = av_frame_alloc();
     AVPacket* av_pkt = av_packet_alloc();
-    bool resampler_initialized = false;
-    bool resampler_fatal = false;
+    bool chain_initialized = false;
+    bool chain_fatal = false;
     bool timebase_initialized = false;
     bool skip_to_target = false;
     std::vector<float> resample_buf; // reused across frames
-    AudioTempoFilter tempo_filter;
 
     while (running.load(std::memory_order_relaxed)) {
         Packet pkt;
@@ -824,18 +991,19 @@ void PlayerEngine::Impl::audio_decode_loop() {
         if (speed_changed.load(std::memory_order_relaxed)) {
             speed_changed.store(false);
             double new_speed = playback_speed.load();
-            tempo_filter.close();
-            if (std::abs(new_speed - 1.0) > 0.001 && resampler_initialized) {
-                tempo_filter.open(ctx, new_speed);
-            }
+            tempo->set_tempo(new_speed);
+            tempo->set_enabled(std::abs(new_speed - 1.0) > 0.001);
         }
+
+        // Sync audio filter state from main thread settings
+        sync_filter_state();
 
         if (pkt.is_flush) {
             {
                 std::lock_guard lock(audio_ring_flush_mutex);
                 audio_ring.reset();
             }
-            tempo_filter.flush();
+            filter_chain.flush();
 
             if (audio_track_changed.load(std::memory_order_relaxed)) {
                 audio_track_changed.store(false);
@@ -846,10 +1014,10 @@ void PlayerEngine::Impl::audio_decode_loop() {
                     new_stream = pending_audio_stream;
                 }
 
-                // Close old decoder
+                // Close old decoder and filter chain
                 avcodec_free_context(&ctx);
-                resampler.close();
-                resampler_initialized = false;
+                filter_chain.close();
+                chain_initialized = false;
                 timebase_initialized = false;
 
                 // Open new decoder
@@ -918,20 +1086,21 @@ void PlayerEngine::Impl::audio_decode_loop() {
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
 
-            // Lazy init resampler
-            if (!resampler_initialized) {
-                Error err = resampler.open(ctx, out_rate, out_channels);
+            // Lazy init filter chain (needs actual codec format from first decoded frame)
+            if (!chain_initialized) {
+                Error err = filter_chain.open(ctx, out_rate, out_channels);
                 if (err) {
-                    PY_LOG_ERROR(TAG, "Resampler init failed: %s", err.message.c_str());
-                    resampler_fatal = true;
+                    PY_LOG_ERROR(TAG, "Filter chain init failed: %s", err.message.c_str());
+                    chain_fatal = true;
                     break;
                 }
-                resampler_initialized = true;
+                chain_initialized = true;
                 resample_buf.reserve(static_cast<size_t>(out_rate) * static_cast<size_t>(out_channels) / 10); // 100ms
-                // Init tempo filter if speed != 1.0
+                // Init tempo if speed != 1.0
                 double spd = playback_speed.load();
                 if (std::abs(spd - 1.0) > 0.001) {
-                    tempo_filter.open(ctx, spd);
+                    tempo->set_tempo(spd);
+                    tempo->set_enabled(true);
                 }
             }
 
@@ -951,11 +1120,14 @@ void PlayerEngine::Impl::audio_decode_loop() {
                 skip_to_target = false;
             }
 
-            // Lambda to resample a frame and write to ring buffer
-            auto resample_and_write = [&](AVFrame* frame, int64_t frame_pts_us) {
-                int num_samples = 0;
-                Error err = resampler.convert(frame, resample_buf, num_samples);
-                if (err) return;
+            // Push frame through the filter chain and drain all output chunks.
+            // Pre-resample filters (tempo) may produce multiple output frames per input.
+            filter_chain.send_frame(av_frame);
+
+            int num_samples = 0;
+            while (filter_chain.drain(resample_buf, num_samples)) {
+                if (num_samples <= 0) break;
+                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) break;
 
                 size_t to_write = static_cast<size_t>(num_samples) * static_cast<size_t>(out_channels);
                 {
@@ -965,36 +1137,18 @@ void PlayerEngine::Impl::audio_decode_loop() {
                                !running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed);
                     });
                 }
-                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) return;
+                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) break;
 
                 audio_ring.write(resample_buf.data(), to_write);
 
                 int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
-                audio_pts_for_ring.store(frame_pts_us + chunk_duration_us, std::memory_order_release);
-            };
-
-            // Route through tempo filter if active, otherwise direct resample
-            if (tempo_filter.tempo() != 1.0) {
-                tempo_filter.send_frame(av_frame);
-                while (running.load(std::memory_order_relaxed)) {
-                    int tret = tempo_filter.receive_frame(tempo_frame);
-                    if (tret < 0) break;
-
-                    int64_t tempo_pts_us = 0;
-                    if (tempo_frame->pts != AV_NOPTS_VALUE && ctx->pkt_timebase.den > 0) {
-                        tempo_pts_us = av_rescale_q(tempo_frame->pts, ctx->pkt_timebase, {1, 1000000});
-                    }
-                    resample_and_write(tempo_frame, tempo_pts_us);
-                    av_frame_unref(tempo_frame);
-                }
-            } else {
-                resample_and_write(av_frame, pts_us);
+                audio_pts_for_ring.store(pts_us + chunk_duration_us, std::memory_order_release);
             }
 
             av_frame_unref(av_frame);
         }
 
-        if (resampler_fatal) break;
+        if (chain_fatal) break;
 
         // If send_packet returned EAGAIN, the packet was NOT consumed.
         // Retry now that we've drained output frames.
@@ -1004,10 +1158,8 @@ void PlayerEngine::Impl::audio_decode_loop() {
     }
 
     av_frame_free(&av_frame);
-    av_frame_free(&tempo_frame);
     av_packet_free(&av_pkt);
-    tempo_filter.close();
-    resampler.close();
+    filter_chain.close();
     avcodec_free_context(&ctx);
 
     PY_LOG_INFO(TAG, "Audio decode thread ended");
