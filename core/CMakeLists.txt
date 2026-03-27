@@ -69,7 +69,6 @@ if(APPLE)
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
-        platform/apple/metal_video_renderer.mm
         platform/apple/smb_media_source.mm
     )
 endif()
@@ -150,7 +149,6 @@ if(APPLE)
         platform/apple/ca_audio_output.mm
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
-        platform/apple/metal_video_renderer.mm
         platform/apple/smb_media_source.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )

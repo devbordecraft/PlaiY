@@ -235,7 +235,7 @@ Error PlayerEngine::open_file(const std::string& path) {
 
     impl_->set_state(PlaybackState::Ready);
     PY_LOG_INFO(TAG, "File opened: %s (%.1fs)",
-                path.c_str(), impl_->media_info.duration_us / 1e6);
+                path.c_str(), static_cast<double>(impl_->media_info.duration_us) / 1e6);
     return Error::Ok();
 }
 

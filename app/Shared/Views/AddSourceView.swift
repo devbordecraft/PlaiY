@@ -11,9 +11,15 @@ struct AddSourceView: View {
     @State private var password = ""
     @State private var isTesting = false
     @State private var testResult: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case displayName, address, username, password
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 16) {
+            // Header
             HStack {
                 Text("Add Source")
                     .font(.title2)
@@ -22,56 +28,97 @@ struct AddSourceView: View {
                 Button("Cancel") { onDismiss() }
                     .buttonStyle(.bordered)
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top)
 
-            Form {
-                Section("Type") {
-                    Picker("Protocol", selection: $sourceType) {
-                        ForEach(SourceType.allCases.filter(\.isAvailable), id: \.self) { type in
-                            Label(type.displayName, systemImage: type.systemImage)
-                                .tag(type)
-                        }
+            // Type picker
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Type")
+                    .font(.headline)
+                Picker("Protocol", selection: $sourceType) {
+                    ForEach(SourceType.allCases.filter(\.isAvailable), id: \.self) { type in
+                        Label(type.displayName, systemImage: type.systemImage)
+                            .tag(type)
                     }
-                    .pickerStyle(.segmented)
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .padding(.horizontal)
 
-                Section("Connection") {
-                    TextField("Display Name", text: $displayName, prompt: Text("My NAS"))
-                    TextField("Address", text: $address, prompt: Text(addressPlaceholder))
-                    TextField("Username", text: $username, prompt: Text("Optional"))
-                    SecureField("Password", text: $password, prompt: Text("Optional"))
-                }
+            // Connection fields
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Connection")
+                    .font(.headline)
 
-                Section {
-                    HStack {
-                        Button("Test Connection") {
-                            testConnection()
-                        }
-                        .disabled(address.isEmpty || isTesting)
-
-                        if isTesting {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        }
-
-                        if let result = testResult {
-                            Text(result)
-                                .font(.caption)
-                                .foregroundStyle(result.contains("Success") ? .green : .red)
-                        }
-
-                        Spacer()
-
-                        Button("Save") {
-                            saveSource()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(address.isEmpty || displayName.isEmpty)
+                Grid(alignment: .leadingFirstTextBaseline, verticalSpacing: 8) {
+                    GridRow {
+                        Text("Name")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .trailing)
+                        TextField("My NAS", text: $displayName)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .displayName)
+                    }
+                    GridRow {
+                        Text("Address")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .trailing)
+                        TextField(addressPlaceholder, text: $address)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .address)
+                    }
+                    GridRow {
+                        Text("Username")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .trailing)
+                        TextField("Optional", text: $username)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .username)
+                    }
+                    GridRow {
+                        Text("Password")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .trailing)
+                        SecureField("Optional", text: $password)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .password)
                     }
                 }
             }
-            .formStyle(.grouped)
+            .padding(.horizontal)
+
+            Spacer()
+
+            // Actions
+            HStack {
+                Button("Test Connection") {
+                    testConnection()
+                }
+                .disabled(address.isEmpty || isTesting)
+
+                if isTesting {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+
+                if let result = testResult {
+                    Text(result)
+                        .font(.caption)
+                        .foregroundStyle(result.contains("Success") ? .green : .red)
+                }
+
+                Spacer()
+
+                Button("Save") {
+                    saveSource()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(address.isEmpty || displayName.isEmpty)
+            }
+            .padding()
         }
+        .onAppear { focusedField = .displayName }
     }
 
     private var addressPlaceholder: String {

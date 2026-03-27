@@ -38,7 +38,7 @@ Error FFDemuxer::open(const std::string& path) {
     populate_media_info();
     PY_LOG_INFO(TAG, "Opened: %s (%s), duration=%.2fs, %zu tracks",
                 path.c_str(), info_.container_format.c_str(),
-                info_.duration_us / 1e6, info_.tracks.size());
+                static_cast<double>(info_.duration_us) / 1e6, info_.tracks.size());
 
     return Error::Ok();
 }

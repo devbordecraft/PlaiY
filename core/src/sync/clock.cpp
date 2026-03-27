@@ -43,7 +43,7 @@ int64_t Clock::compute_now(const State& s) {
     if (s.paused || s.frozen) return s.audio_pts_us;
     auto elapsed = std::chrono::steady_clock::now() - s.last_update;
     auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-    return s.audio_pts_us + static_cast<int64_t>(elapsed_us * s.rate);
+    return s.audio_pts_us + static_cast<int64_t>(static_cast<double>(elapsed_us) * s.rate);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ void Clock::set_rate(double rate) {
     // Snap current time before changing rate
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - state_.last_update).count();
-    state_.audio_pts_us += static_cast<int64_t>(elapsed * state_.rate);
+    state_.audio_pts_us += static_cast<int64_t>(static_cast<double>(elapsed) * state_.rate);
     state_.last_update = now;
     state_.rate = rate;
     end_write();

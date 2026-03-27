@@ -25,7 +25,7 @@ AudioPipeline::AudioPipeline(SharedState shared)
 void AudioPipeline::setup(const TrackInfo& track,
                           std::unique_ptr<IAudioOutput>& audio_output,
                           std::unique_ptr<AudioDecoder>& audio_decoder,
-                          std::unique_ptr<AudioResampler>& audio_resampler,
+                          std::unique_ptr<AudioResampler>& /*audio_resampler*/,
                           int spatial_audio_mode,
                           bool head_tracking_enabled,
                           bool muted, float volume) {

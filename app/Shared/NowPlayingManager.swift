@@ -5,26 +5,34 @@ class NowPlayingManager {
     static let shared = NowPlayingManager()
 
     private var playPauseHandler: (() -> Void)?
+    private var playTarget: Any?
+    private var pauseTarget: Any?
+    private var toggleTarget: Any?
 
     func setup(onPlayPause: @escaping () -> Void) {
         playPauseHandler = onPlayPause
 
         let center = MPRemoteCommandCenter.shared()
 
+        // Remove previous targets to avoid stacking
+        if let t = playTarget { center.playCommand.removeTarget(t) }
+        if let t = pauseTarget { center.pauseCommand.removeTarget(t) }
+        if let t = toggleTarget { center.togglePlayPauseCommand.removeTarget(t) }
+
         center.playCommand.isEnabled = true
-        center.playCommand.addTarget { [weak self] _ in
+        playTarget = center.playCommand.addTarget { [weak self] _ in
             self?.playPauseHandler?()
             return .success
         }
 
         center.pauseCommand.isEnabled = true
-        center.pauseCommand.addTarget { [weak self] _ in
+        pauseTarget = center.pauseCommand.addTarget { [weak self] _ in
             self?.playPauseHandler?()
             return .success
         }
 
         center.togglePlayPauseCommand.isEnabled = true
-        center.togglePlayPauseCommand.addTarget { [weak self] _ in
+        toggleTarget = center.togglePlayPauseCommand.addTarget { [weak self] _ in
             self?.playPauseHandler?()
             return .success
         }
@@ -45,6 +53,18 @@ class NowPlayingManager {
     }
 
     func clearNowPlaying() {
+        let center = MPRemoteCommandCenter.shared()
+
+        // Disable commands and remove targets so they stop intercepting the space key
+        if let t = playTarget { center.playCommand.removeTarget(t); playTarget = nil }
+        if let t = pauseTarget { center.pauseCommand.removeTarget(t); pauseTarget = nil }
+        if let t = toggleTarget { center.togglePlayPauseCommand.removeTarget(t); toggleTarget = nil }
+        center.playCommand.isEnabled = false
+        center.pauseCommand.isEnabled = false
+        center.togglePlayPauseCommand.isEnabled = false
+
+        playPauseHandler = nil
+
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
