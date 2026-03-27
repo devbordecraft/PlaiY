@@ -141,7 +141,7 @@ class PlayerViewModel: ObservableObject {
         playbackSpeed = 1.0
 
         bridge.setHWDecodePref(Int32(settings.hwDecodePref))
-        bridge.setSubtitleFontScale(settings.assFontScale)
+        bridge.setSubtitleFontScale(settings.styledSubtitleScale)
         bridge.setSpatialAudioMode(Int32(settings.spatialAudioMode))
         bridge.setHeadTracking(settings.headTrackingEnabled)
         headTrackingEnabled = settings.headTrackingEnabled

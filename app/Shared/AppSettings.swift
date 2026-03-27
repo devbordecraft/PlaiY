@@ -21,17 +21,17 @@ class AppSettings: ObservableObject {
     @AppStorage("preferredSubtitleLanguage") var preferredSubtitleLanguage: String = ""
     @AppStorage("autoSelectSubtitles") var autoSelectSubtitles: Bool = true
     // 0=Small, 1=Medium, 2=Large, 3=Very Large
-    @AppStorage("srtFontSize") var srtFontSize: Int = 1
+    @AppStorage("srtFontSize") var subtitleSize: Int = 1
     // 0=White, 1=Yellow
-    @AppStorage("srtTextColor") var srtTextColor: Int = 0
+    @AppStorage("srtTextColor") var subtitleColor: Int = 0
     // 0=Semi-transparent, 1=None, 2=Opaque
-    @AppStorage("srtBackgroundStyle") var srtBackgroundStyle: Int = 0
-    @AppStorage("assFontScale") var assFontScale: Double = 1.0
+    @AppStorage("srtBackgroundStyle") var subtitleBackground: Int = 0
+    @AppStorage("assFontScale") var styledSubtitleScale: Double = 1.0
 
     // MARK: - Computed helpers
 
-    var srtFont: Font {
-        switch srtFontSize {
+    var subtitleFont: Font {
+        switch subtitleSize {
         case 0: return .body
         case 2: return .title2
         case 3: return .title
@@ -39,12 +39,12 @@ class AppSettings: ObservableObject {
         }
     }
 
-    var srtColor: Color {
-        srtTextColor == 1 ? .yellow : .white
+    var subtitleForegroundColor: Color {
+        subtitleColor == 1 ? .yellow : .white
     }
 
-    var srtBgColor: Color {
-        switch srtBackgroundStyle {
+    var subtitleBackgroundColor: Color {
+        switch subtitleBackground {
         case 1: return .clear
         case 2: return .black.opacity(0.9)
         default: return .black.opacity(0.6)

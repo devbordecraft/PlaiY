@@ -210,14 +210,14 @@ private struct OutputSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("OUTPUT")
+            Text("AUDIO OUTPUT")
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white.opacity(0.6))
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    Toggle("Audio Passthrough", isOn: Binding(
+                    Toggle("Send Directly to Receiver", isOn: Binding(
                         get: { viewModel.passthroughEnabled },
                         set: { viewModel.setPassthrough($0) }
                     ))
@@ -227,7 +227,7 @@ private struct OutputSectionView: View {
                 .padding(.vertical, 4)
 
                 if viewModel.transport.passthroughActive {
-                    Text("Bitstream active")
+                    Text("Direct output active")
                         .font(.caption)
                         .foregroundStyle(.green.opacity(0.8))
                         .padding(.leading, 4)
@@ -242,12 +242,12 @@ private struct OutputSectionView: View {
                     caps.truehd ? "TrueHD" : nil,
                 ].compactMap { $0 }
                 if supported.isEmpty {
-                    Text("No passthrough formats detected")
+                    Text("No direct output formats detected")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.4))
                         .padding(.leading, 4)
                 } else {
-                    Text("Device supports: \(supported.joined(separator: ", "))")
+                    Text("Your receiver supports: \(supported.joined(separator: ", "))")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.5))
                         .padding(.leading, 4)
@@ -265,7 +265,7 @@ private struct OutputSectionView: View {
                     )) {
                         Text("Auto").tag(Int32(0))
                         Text("Off").tag(Int32(1))
-                        Text("Force").tag(Int32(2))
+                        Text("Always On").tag(Int32(2))
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 160)
@@ -273,7 +273,7 @@ private struct OutputSectionView: View {
                 .padding(.vertical, 2)
 
                 if viewModel.transport.spatialActive {
-                    Text("Spatial audio active (HRTF)")
+                    Text("Spatial audio active")
                         .font(.caption)
                         .foregroundStyle(.blue.opacity(0.8))
                         .padding(.leading, 4)

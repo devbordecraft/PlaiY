@@ -21,16 +21,16 @@ struct SubtitleOverlayView: View {
                 switch subtitle {
                 case .text(let text):
                     Text(text)
-                        .font(settings.srtFont)
+                        .font(settings.subtitleFont)
                         .fontWeight(.medium)
-                        .foregroundStyle(settings.srtColor)
+                        .foregroundStyle(settings.subtitleForegroundColor)
                         .brightness(isHDRContent ? 0.3 : 0.0)
                         .shadow(color: .black, radius: 2, x: 1, y: 1)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(settings.srtBgColor)
+                                .fill(settings.subtitleBackgroundColor)
                         )
                         .multilineTextAlignment(.center)
 

@@ -42,9 +42,9 @@ struct SettingsView: View {
 
             Form {
                 generalSection
-                videoSection
                 audioSection
                 subtitleSection
+                advancedSection
                 librarySection
                 sourcesSection
             }
@@ -61,66 +61,82 @@ struct SettingsView: View {
         }
     }
 
-    private var videoSection: some View {
-        Section("Video") {
-            Picker("Decoder", selection: $settings.hwDecodePref) {
-                Text("Auto").tag(0)
-                Text("Force Hardware").tag(1)
-                Text("Force Software").tag(2)
-            }
-        }
-    }
-
     private var audioSection: some View {
         Section("Audio") {
-            Picker("Preferred Language", selection: $settings.preferredAudioLanguage) {
+            Picker("Default Language", selection: $settings.preferredAudioLanguage) {
                 ForEach(languages, id: \.code) { lang in
                     Text(lang.name).tag(lang.code)
                 }
             }
 
             #if os(macOS)
-            Toggle("Audio Passthrough", isOn: $settings.audioPassthrough)
+            Toggle("Send Audio Directly to Receiver", isOn: $settings.audioPassthrough)
             #endif
+
+            Picker("Spatial Audio", selection: $settings.spatialAudioMode) {
+                Text("Automatic").tag(0)
+                Text("Off").tag(1)
+                Text("Always On").tag(2)
+            }
+
+            Toggle("Head Tracking", isOn: $settings.headTrackingEnabled)
         }
     }
 
     private var subtitleSection: some View {
-        Section("Subtitles") {
-            Picker("Preferred Language", selection: $settings.preferredSubtitleLanguage) {
+        Section {
+            Picker("Default Language", selection: $settings.preferredSubtitleLanguage) {
                 ForEach(languages, id: \.code) { lang in
                     Text(lang.name).tag(lang.code)
                 }
             }
 
-            Toggle("Auto-select Subtitles", isOn: $settings.autoSelectSubtitles)
+            Toggle("Show Subtitles Automatically", isOn: $settings.autoSelectSubtitles)
 
-            Picker("SRT Font Size", selection: $settings.srtFontSize) {
+            Picker("Subtitle Size", selection: $settings.subtitleSize) {
                 Text("Small").tag(0)
                 Text("Medium").tag(1)
                 Text("Large").tag(2)
                 Text("Very Large").tag(3)
             }
 
-            Picker("SRT Text Color", selection: $settings.srtTextColor) {
+            Picker("Subtitle Color", selection: $settings.subtitleColor) {
                 Text("White").tag(0)
                 Text("Yellow").tag(1)
             }
 
-            Picker("SRT Background", selection: $settings.srtBackgroundStyle) {
+            Picker("Subtitle Background", selection: $settings.subtitleBackground) {
                 Text("Semi-transparent").tag(0)
                 Text("None").tag(1)
                 Text("Opaque").tag(2)
             }
 
             HStack {
-                Text("ASS/SSA Scale")
+                Text("Styled Subtitle Scale")
                 Spacer()
-                Text(String(format: "%.1fx", settings.assFontScale))
+                Text(String(format: "%.1fx", settings.styledSubtitleScale))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Slider(value: $settings.assFontScale, in: 0.5...2.0, step: 0.1)
+            Slider(value: $settings.styledSubtitleScale, in: 0.5...2.0, step: 0.1)
+        } header: {
+            Text("Subtitles")
+        } footer: {
+            Text("Styled Subtitle Scale adjusts the size of subtitles that have custom formatting (e.g. anime fansubs).")
+        }
+    }
+
+    private var advancedSection: some View {
+        Section {
+            Picker("Video Decoder", selection: $settings.hwDecodePref) {
+                Text("Automatic").tag(0)
+                Text("Hardware Only").tag(1)
+                Text("Software Only").tag(2)
+            }
+        } header: {
+            Text("Advanced")
+        } footer: {
+            Text("These settings are for troubleshooting. Leave them on defaults unless you experience issues.")
         }
     }
 
