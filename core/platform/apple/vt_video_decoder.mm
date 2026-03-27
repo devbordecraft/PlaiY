@@ -170,6 +170,12 @@ Error VTVideoDecoder::open(const TrackInfo& track) {
             kCFBooleanTrue);
     }
 
+    // Enable hardware deinterlacing for interlaced content.
+    // Free in hardware, only activates when content is actually interlaced.
+    VTSessionSetProperty(impl_->session,
+        kVTDecompressionPropertyKey_FieldMode,
+        kVTDecompressionProperty_FieldMode_DeinterlaceFields);
+
     PY_LOG_INFO(TAG, "Opened VideoToolbox decoder: %s (%dx%d, %s)",
                 track.codec_name.c_str(), track.width, track.height,
                 impl_->is_10bit ? "10-bit" : "8-bit");

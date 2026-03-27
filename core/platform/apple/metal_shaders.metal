@@ -26,6 +26,20 @@ vertex VertexOut vertexFullscreen(uint vertexID [[vertex_id]]) {
     return out;
 }
 
+// ---- Bayer 8x8 dithering matrix ----
+// Threshold values normalized to [-0.5, 0.5] range for ordered dithering.
+// Eliminates banding in smooth gradients at sub-LSB cost.
+constant float bayerMatrix8x8[64] = {
+     0.0/64.0 - 0.5, 32.0/64.0 - 0.5,  8.0/64.0 - 0.5, 40.0/64.0 - 0.5,  2.0/64.0 - 0.5, 34.0/64.0 - 0.5, 10.0/64.0 - 0.5, 42.0/64.0 - 0.5,
+    48.0/64.0 - 0.5, 16.0/64.0 - 0.5, 56.0/64.0 - 0.5, 24.0/64.0 - 0.5, 50.0/64.0 - 0.5, 18.0/64.0 - 0.5, 58.0/64.0 - 0.5, 26.0/64.0 - 0.5,
+    12.0/64.0 - 0.5, 44.0/64.0 - 0.5,  4.0/64.0 - 0.5, 36.0/64.0 - 0.5, 14.0/64.0 - 0.5, 46.0/64.0 - 0.5,  6.0/64.0 - 0.5, 38.0/64.0 - 0.5,
+    60.0/64.0 - 0.5, 28.0/64.0 - 0.5, 52.0/64.0 - 0.5, 20.0/64.0 - 0.5, 62.0/64.0 - 0.5, 30.0/64.0 - 0.5, 54.0/64.0 - 0.5, 22.0/64.0 - 0.5,
+     3.0/64.0 - 0.5, 35.0/64.0 - 0.5, 11.0/64.0 - 0.5, 43.0/64.0 - 0.5,  1.0/64.0 - 0.5, 33.0/64.0 - 0.5,  9.0/64.0 - 0.5, 41.0/64.0 - 0.5,
+    51.0/64.0 - 0.5, 19.0/64.0 - 0.5, 59.0/64.0 - 0.5, 27.0/64.0 - 0.5, 49.0/64.0 - 0.5, 17.0/64.0 - 0.5, 57.0/64.0 - 0.5, 25.0/64.0 - 0.5,
+    15.0/64.0 - 0.5, 47.0/64.0 - 0.5,  7.0/64.0 - 0.5, 39.0/64.0 - 0.5, 13.0/64.0 - 0.5, 45.0/64.0 - 0.5,  5.0/64.0 - 0.5, 37.0/64.0 - 0.5,
+    63.0/64.0 - 0.5, 31.0/64.0 - 0.5, 55.0/64.0 - 0.5, 23.0/64.0 - 0.5, 61.0/64.0 - 0.5, 29.0/64.0 - 0.5, 53.0/64.0 - 0.5, 21.0/64.0 - 0.5
+};
+
 // ---- Color space matrices ----
 
 // BT.709 YCbCr to RGB (video range)
@@ -40,6 +54,13 @@ constant float3x3 bt2020Matrix = float3x3(
     float3(1.164384,  1.164384,  1.164384),
     float3(0.0,      -0.187326,  2.141772),
     float3(1.678674, -0.650424,  0.0)
+);
+
+// BT.601 YCbCr to RGB (video range, SD content: NTSC/PAL/DVD)
+constant float3x3 bt601Matrix = float3x3(
+    float3(1.164384,  1.164384,  1.164384),
+    float3(0.0,      -0.391762,  2.017232),
+    float3(1.596027, -0.812968,  0.0)
 );
 
 // ---- Transfer functions ----
@@ -213,6 +234,9 @@ struct VideoUniforms {
 
     // MaxFALL (Maximum Frame Average Light Level) in cd/m2
     float maxFALL;
+
+    // Chroma subsampling format: 0=4:2:0, 1=4:2:2, 2=4:4:4
+    int chromaFormat;
 };
 
 // Dolby Vision reshaping uniforms (passed as buffer(1))
@@ -303,8 +327,106 @@ struct ColorFilterUniforms {
     float brightness;    // [-1, 1], 0 = neutral
     float contrast;      // [0, 3], 1 = neutral
     float saturation;    // [0, 3], 1 = neutral
-    float sharpness;     // [0, 1], 0 = off
+    float sharpness;         // [0, 1], 0 = off
+    float debandEnabled;     // 0.0 = off, 1.0 = on
+    float lanczosUpscaling;  // 0.0 = off, 1.0 = on (Lanczos-3 for Y upscaling)
 };
+
+// ---- Bicubic Catmull-Rom chroma upsampling ----
+// 4:2:0 chroma is half-resolution. Bilinear upsampling causes color bleeding at
+// sharp edges. This uses 4 bilinear taps to efficiently evaluate a Catmull-Rom
+// bicubic filter, producing sharper chroma reconstruction.
+
+float2 sampleChromaBicubic(texture2d<float> tex, sampler s, float2 coord) {
+    float2 texSize = float2(tex.get_width(), tex.get_height());
+    float2 invTexSize = 1.0 / texSize;
+
+    // Convert to texel space, offset to texel center
+    float2 tc = coord * texSize - 0.5;
+    float2 f = fract(tc);
+    float2 tc0 = (floor(tc) + 0.5) * invTexSize;
+
+    // Catmull-Rom weights for the fractional position
+    // w0 = -0.5*f^3 + f^2 - 0.5*f
+    // w1 =  1.5*f^3 - 2.5*f^2 + 1
+    // w2 = -1.5*f^3 + 2*f^2 + 0.5*f
+    // w3 =  0.5*f^3 - 0.5*f^2
+    float2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    float2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    float2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    float2 w3 = f * f * (-0.5 + 0.5 * f);
+
+    // Combine into 2 bilinear taps per axis (4 total)
+    // Group (w0+w1) and (w2+w3), offset by weight ratio to exploit HW bilinear
+    float2 s01 = w0 + w1;
+    float2 s23 = w2 + w3;
+    float2 offset01 = tc0 + (w1 / s01 - 1.0) * invTexSize;
+    float2 offset23 = tc0 + (w3 / s23 + 1.0) * invTexSize;
+
+    float4 t00 = tex.sample(s, float2(offset01.x, offset01.y));
+    float4 t10 = tex.sample(s, float2(offset23.x, offset01.y));
+    float4 t01 = tex.sample(s, float2(offset01.x, offset23.y));
+    float4 t11 = tex.sample(s, float2(offset23.x, offset23.y));
+
+    float4 result = (s01.x * (s01.y * t00 + s23.y * t01) +
+                     s23.x * (s01.y * t10 + s23.y * t11));
+    // Normalize: total weight = (s01.x + s23.x) * (s01.y + s23.y) = 1.0 for Catmull-Rom
+    // but floating point may drift, so normalize explicitly
+    result /= (s01.x + s23.x) * (s01.y + s23.y);
+
+    return result.rg;
+}
+
+// ---- Lanczos-3 upscaling for Y plane ----
+// 6-tap separable Lanczos kernel for high-quality luma upscaling.
+// Only used when video resolution is significantly below display resolution.
+
+float lanczos3(float x) {
+    if (abs(x) < 1e-6) return 1.0;
+    if (abs(x) >= 3.0) return 0.0;
+    float pi_x = 3.14159265 * x;
+    return (sin(pi_x) / pi_x) * (sin(pi_x / 3.0) / (pi_x / 3.0));
+}
+
+float sampleYLanczos3(texture2d<float> tex, sampler s, float2 coord) {
+    float2 texSize = float2(tex.get_width(), tex.get_height());
+    float2 invTexSize = 1.0 / texSize;
+
+    float2 tc = coord * texSize - 0.5;
+    float2 itc = floor(tc);
+    float2 f = tc - itc;
+
+    // 6 taps per axis, separable: first horizontal, then vertical
+    // Compute horizontal weights
+    float hWeights[6];
+    float hSum = 0.0;
+    for (int i = -2; i <= 3; i++) {
+        hWeights[i + 2] = lanczos3(float(i) - f.x);
+        hSum += hWeights[i + 2];
+    }
+    for (int i = 0; i < 6; i++) hWeights[i] /= hSum;
+
+    // Compute vertical weights
+    float vWeights[6];
+    float vSum = 0.0;
+    for (int i = -2; i <= 3; i++) {
+        vWeights[i + 2] = lanczos3(float(i) - f.y);
+        vSum += vWeights[i + 2];
+    }
+    for (int i = 0; i < 6; i++) vWeights[i] /= vSum;
+
+    // Separable: for each row, compute horizontal interpolation, then vertical
+    float result = 0.0;
+    for (int j = -2; j <= 3; j++) {
+        float row = 0.0;
+        for (int i = -2; i <= 3; i++) {
+            float2 samplePos = (itc + float2(float(i), float(j)) + 0.5) * invTexSize;
+            row += tex.sample(s, samplePos).r * hWeights[i + 2];
+        }
+        result += row * vWeights[j + 2];
+    }
+    return result;
+}
 
 // ---- NV12/P010 fragment shader (biplanar: Y + UV textures) ----
 
@@ -322,8 +444,22 @@ fragment float4 fragmentBiplanar(
     // Remap texture coordinates for crop (identity when origin=0, scale=1)
     float2 coord = cropUniforms.texOrigin + in.texCoord * cropUniforms.texScale;
 
-    float y = textureY.sample(texSampler, coord).r;
-    float2 uv = textureUV.sample(texSampler, coord).rg;
+    // Y plane sampling: use Lanczos-3 when upscaling is enabled, otherwise bilinear
+    float y;
+    if (colorFilters.lanczosUpscaling > 0.5) {
+        y = sampleYLanczos3(textureY, texSampler, coord);
+    } else {
+        y = textureY.sample(texSampler, coord).r;
+    }
+
+    // Chroma sampling: use bicubic for 4:2:0 (both axes subsampled),
+    // bilinear for 4:2:2 (only horizontal subsampled), direct for 4:4:4.
+    float2 uv;
+    if (uniforms.chromaFormat == 0) {
+        uv = sampleChromaBicubic(textureUV, texSampler, coord);
+    } else {
+        uv = textureUV.sample(texSampler, coord).rg;
+    }
 
     // YCbCr to RGB
     float3 ycbcr = float3(y, uv.x, uv.y);
@@ -332,13 +468,19 @@ fragment float4 fragmentBiplanar(
     if (uniforms.colorRange == 1) {
         // Full/JPEG range: Y [0,255], CbCr [0,255] with 128 center
         ycbcr -= float3(0.0, 128.0/255.0, 128.0/255.0);
-        // Full-range BT.709 matrix (no 16-235 scaling)
         if (uniforms.colorSpace == 1) {
             const float3x3 bt2020Full = float3x3(
                 float3(1.0,  1.0,      1.0),
                 float3(0.0, -0.164553, 1.8814),
                 float3(1.4746, -0.571353, 0.0));
             rgb = bt2020Full * ycbcr;
+        } else if (uniforms.colorSpace == 2) {
+            // BT.601 full range (SD content)
+            const float3x3 bt601Full = float3x3(
+                float3(1.0,  1.0,      1.0),
+                float3(0.0, -0.344136, 1.772),
+                float3(1.402, -0.714136, 0.0));
+            rgb = bt601Full * ycbcr;
         } else {
             const float3x3 bt709Full = float3x3(
                 float3(1.0,  1.0,      1.0),
@@ -351,6 +493,8 @@ fragment float4 fragmentBiplanar(
         ycbcr -= float3(16.0/255.0, 128.0/255.0, 128.0/255.0);
         if (uniforms.colorSpace == 1) {
             rgb = bt2020Matrix * ycbcr;
+        } else if (uniforms.colorSpace == 2) {
+            rgb = bt601Matrix * ycbcr;
         } else {
             rgb = bt709Matrix * ycbcr;
         }
@@ -456,21 +600,101 @@ fragment float4 fragmentBiplanar(
         rgb = srgbToLinear(rgb);
     }
 
+    // ---- BT.2020 to Display P3 gamut mapping ----
+    // The output colorspace is extendedLinearDisplayP3. BT.2020 has a wider gamut
+    // than Display P3, so some colors (saturated greens/blues) are out of gamut.
+    // Without mapping, they hard-clip which shifts hue. This applies a primaries
+    // rotation matrix followed by soft-clip desaturation toward luminance.
+    if (uniforms.colorSpace == 1) {
+        // BT.2020 -> Display P3 primary rotation (3x3 chromatic adaptation)
+        // Derived from BT.2020 and Display P3 primary coordinates via Bradford transform
+        const float3x3 bt2020ToP3 = float3x3(
+            float3( 1.3434, -0.2820, -0.0462),
+            float3(-0.0653,  1.0758,  0.0084),
+            float3(-0.0029, -0.0193,  1.0372));
+        rgb = bt2020ToP3 * rgb;
+
+        // Soft-clip: desaturate out-of-gamut values toward luminance instead of hard clipping
+        float lum = dot(rgb, float3(0.2290, 0.6917, 0.0793)); // Display P3 luminance
+        float peak = uniforms.transferFunc > 0 ? uniforms.edrHeadroom : 1.0;
+        float3 overshoot = max(rgb - peak, 0.0) + max(-rgb, 0.0);
+        float maxOver = max(max(overshoot.x, overshoot.y), overshoot.z);
+        if (maxOver > 0.0) {
+            // Blend toward luminance proportionally to how far out of gamut we are
+            float t = saturate(maxOver / max(peak * 0.5, 0.001));
+            rgb = mix(rgb, float3(lum), t);
+            rgb = clamp(rgb, 0.0, peak);
+        }
+    }
+
     // ---- User color adjustments (brightness/contrast/saturation) ----
     // Applied in linear light after all HDR/SDR processing.
 
-    // Sharpening (unsharp mask via neighboring Y texel sampling)
+    // Debanding: breaks up quantization bands in smooth gradients.
+    // Samples 4 neighbors at small offsets, averages if differences are below threshold.
+    // Applied before sharpening so CAS doesn't re-sharpen the debanded regions.
+    if (colorFilters.debandEnabled > 0.5) {
+        float2 texelSize = float2(1.0 / textureY.get_width(), 1.0 / textureY.get_height());
+        float2 origUV = cropUniforms.texOrigin + in.texCoord * cropUniforms.texScale;
+
+        // Deterministic pseudo-random offset from fragment position (avoids visible patterns)
+        int2 ipos = int2(in.position.xy);
+        float angle = float((ipos.x * 73 + ipos.y * 127) % 256) * (3.14159265 * 2.0 / 256.0);
+        float radius = 2.0; // sample radius in texels
+        float2 dir1 = float2(cos(angle), sin(angle)) * texelSize * radius;
+        float2 dir2 = float2(-dir1.y, dir1.x); // perpendicular
+
+        float center = textureY.sample(texSampler, origUV).r;
+        float s0 = textureY.sample(texSampler, origUV + dir1).r;
+        float s1 = textureY.sample(texSampler, origUV - dir1).r;
+        float s2 = textureY.sample(texSampler, origUV + dir2).r;
+        float s3 = textureY.sample(texSampler, origUV - dir2).r;
+
+        // Only deband if all neighbors are very close (quantization band, not real edge)
+        float threshold = 0.004; // ~1 step in 8-bit (1/255)
+        float d0 = abs(s0 - center);
+        float d1 = abs(s1 - center);
+        float d2 = abs(s2 - center);
+        float d3 = abs(s3 - center);
+        if (d0 < threshold && d1 < threshold && d2 < threshold && d3 < threshold) {
+            float avg = (s0 + s1 + s2 + s3) * 0.25;
+            float diff = avg - center;
+            rgb += diff; // Apply the luma correction to all channels equally
+        }
+    }
+
+    // Contrast Adaptive Sharpening (CAS): edge-aware sharpening that enhances
+    // real detail without amplifying noise, bands, or compression artifacts.
+    // Uses a 3x3 neighborhood to detect local contrast and scales sharpening
+    // inversely -- high-contrast edges get less sharpening to prevent halos.
     if (colorFilters.sharpness > 0.001) {
         float2 texelSize = float2(1.0 / textureY.get_width(), 1.0 / textureY.get_height());
         float2 origUV = cropUniforms.texOrigin + in.texCoord * cropUniforms.texScale;
-        float center = textureY.sample(texSampler, origUV).r;
-        float top    = textureY.sample(texSampler, origUV + float2(0, -texelSize.y)).r;
-        float bottom = textureY.sample(texSampler, origUV + float2(0,  texelSize.y)).r;
-        float left   = textureY.sample(texSampler, origUV + float2(-texelSize.x, 0)).r;
-        float right  = textureY.sample(texSampler, origUV + float2( texelSize.x, 0)).r;
-        float blur = (top + bottom + left + right) * 0.25;
-        float sharp = (center - blur) * colorFilters.sharpness * 2.0;
-        rgb += sharp;
+
+        // Sample 3x3 neighborhood from Y plane
+        float tl = textureY.sample(texSampler, origUV + float2(-texelSize.x, -texelSize.y)).r;
+        float tc = textureY.sample(texSampler, origUV + float2(          0.0, -texelSize.y)).r;
+        float tr = textureY.sample(texSampler, origUV + float2( texelSize.x, -texelSize.y)).r;
+        float ml = textureY.sample(texSampler, origUV + float2(-texelSize.x,          0.0)).r;
+        float mc = textureY.sample(texSampler, origUV).r;
+        float mr = textureY.sample(texSampler, origUV + float2( texelSize.x,          0.0)).r;
+        float bl = textureY.sample(texSampler, origUV + float2(-texelSize.x,  texelSize.y)).r;
+        float bc = textureY.sample(texSampler, origUV + float2(          0.0,  texelSize.y)).r;
+        float br = textureY.sample(texSampler, origUV + float2( texelSize.x,  texelSize.y)).r;
+
+        // Local min/max for contrast detection
+        float mnV = min(min(min(tl, tc), min(tr, ml)), min(min(mc, mr), min(bl, min(bc, br))));
+        float mxV = max(max(max(tl, tc), max(tr, ml)), max(max(mc, mr), max(bl, max(bc, br))));
+
+        // CAS kernel weight: inversely proportional to local contrast
+        // High contrast (edges) -> less sharpening; low contrast (flat) -> more sharpening
+        float localContrast = mxV - mnV;
+        float adaptiveWeight = 1.0 - saturate(localContrast * 4.0);
+        float w = colorFilters.sharpness * adaptiveWeight;
+
+        // Apply sharpening: weighted difference of center vs cross neighbors
+        float cross = (tc + ml + mr + bc) * 0.25;
+        rgb += (mc - cross) * w * 2.0;
     }
 
     // Brightness, contrast, saturation
@@ -482,6 +706,19 @@ fragment float4 fragmentBiplanar(
         rgb = lum + colorFilters.saturation * (rgb - lum);
         float maxVal = uniforms.transferFunc > 0 ? uniforms.edrHeadroom : 1.0;
         rgb = clamp(rgb, 0.0, maxVal);
+    }
+
+    // Ordered dithering (Bayer 8x8): eliminates banding in smooth gradients.
+    // Applied as the final step so it operates on the actual output values.
+    // Magnitude is one 8-bit LSB (1/255), invisible but breaks quantization bands.
+    {
+        int2 pos = int2(in.position.xy) % 8;
+        float dither = bayerMatrix8x8[pos.y * 8 + pos.x];
+        // Scale dither magnitude: 1 LSB for SDR, scaled for HDR EDR range
+        float magnitude = (uniforms.transferFunc > 0)
+            ? 1.0 / (max(uniforms.edrHeadroom, 1.0) * 255.0)
+            : 1.0 / 255.0;
+        rgb += dither * magnitude;
     }
 
     return float4(rgb, 1.0);

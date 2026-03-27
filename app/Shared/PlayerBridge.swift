@@ -129,6 +129,15 @@ final class PlayerBridge: @unchecked Sendable {
     @inline(always) func setSharpness(_ value: Float) { py_player_set_sharpness(handle, value) }
     @inline(always) var sharpness: Float { py_player_get_sharpness(handle) }
 
+    @inline(always) func setDebandEnabled(_ enabled: Bool) { py_player_set_deband_enabled(handle, enabled) }
+    @inline(always) var isDebandEnabled: Bool { py_player_is_deband_enabled(handle) }
+
+    @inline(always) func setLanczosUpscaling(_ enabled: Bool) { py_player_set_lanczos_upscaling(handle, enabled) }
+    @inline(always) var isLanczosUpscaling: Bool { py_player_is_lanczos_upscaling(handle) }
+
+    @inline(always) func setFilmGrainEnabled(_ enabled: Bool) { py_player_set_film_grain_enabled(handle, enabled) }
+    @inline(always) var isFilmGrainEnabled: Bool { py_player_is_film_grain_enabled(handle) }
+
     @inline(always) func resetVideoAdjustments() { py_player_reset_video_adjustments(handle) }
 
     // MARK: - Video Filters (CPU: Deinterlace)
@@ -279,6 +288,10 @@ final class PlayerBridge: @unchecked Sendable {
 
     @inline(always) static func frameColorRange(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_range(frame)
+    }
+
+    @inline(always) static func frameChromaFormat(_ frame: UnsafeMutableRawPointer) -> Int32 {
+        py_player_frame_get_chroma_format(frame)
     }
 
     // HDR10+ per-frame dynamic metadata

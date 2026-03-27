@@ -56,6 +56,12 @@ Error FFVideoDecoder::open(const TrackInfo& track) {
     codec_ctx_->thread_count = 0; // auto
     codec_ctx_->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 
+    // Film grain: FFmpeg applies grain synthesis by default for AV1/H.266.
+    // If film_grain_synthesis_ is false, export raw params instead of applying.
+    if (!film_grain_synthesis_) {
+        codec_ctx_->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
+    }
+
     int ret = avcodec_open2(codec_ctx_, codec, nullptr);
     if (ret < 0) {
         char errbuf[256];
@@ -111,6 +117,12 @@ void FFVideoDecoder::flush() {
 
 void FFVideoDecoder::set_pts_only_output(bool enabled) {
     pts_only_output_ = enabled;
+}
+
+void FFVideoDecoder::set_film_grain_synthesis(bool enabled) {
+    film_grain_synthesis_ = enabled;
+    // Note: this takes effect on next open(), not mid-stream, since
+    // the codec context flag must be set before avcodec_open2().
 }
 
 void FFVideoDecoder::set_fast_replay_mode(bool enabled) {
@@ -321,21 +333,53 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
 
 #ifdef __APPLE__
     // On Apple, wrap the decoded frame in a CVPixelBuffer so the Metal
-    // renderer can create textures from it. The renderer only handles
-    // CVPixelBuffer (biplanar NV12/P010), so we convert if needed.
+    // renderer can create textures from it. Supports 4:2:0 and 4:2:2 biplanar
+    // formats. 4:4:4 is converted to 4:2:2 (no biplanar CVPixelBuffer format).
     bool is_10bit = (av_frame->format == AV_PIX_FMT_YUV420P10LE ||
                      av_frame->format == AV_PIX_FMT_YUV420P10BE ||
                      av_frame->format == AV_PIX_FMT_P010LE ||
                      av_frame->format == AV_PIX_FMT_P010BE ||
                      av_frame->format == AV_PIX_FMT_YUV420P12LE ||
-                     av_frame->format == AV_PIX_FMT_YUV420P12BE);
+                     av_frame->format == AV_PIX_FMT_YUV420P12BE ||
+                     av_frame->format == AV_PIX_FMT_YUV422P10LE ||
+                     av_frame->format == AV_PIX_FMT_YUV422P10BE ||
+                     av_frame->format == AV_PIX_FMT_YUV444P10LE ||
+                     av_frame->format == AV_PIX_FMT_YUV444P10BE);
 
-    OSType cv_pix_fmt = is_10bit
-        ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-        : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
-    AVPixelFormat target_av_fmt = is_10bit ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12;
+    // Detect 4:2:2 or 4:4:4 source (4:4:4 will be downconverted to 4:2:2)
+    bool is_422_or_444 = (av_frame->format == AV_PIX_FMT_YUV422P ||
+                          av_frame->format == AV_PIX_FMT_YUV422P10LE ||
+                          av_frame->format == AV_PIX_FMT_YUV422P10BE ||
+                          av_frame->format == AV_PIX_FMT_YUV444P ||
+                          av_frame->format == AV_PIX_FMT_YUV444P10LE ||
+                          av_frame->format == AV_PIX_FMT_YUV444P10BE);
 
-    out.pixel_format = is_10bit ? PixelFormat::P010 : PixelFormat::NV12;
+    OSType cv_pix_fmt;
+    AVPixelFormat target_av_fmt;
+    if (is_422_or_444) {
+        // 4:2:2 biplanar preserves horizontal chroma resolution
+        if (is_10bit) {
+            cv_pix_fmt = kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange;
+            target_av_fmt = AV_PIX_FMT_P210LE;
+            out.pixel_format = PixelFormat::P210;
+        } else {
+            cv_pix_fmt = kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange;
+            target_av_fmt = AV_PIX_FMT_NV16;
+            out.pixel_format = PixelFormat::NV16;
+        }
+        out.chroma_format = ChromaFormat::Chroma422;
+    } else {
+        if (is_10bit) {
+            cv_pix_fmt = kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
+            target_av_fmt = AV_PIX_FMT_P010LE;
+            out.pixel_format = PixelFormat::P010;
+        } else {
+            cv_pix_fmt = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+            target_av_fmt = AV_PIX_FMT_NV12;
+            out.pixel_format = PixelFormat::NV12;
+        }
+        out.chroma_format = ChromaFormat::Chroma420;
+    }
 
     CVPixelBufferRef pixel_buffer = nullptr;
 
@@ -413,11 +457,22 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
         sws_ctx_ = sws_getContext(
             av_frame->width, av_frame->height, static_cast<AVPixelFormat>(av_frame->format),
             av_frame->width, av_frame->height, target_av_fmt,
-            SWS_BILINEAR, nullptr, nullptr, nullptr);
+            SWS_LANCZOS | SWS_ACCURATE_RND, nullptr, nullptr, nullptr);
         sws_src_w_ = av_frame->width;
         sws_src_h_ = av_frame->height;
         sws_src_fmt_ = src_fmt;
         sws_dst_fmt_ = dst_fmt;
+
+        // Set correct color space for the scaler to avoid wrong chroma coefficients
+        if (sws_ctx_) {
+            int cs = (av_frame->colorspace == AVCOL_SPC_BT2020_NCL ||
+                      av_frame->colorspace == AVCOL_SPC_BT2020_CL)
+                ? SWS_CS_BT2020 : SWS_CS_ITU709;
+            const int* coefs = sws_getCoefficients(cs);
+            int full_range = (av_frame->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
+            sws_setColorspaceDetails(sws_ctx_, coefs, full_range,
+                                     coefs, full_range, 0, 1 << 16, 1 << 16);
+        }
     }
 
     if (sws_ctx_) {

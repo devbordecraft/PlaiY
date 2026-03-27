@@ -89,7 +89,13 @@ bool        py_player_is_dialogue_boost_enabled(PYPlayer* p);
 void        py_player_set_dialogue_boost_amount(PYPlayer* p, float amount);
 float       py_player_get_dialogue_boost_amount(PYPlayer* p);
 
-// ---- Video filters (GPU: brightness/contrast/saturation/sharpness) ----
+// ---- Video filters (GPU: brightness/contrast/saturation/sharpness/deband) ----
+void        py_player_set_deband_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_deband_enabled(PYPlayer* p);
+void        py_player_set_lanczos_upscaling(PYPlayer* p, bool enabled);
+bool        py_player_is_lanczos_upscaling(PYPlayer* p);
+void        py_player_set_film_grain_enabled(PYPlayer* p, bool enabled);
+bool        py_player_is_film_grain_enabled(PYPlayer* p);
 void        py_player_set_brightness(PYPlayer* p, float value);
 float       py_player_get_brightness(PYPlayer* p);
 void        py_player_set_contrast(PYPlayer* p, float value);
@@ -245,6 +251,7 @@ int         py_player_frame_get_sar_num(void* frame);
 int         py_player_frame_get_sar_den(void* frame);
 int         py_player_frame_get_color_primaries(void* frame);
 int         py_player_frame_get_color_range(void* frame);  // 0=unspecified, 1=limited, 2=full
+int         py_player_frame_get_chroma_format(void* frame); // 0=420, 1=422, 2=444
 bool        py_player_frame_is_hardware(void* frame);
 
 // ---- HDR10+ per-frame dynamic metadata ----

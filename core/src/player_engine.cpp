@@ -132,6 +132,9 @@ struct PlayerEngine::Impl {
     std::atomic<int> deinterlace_mode{0}; // 0=yadif, 1=bwdif
 
     // Video filter parameters (GPU-side, read by Swift via bridge)
+    std::atomic<bool> deband_enabled{false};
+    std::atomic<bool> lanczos_upscaling{false};
+    std::atomic<bool> film_grain_enabled{true}; // ON by default for authentic grain
     std::atomic<float> video_brightness{0.0f};
     std::atomic<float> video_contrast{1.0f};
     std::atomic<float> video_saturation{1.0f};
@@ -621,6 +624,12 @@ void PlayerEngine::set_deinterlace_mode(int m) { impl_->deinterlace_mode.store(m
 int PlayerEngine::deinterlace_mode() const { return impl_->deinterlace_mode.load(std::memory_order_relaxed); }
 
 // Video filter getters/setters (GPU — atomic read/write, lock-free)
+void PlayerEngine::set_deband_enabled(bool e) { impl_->deband_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::is_deband_enabled() const { return impl_->deband_enabled.load(std::memory_order_relaxed); }
+void PlayerEngine::set_lanczos_upscaling(bool e) { impl_->lanczos_upscaling.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::lanczos_upscaling() const { return impl_->lanczos_upscaling.load(std::memory_order_relaxed); }
+void PlayerEngine::set_film_grain_enabled(bool e) { impl_->film_grain_enabled.store(e, std::memory_order_relaxed); }
+bool PlayerEngine::film_grain_enabled() const { return impl_->film_grain_enabled.load(std::memory_order_relaxed); }
 void PlayerEngine::set_brightness(float v) { impl_->video_brightness.store(v, std::memory_order_relaxed); }
 float PlayerEngine::brightness() const { return impl_->video_brightness.load(std::memory_order_relaxed); }
 void PlayerEngine::set_contrast(float v) { impl_->video_contrast.store(v, std::memory_order_relaxed); }

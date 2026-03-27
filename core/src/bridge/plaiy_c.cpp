@@ -78,6 +78,12 @@ float py_player_get_saturation(PYPlayer* p) { return p ? p->engine.saturation() 
 void py_player_set_sharpness(PYPlayer* p, float value) { if (p) p->engine.set_sharpness(value); }
 float py_player_get_sharpness(PYPlayer* p) { return p ? p->engine.sharpness() : 0.0f; }
 
+void py_player_set_deband_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_deband_enabled(enabled); }
+bool py_player_is_deband_enabled(PYPlayer* p) { return p ? p->engine.is_deband_enabled() : false; }
+void py_player_set_lanczos_upscaling(PYPlayer* p, bool enabled) { if (p) p->engine.set_lanczos_upscaling(enabled); }
+bool py_player_is_lanczos_upscaling(PYPlayer* p) { return p ? p->engine.lanczos_upscaling() : false; }
+void py_player_set_film_grain_enabled(PYPlayer* p, bool enabled) { if (p) p->engine.set_film_grain_enabled(enabled); }
+bool py_player_is_film_grain_enabled(PYPlayer* p) { return p ? p->engine.film_grain_enabled() : true; }
 void py_player_reset_video_adjustments(PYPlayer* p) { if (p) p->engine.reset_video_adjustments(); }
 
 // ---- Video filters (CPU: deinterlace) ----
@@ -414,6 +420,11 @@ int py_player_frame_get_color_primaries(void* frame) {
 int py_player_frame_get_color_range(void* frame) {
     if (!frame) return 0;
     return static_cast<py::VideoFrame*>(frame)->color_range;
+}
+
+int py_player_frame_get_chroma_format(void* frame) {
+    if (!frame) return 0;
+    return static_cast<int>(static_cast<py::VideoFrame*>(frame)->chroma_format);
 }
 
 bool py_player_frame_is_hardware(void* frame) {

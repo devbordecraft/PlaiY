@@ -27,6 +27,7 @@ final class PlaybackTransport {
     var currentSubtitle: SubtitleData?
     var passthroughActive: Bool = false
     var spatialActive: Bool = false
+    nonisolated(unsafe) var isHDRContent: Bool = false
     var playbackStats: PYPlaybackStats?
 
     // Display settings (aspect ratio, crop, zoom, pan)

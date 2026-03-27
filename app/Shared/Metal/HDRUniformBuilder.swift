@@ -9,7 +9,7 @@ struct HDRUniformBuilder {
     ) -> VideoUniforms {
         var uniforms = VideoUniforms()
         let colorTrc = PlayerBridge.frameColorTrc(framePtr)
-        let colorPrimaries = PlayerBridge.frameColorPrimaries(framePtr)
+        let colorMatrix = PlayerBridge.frameColorSpace(framePtr) // AVCOL_SPC_* (YCbCr matrix)
         let colorRange = PlayerBridge.frameColorRange(framePtr)
 
         // Transfer function: AVCOL_TRC_SMPTE2084 = 16 (PQ), AVCOL_TRC_ARIB_STD_B67 = 18 (HLG)
@@ -19,9 +19,14 @@ struct HDRUniformBuilder {
             uniforms.transferFunc = 2 // HLG
         }
 
-        // Color space matrix: AVCOL_PRI_BT2020 = 9
-        if colorPrimaries == 9 {
+        // YCbCr color matrix selection (AVCOL_SPC_*)
+        // BT.2020: AVCOL_SPC_BT2020_NCL = 9, AVCOL_SPC_BT2020_CL = 10
+        // BT.601:  AVCOL_SPC_BT470BG = 5, AVCOL_SPC_SMPTE170M = 6
+        // BT.709:  AVCOL_SPC_BT709 = 1 (default)
+        if colorMatrix == 9 || colorMatrix == 10 {
             uniforms.colorSpace = 1  // BT.2020
+        } else if colorMatrix == 5 || colorMatrix == 6 {
+            uniforms.colorSpace = 2  // BT.601
         }
 
         // AVCOL_RANGE_JPEG = 2 -> full range
@@ -44,6 +49,9 @@ struct HDRUniformBuilder {
         if maxFALL > 0 {
             uniforms.maxFALL = Float(maxFALL)
         }
+
+        // Chroma subsampling format (0=420, 1=422, 2=444)
+        uniforms.chromaFormat = PlayerBridge.frameChromaFormat(framePtr)
 
         // Populate HDR10+ per-frame dynamic metadata
         if PlayerBridge.frameHasHDR10Plus(framePtr) {

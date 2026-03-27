@@ -3,6 +3,7 @@ import SwiftUI
 struct SubtitleOverlayView: View {
     @EnvironmentObject var settings: AppSettings
     let subtitle: SubtitleData?
+    var isHDRContent: Bool = false
 
     // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
     @MainActor private static var cachedDataHash: Int = 0
@@ -23,6 +24,7 @@ struct SubtitleOverlayView: View {
                         .font(settings.srtFont)
                         .fontWeight(.medium)
                         .foregroundStyle(settings.srtColor)
+                        .brightness(isHDRContent ? 0.3 : 0.0)
                         .shadow(color: .black, radius: 2, x: 1, y: 1)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 8)

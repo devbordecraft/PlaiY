@@ -31,7 +31,8 @@ struct PlayerView: View {
             // at 120Hz, only on @Published changes.
             TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
                 let _ = viewModel.tick()
-                SubtitleOverlayView(subtitle: viewModel.transport.currentSubtitle)
+                SubtitleOverlayView(subtitle: viewModel.transport.currentSubtitle,
+                                    isHDRContent: viewModel.transport.isHDRContent)
             }
             .allowsHitTesting(false)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

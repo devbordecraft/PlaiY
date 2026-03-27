@@ -10,6 +10,7 @@ struct VideoRenderConstants {
     // Color space IDs matching VideoUniforms.colorSpace in metal_shaders.metal
     static constexpr int COLOR_SPACE_BT709 = 0;
     static constexpr int COLOR_SPACE_BT2020 = 1;
+    static constexpr int COLOR_SPACE_BT601 = 2;
 
     // Transfer function IDs matching VideoUniforms.transferFunc
     static constexpr int TRANSFER_SDR = 0;

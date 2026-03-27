@@ -26,6 +26,9 @@ struct VideoUniforms {
 
     // MaxFALL (Maximum Frame Average Light Level) in cd/m2
     var maxFALL: Float = 0.0
+
+    // Chroma subsampling format: 0=4:2:0, 1=4:2:2, 2=4:4:4
+    var chromaFormat: Int32 = 0
 }
 
 struct DoviUniforms {
@@ -245,11 +248,13 @@ class MetalViewCoordinator {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        // Detect 10-bit from the actual CVPixelBuffer format, not HDR type.
-        // Content can be 10-bit without HDR metadata, or vice versa.
+        // Detect pixel format from the actual CVPixelBuffer type.
         let pixFmt = CVPixelBufferGetPixelFormatType(pixelBuffer)
         let is10bit = (pixFmt == kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange ||
-                       pixFmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange)
+                       pixFmt == kCVPixelFormatType_420YpCbCr10BiPlanarFullRange ||
+                       pixFmt == kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange)
+        let is422 = (pixFmt == kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange ||
+                     pixFmt == kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange)
 
         // Y plane (luma)
         var yTexture: CVMetalTexture?
@@ -258,12 +263,15 @@ class MetalViewCoordinator {
             kCFAllocatorDefault, textureCache, pixelBuffer, nil,
             yFormat, width, height, 0, &yTexture)
 
-        // UV plane (chroma)
+        // UV plane (chroma) — dimensions depend on chroma subsampling:
+        //   4:2:0: width/2, height/2
+        //   4:2:2: width/2, height (full vertical resolution)
         var uvTexture: CVMetalTexture?
         let uvFormat: MTLPixelFormat = is10bit ? .rg16Unorm : .rg8Unorm
+        let uvHeight = is422 ? height : height / 2
         CVMetalTextureCacheCreateTextureFromImage(
             kCFAllocatorDefault, textureCache, pixelBuffer, nil,
-            uvFormat, width / 2, height / 2, 1, &uvTexture)
+            uvFormat, width / 2, uvHeight, 1, &uvTexture)
 
         guard let yTex = yTexture.flatMap({ CVMetalTextureGetTexture($0) }),
               let uvTex = uvTexture.flatMap({ CVMetalTextureGetTexture($0) }) else {
@@ -296,6 +304,7 @@ class MetalViewCoordinator {
         // Only update when the content type changes to avoid per-frame overhead.
         if uniforms.transferFunc != currentHDRMode {
             currentHDRMode = uniforms.transferFunc
+            transport.isHDRContent = uniforms.transferFunc > 0
             if let metalLayer = view.layer as? CAMetalLayer {
                 metalLayer.edrMetadata = HDRUniformBuilder.edrMetadata(
                     transferFunc: uniforms.transferFunc,

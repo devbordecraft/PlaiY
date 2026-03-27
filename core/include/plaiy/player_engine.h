@@ -97,7 +97,13 @@ public:
     void set_deinterlace_mode(int mode); // 0=yadif, 1=bwdif
     int deinterlace_mode() const;
 
-    // Video filters (GPU — brightness/contrast/saturation/sharpness)
+    // Video filters (GPU — brightness/contrast/saturation/sharpness/deband/upscaling)
+    void set_deband_enabled(bool enabled);
+    bool is_deband_enabled() const;
+    void set_lanczos_upscaling(bool enabled);
+    bool lanczos_upscaling() const;
+    void set_film_grain_enabled(bool enabled);
+    bool film_grain_enabled() const;
     void set_brightness(float v);
     float brightness() const;
     void set_contrast(float v);

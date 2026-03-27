@@ -56,12 +56,19 @@ enum class SubtitleFormat {
 
 enum class PixelFormat {
     Unknown,
-    NV12,      // 8-bit 4:2:0 biplanar
-    P010,      // 10-bit 4:2:0 biplanar
-    YUV420P,   // 8-bit 4:2:0 planar
-    YUV420P10, // 10-bit 4:2:0 planar
+    NV12,        // 8-bit 4:2:0 biplanar
+    P010,        // 10-bit 4:2:0 biplanar
+    YUV420P,     // 8-bit 4:2:0 planar
+    YUV420P10,   // 10-bit 4:2:0 planar
+    NV16,        // 8-bit 4:2:2 biplanar
+    P210,        // 10-bit 4:2:2 biplanar
+    YUV422P,     // 8-bit 4:2:2 planar
+    YUV422P10,   // 10-bit 4:2:2 planar
     BGRA,
 };
+
+// Chroma subsampling format (derived from PixelFormat)
+enum class ChromaFormat { Chroma420, Chroma422, Chroma444 };
 
 struct HDRMetadata {
     HDRType type = HDRType::SDR;
@@ -216,6 +223,7 @@ struct VideoFrame {
     int64_t pts_us = 0;     // presentation timestamp in microseconds
     int64_t duration_us = 0;
     PixelFormat pixel_format = PixelFormat::Unknown;
+    ChromaFormat chroma_format = ChromaFormat::Chroma420;
     HDRMetadata hdr_metadata;
 
     // Color space info
