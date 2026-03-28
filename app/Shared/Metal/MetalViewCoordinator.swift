@@ -109,6 +109,9 @@ class MetalViewCoordinator {
     // Periodic texture cache flush counter
     private var framesSinceFlush: Int = 0
 
+    // Frame counter for temporal dithering (wraps on overflow)
+    private var frameCounter: UInt32 = 0
+
     // Display link rate management — drop to 4fps when paused to save power
     private weak var mtkView: MTKView?
     private var wasPlaying = true
@@ -217,6 +220,7 @@ class MetalViewCoordinator {
             return
         }
         lastRenderedPts = currentPts
+        frameCounter &+= 1
 
         // Adjust display link rate when playback state changes.
         // Drop to 4fps when paused to save power; restore full rate on play.
@@ -363,7 +367,7 @@ class MetalViewCoordinator {
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(yTex, index: 0)
         encoder.setFragmentTexture(uvTex, index: 1)
-        var colorFilterUniforms = ColorFilterUniformBuilder.build(playerBridge: playerBridge)
+        var colorFilterUniforms = ColorFilterUniformBuilder.build(playerBridge: playerBridge, frameCounter: frameCounter)
 
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)
         encoder.setFragmentBytes(&doviUniforms, length: MemoryLayout<DoviUniforms>.size, index: 1)

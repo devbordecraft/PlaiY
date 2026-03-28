@@ -808,7 +808,6 @@ void PlayerEngine::Impl::video_decode_loop() {
                 PY_LOG_WARN(TAG, "Video receive_frame error: %s", err.message.c_str());
                 break;
             }
-
             if (skip_to_target) {
                 if (frame.pts_us < seek_target_us.load(std::memory_order_relaxed)) continue;
                 skip_to_target = false;

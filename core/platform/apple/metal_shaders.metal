@@ -330,6 +330,7 @@ struct ColorFilterUniforms {
     float sharpness;         // [0, 1], 0 = off
     float debandEnabled;     // 0.0 = off, 1.0 = on
     float lanczosUpscaling;  // 0.0 = off, 1.0 = on (Lanczos-3 for Y upscaling)
+    uint frameCounter;       // per-frame counter for temporal dithering
 };
 
 // ---- Bicubic Catmull-Rom chroma upsampling ----
@@ -381,6 +382,23 @@ float2 sampleChromaBicubic(texture2d<float> tex, sampler s, float2 coord) {
 // 6-tap separable Lanczos kernel for high-quality luma upscaling.
 // Only used when video resolution is significantly below display resolution.
 
+// ---- Sigmoid transfer for Lanczos ringing suppression ----
+// Maps signal through a sigmoid curve before filtering, preventing
+// Lanczos kernel overshoot near 0.0/1.0 boundaries (dark halos).
+// Constants match mpv/libplacebo defaults.
+
+constant float SIGMOID_CENTER = 0.75;
+constant float SIGMOID_SLOPE  = 6.5;
+
+float sigmoidForward(float x) {
+    return 1.0 / (1.0 + exp(SIGMOID_SLOPE * (SIGMOID_CENTER - x)));
+}
+
+float sigmoidInverse(float x) {
+    x = clamp(x, 0.001, 0.999);
+    return SIGMOID_CENTER - log(1.0 / x - 1.0) / SIGMOID_SLOPE;
+}
+
 float lanczos3(float x) {
     if (abs(x) < 1e-6) return 1.0;
     if (abs(x) >= 3.0) return 0.0;
@@ -421,11 +439,11 @@ float sampleYLanczos3(texture2d<float> tex, sampler s, float2 coord) {
         float row = 0.0;
         for (int i = -2; i <= 3; i++) {
             float2 samplePos = (itc + float2(float(i), float(j)) + 0.5) * invTexSize;
-            row += tex.sample(s, samplePos).r * hWeights[i + 2];
+            row += sigmoidForward(tex.sample(s, samplePos).r) * hWeights[i + 2];
         }
         result += row * vWeights[j + 2];
     }
-    return result;
+    return sigmoidInverse(result);
 }
 
 // ---- NV12/P010 fragment shader (biplanar: Y + UV textures) ----
@@ -712,7 +730,9 @@ fragment float4 fragmentBiplanar(
     // Applied as the final step so it operates on the actual output values.
     // Magnitude is one 8-bit LSB (1/255), invisible but breaks quantization bands.
     {
-        int2 pos = int2(in.position.xy) % 8;
+        uint fc = colorFilters.frameCounter;
+        int2 offset = int2(fc % 8, (fc * 3) % 8);
+        int2 pos = (int2(in.position.xy) + offset) % 8;
         float dither = bayerMatrix8x8[pos.y * 8 + pos.x];
         // Scale dither magnitude: 1 LSB for SDR, scaled for HDR EDR range
         float magnitude = (uniforms.transferFunc > 0)

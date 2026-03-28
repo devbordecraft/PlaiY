@@ -40,16 +40,22 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(
             PY_LOG_INFO(TAG, "HDR10+ content: using FFmpeg decoder for dynamic metadata");
             vt_candidate = false;
         }
-        if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision &&
-            (track.dv_profile == 7 || track.dv_profile == 8)) {
-            PY_LOG_INFO(TAG, "DV Profile %d: using DVSeekDecoder (FFmpeg + VT shadow)",
-                        track.dv_profile);
-            auto dv = std::make_unique<DVSeekDecoder>();
-            Error err = dv->open(track);
-            if (err.ok()) return dv;
-            PY_LOG_WARN(TAG, "DVSeekDecoder failed: %s, falling back to FFmpeg-only",
-                        err.message.c_str());
-            vt_candidate = false;
+        if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision) {
+            if (track.dv_profile == 10) {
+                // AV1 DV Profile 10: force FFmpeg to preserve RPU metadata.
+                // DVSeekDecoder not usable (VT has no AV1 DV support).
+                PY_LOG_INFO(TAG, "DV Profile 10 (AV1): using FFmpeg decoder for RPU metadata");
+                vt_candidate = false;
+            } else if (track.dv_profile == 7 || track.dv_profile == 8) {
+                PY_LOG_INFO(TAG, "DV Profile %d: using DVSeekDecoder (FFmpeg + VT shadow)",
+                            track.dv_profile);
+                auto dv = std::make_unique<DVSeekDecoder>();
+                Error err = dv->open(track);
+                if (err.ok()) return dv;
+                PY_LOG_WARN(TAG, "DVSeekDecoder failed: %s, falling back to FFmpeg-only",
+                            err.message.c_str());
+                vt_candidate = false;
+            }
         }
 
         if (vt_candidate) {

@@ -151,8 +151,11 @@ void FFVideoDecoder::set_skip_mode(bool skip) {
 Error FFVideoDecoder::send_packet(const Packet& pkt) {
     if (!codec_ctx_) return {ErrorCode::InvalidState, "Decoder not open"};
 
-    // Set pkt_timebase from the first real packet so PTS conversion works
-    if (codec_ctx_->pkt_timebase.den == 0 && !pkt.is_flush && pkt.time_base_den > 0) {
+    // Set pkt_timebase from the first real packet so PTS conversion works.
+    // Check both num==0 and den==0: FFmpeg may pre-init to {0,1} which is
+    // effectively unset but has den>0.
+    if ((codec_ctx_->pkt_timebase.num == 0 || codec_ctx_->pkt_timebase.den == 0)
+        && !pkt.is_flush && pkt.time_base_den > 0) {
         codec_ctx_->pkt_timebase = AVRational{pkt.time_base_num, pkt.time_base_den};
     }
 
@@ -317,13 +320,19 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
                 }
 
                 // DM Level 2: trim for target display
+                // L2 trim values use 2048 as unity/zero point:
+                //   slope:           2048 = 1.0 (identity)
+                //   offset:          2048 = 0.0 (no offset)
+                //   power:           2048 = 1.0 (identity)
+                //   chroma_weight:   2048 = 1.0 (identity)
+                //   saturation_gain: 2048 = 1.0 (identity)
                 AVDOVIDmData* l2 = av_dovi_find_level(dovi, 2);
                 if (l2) {
-                    out.dovi.trim_slope = static_cast<float>(l2->l2.trim_slope) / 4096.0f;
-                    out.dovi.trim_offset = static_cast<float>(l2->l2.trim_offset) / 4096.0f;
-                    out.dovi.trim_power = static_cast<float>(l2->l2.trim_power) / 4096.0f;
-                    out.dovi.trim_chroma_weight = static_cast<float>(l2->l2.trim_chroma_weight) / 4096.0f;
-                    out.dovi.trim_saturation_gain = static_cast<float>(l2->l2.trim_saturation_gain) / 4096.0f;
+                    out.dovi.trim_slope = static_cast<float>(l2->l2.trim_slope) / 2048.0f;
+                    out.dovi.trim_offset = (static_cast<float>(l2->l2.trim_offset) - 2048.0f) / 2048.0f;
+                    out.dovi.trim_power = static_cast<float>(l2->l2.trim_power) / 2048.0f;
+                    out.dovi.trim_chroma_weight = static_cast<float>(l2->l2.trim_chroma_weight) / 2048.0f;
+                    out.dovi.trim_saturation_gain = static_cast<float>(l2->l2.trim_saturation_gain) / 2048.0f;
                 }
             }
         }
@@ -458,6 +467,16 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
             av_frame->width, av_frame->height, static_cast<AVPixelFormat>(av_frame->format),
             av_frame->width, av_frame->height, target_av_fmt,
             SWS_LANCZOS | SWS_ACCURATE_RND, nullptr, nullptr, nullptr);
+        if (!sws_ctx_) {
+            const char* src_name = av_get_pix_fmt_name(static_cast<AVPixelFormat>(av_frame->format));
+            const char* dst_name = av_get_pix_fmt_name(target_av_fmt);
+            PY_LOG_ERROR(TAG, "sws_getContext failed: %s -> %s (%dx%d)",
+                         src_name ? src_name : "unknown", dst_name ? dst_name : "unknown",
+                         av_frame->width, av_frame->height);
+            CVPixelBufferUnlockBaseAddress(pixel_buffer, 0);
+            CVPixelBufferRelease(pixel_buffer);
+            return false;
+        }
         sws_src_w_ = av_frame->width;
         sws_src_h_ = av_frame->height;
         sws_src_fmt_ = src_fmt;

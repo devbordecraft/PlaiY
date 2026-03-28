@@ -5,10 +5,11 @@ struct ColorFilterUniforms {
     var sharpness: Float = 0.0
     var debandEnabled: Float = 0.0
     var lanczosUpscaling: Float = 0.0
+    var frameCounter: UInt32 = 0
 }
 
 struct ColorFilterUniformBuilder {
-    static func build(playerBridge: PlayerBridge) -> ColorFilterUniforms {
+    static func build(playerBridge: PlayerBridge, frameCounter: UInt32) -> ColorFilterUniforms {
         var u = ColorFilterUniforms()
         u.brightness = playerBridge.brightness
         u.contrast = playerBridge.contrast
@@ -16,6 +17,7 @@ struct ColorFilterUniformBuilder {
         u.sharpness = playerBridge.sharpness
         u.debandEnabled = playerBridge.isDebandEnabled ? 1.0 : 0.0
         u.lanczosUpscaling = playerBridge.isLanczosUpscaling ? 1.0 : 0.0
+        u.frameCounter = frameCounter
         return u
     }
 }
