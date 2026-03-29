@@ -18,7 +18,7 @@ private func configureMTKView(playerBridge: PlayerBridge, transport: PlaybackTra
     #endif
 
     if let layer = mtkView.layer as? CAMetalLayer {
-        layer.wantsExtendedDynamicRangeContent = true
+        layer.preferredDynamicRange = .high
         layer.colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
     }
 

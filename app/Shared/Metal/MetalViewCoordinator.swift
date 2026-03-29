@@ -102,8 +102,10 @@ class MetalViewCoordinator {
     // setting CAEDRMetadata on every frame.
     private var currentHDRMode: Int32 = -1 // -1 = unset, 0 = SDR, 1 = PQ, 2 = HLG
 
-    // Cached EDR headroom — updated on screen change instead of per-frame
+    // Cached EDR headroom — refreshed every frame during HDR playback
     private var cachedEDRHeadroom: Float = 1.0
+    // Display's theoretical maximum EDR — used to request elevated headroom
+    private var displayPotentialHeadroom: Float = 1.0
     private var screenObserver: NSObjectProtocol?
 
     // Periodic texture cache flush counter
@@ -151,7 +153,12 @@ class MetalViewCoordinator {
     private func updateEDRHeadroom(window: NSWindow?) {
         #if os(macOS)
         let screen = window?.screen ?? NSScreen.main
-        cachedEDRHeadroom = Float(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1.0)
+        let newHeadroom = Float(screen?.maximumExtendedDynamicRangeColorComponentValue ?? 1.0)
+        displayPotentialHeadroom = Float(screen?.maximumPotentialExtendedDynamicRangeColorComponentValue ?? 1.0)
+        if abs(newHeadroom - cachedEDRHeadroom) > 0.1 {
+            PYLog.info("EDR headroom: \(cachedEDRHeadroom) -> \(newHeadroom) (potential: \(displayPotentialHeadroom))", tag: "Metal")
+        }
+        cachedEDRHeadroom = newHeadroom
         #else
         cachedEDRHeadroom = Float(UIScreen.main.currentEDRHeadroom)
         #endif
@@ -204,6 +211,14 @@ class MetalViewCoordinator {
                 activeUVTexture = nil
             }
             lastRenderedPts = Int64.min
+            // Reset HDR state so the display returns to normal brightness
+            if currentHDRMode > 0, let metalLayer = view.layer as? CAMetalLayer {
+                metalLayer.edrMetadata = nil
+                metalLayer.preferredDynamicRange = .standard
+                currentHDRMode = 0
+                transport.isHDRContent = false
+                cachedEDRHeadroom = 1.0
+            }
             guard let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor else { return }
             drawBlack(descriptor: descriptor, drawable: drawable)
@@ -290,9 +305,10 @@ class MetalViewCoordinator {
         activeYTexture = yTexture
         activeUVTexture = uvTexture
 
-        // Refresh EDR headroom cache if needed
+        // Refresh EDR headroom: always during HDR (tracks ramp-up and throttling),
+        // only when stale during SDR (optimization for idle draws)
         #if os(macOS)
-        if cachedEDRHeadroom <= 1.0, let window = view.window {
+        if currentHDRMode > 0 || cachedEDRHeadroom <= 1.0, let window = view.window {
             updateEDRHeadroom(window: window)
         }
         #else
@@ -304,7 +320,7 @@ class MetalViewCoordinator {
             framePtr: framePtr, edrHeadroom: cachedEDRHeadroom)
         var doviUniforms = HDRUniformBuilder.buildDoviUniforms(framePtr: framePtr)
 
-        // Configure CAEDRMetadata so macOS activates HDR mode on the display.
+        // Configure CAEDRMetadata and request elevated display headroom.
         // Only update when the content type changes to avoid per-frame overhead.
         if uniforms.transferFunc != currentHDRMode {
             currentHDRMode = uniforms.transferFunc
@@ -314,6 +330,15 @@ class MetalViewCoordinator {
                     transferFunc: uniforms.transferFunc,
                     maxLuminance: uniforms.maxLuminance,
                     sdrWhite: uniforms.sdrWhite)
+                if uniforms.transferFunc > 0 {
+                    metalLayer.preferredDynamicRange = .high
+                    PYLog.info("Requesting full EDR dynamic range (potential: \(displayPotentialHeadroom))", tag: "Metal")
+                } else {
+                    metalLayer.preferredDynamicRange = .standard
+                }
+                #if os(macOS)
+                updateEDRHeadroom(window: view.window)
+                #endif
                 if uniforms.transferFunc == 1 {
                     let maxNits = uniforms.maxLuminance > 0 ? uniforms.maxLuminance : 1000.0
                     PYLog.info("HDR mode activated: PQ, max \(maxNits) nits", tag: "Metal")
