@@ -89,6 +89,7 @@ class MetalViewCoordinator {
     // Track whether we've configured the layer for HDR/SDR to avoid
     // setting CAEDRMetadata on every frame.
     private var currentHDRMode: Int32 = -1 // -1 = unset, 0 = SDR, 1 = PQ, 2 = HLG
+    private var lastEDRMaxLuminance: Float = 0
 
     // Cached EDR headroom — refreshed every frame during HDR playback
     private var cachedEDRHeadroom: Float = 1.0
@@ -157,6 +158,25 @@ class MetalViewCoordinator {
         #else
         cachedEDRHeadroom = Float(UIScreen.main.currentEDRHeadroom)
         #endif
+    }
+
+    /// Derives the effective max luminance for CAEDRMetadata.
+    /// When DV L1 metadata is present, converts the per-scene max PQ to nits
+    /// via ST.2084 inverse EOTF. Falls back to stream-level maxLuminance.
+    private static func effectiveMaxLuminance(uniforms: VideoUniforms) -> Float {
+        if uniforms.doviHasL1 != 0, uniforms.doviL1MaxPQ > 0 {
+            // ST.2084 PQ EOTF: PQ [0,1] -> linear [0,10000] cd/m2
+            let pq = Double(uniforms.doviL1MaxPQ)
+            let m1 = 0.1593017578125
+            let m2 = 78.84375
+            let c1 = 0.8359375
+            let c2 = 18.8515625
+            let c3 = 18.6875
+            let np = pow(max(pq, 0.0), 1.0 / m2)
+            let L = pow(max(np - c1, 0.0) / max(c2 - c3 * np, 1e-10), 1.0 / m1)
+            return max(Float(L * 10000.0), 100.0)
+        }
+        return uniforms.maxLuminance
     }
 
     private func setupPipeline(mtkView: MTKView) {
@@ -251,6 +271,7 @@ class MetalViewCoordinator {
                 currentHDRMode = 0
                 transport.isHDRContent = false
                 cachedEDRHeadroom = 1.0
+                lastEDRMaxLuminance = 0
             }
             guard let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor else { return }
@@ -370,15 +391,17 @@ class MetalViewCoordinator {
         #endif
 
         // Configure CAEDRMetadata and request elevated display headroom.
-        // Only update when the content type changes to avoid per-frame overhead.
+        // Update dynamic range mode when content type changes (SDR <-> HDR).
+        let effectiveMaxLum = Self.effectiveMaxLuminance(uniforms: uniforms)
         if uniforms.transferFunc != currentHDRMode {
             currentHDRMode = uniforms.transferFunc
             transport.isHDRContent = uniforms.transferFunc > 0
             if let metalLayer = view.layer as? CAMetalLayer {
                 metalLayer.edrMetadata = HDRUniformBuilder.edrMetadata(
                     transferFunc: uniforms.transferFunc,
-                    maxLuminance: uniforms.maxLuminance,
+                    maxLuminance: effectiveMaxLum,
                     sdrWhite: uniforms.sdrWhite)
+                lastEDRMaxLuminance = effectiveMaxLum
                 if uniforms.transferFunc > 0 {
                     metalLayer.preferredDynamicRange = .high
                     PYLog.info("Requesting full EDR dynamic range (potential: \(displayPotentialHeadroom))", tag: "Metal")
@@ -395,6 +418,21 @@ class MetalViewCoordinator {
                     PYLog.info("HDR mode activated: HLG", tag: "Metal")
                 } else if uniforms.transferFunc == 3 {
                     PYLog.info("HDR mode activated: DV Profile 5 (IPTPQc2)", tag: "Metal")
+                }
+            }
+        } else if currentHDRMode > 0 {
+            // Per-scene EDR metadata update: when DV L1 metadata indicates
+            // a significant scene peak change, update CAEDRMetadata so the
+            // display can ramp headroom for bright scenes.
+            let delta = abs(effectiveMaxLum - lastEDRMaxLuminance)
+            let threshold = max(50.0, lastEDRMaxLuminance * 0.1)
+            if delta > threshold {
+                if let metalLayer = view.layer as? CAMetalLayer {
+                    metalLayer.edrMetadata = HDRUniformBuilder.edrMetadata(
+                        transferFunc: uniforms.transferFunc,
+                        maxLuminance: effectiveMaxLum,
+                        sdrWhite: uniforms.sdrWhite)
+                    lastEDRMaxLuminance = effectiveMaxLum
                 }
             }
         }

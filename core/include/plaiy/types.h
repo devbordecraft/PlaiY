@@ -138,6 +138,7 @@ struct DoviColorMetadata {
     uint16_t l2_trim_chroma_weight = 0;
     uint16_t l2_trim_saturation_gain = 2048;
     int16_t l2_ms_weight = 0;
+    uint16_t l2_target_max_pq = 0;  // PQ-encoded target display peak of selected L2 block
 
     // L5 active area metadata (per-frame letterbox offsets from RPU)
     bool has_l5 = false;

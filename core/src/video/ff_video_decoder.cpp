@@ -381,15 +381,37 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
             }
 
             // L2 metadata: display trim (slope/offset/power/chroma/saturation)
-            const AVDOVIDmData* l2_block = av_dovi_find_level(dovi, 2);
-            if (l2_block) {
-                out.dovi_color.has_l2 = true;
-                out.dovi_color.l2_trim_slope = l2_block->l2.trim_slope;
-                out.dovi_color.l2_trim_offset = l2_block->l2.trim_offset;
-                out.dovi_color.l2_trim_power = l2_block->l2.trim_power;
-                out.dovi_color.l2_trim_chroma_weight = l2_block->l2.trim_chroma_weight;
-                out.dovi_color.l2_trim_saturation_gain = l2_block->l2.trim_saturation_gain;
-                out.dovi_color.l2_ms_weight = l2_block->l2.ms_weight;
+            // When multiple L2 blocks exist (targeting different display peaks),
+            // select the one with the highest target_max_pq. This gives the
+            // least-aggressive trim, appropriate for modern HDR displays;
+            // the shader's BT.2390 tone mapping handles actual display adaptation.
+            {
+                const AVDOVIDmData* best_l2 = nullptr;
+                uint16_t best_target_pq = 0;
+                int l2_count = 0;
+                for (int i = 0; i < dovi->num_ext_blocks; i++) {
+                    const AVDOVIDmData* blk = av_dovi_get_ext(dovi, i);
+                    if (blk->level == 2) {
+                        l2_count++;
+                        if (!best_l2 || blk->l2.target_max_pq > best_target_pq) {
+                            best_l2 = blk;
+                            best_target_pq = blk->l2.target_max_pq;
+                        }
+                    }
+                }
+                if (l2_count > 1) {
+                    PY_LOG_DEBUG(TAG, "DV: %d L2 blocks, selected target_max_pq=%u", l2_count, best_target_pq);
+                }
+                if (best_l2) {
+                    out.dovi_color.has_l2 = true;
+                    out.dovi_color.l2_trim_slope = best_l2->l2.trim_slope;
+                    out.dovi_color.l2_trim_offset = best_l2->l2.trim_offset;
+                    out.dovi_color.l2_trim_power = best_l2->l2.trim_power;
+                    out.dovi_color.l2_trim_chroma_weight = best_l2->l2.trim_chroma_weight;
+                    out.dovi_color.l2_trim_saturation_gain = best_l2->l2.trim_saturation_gain;
+                    out.dovi_color.l2_ms_weight = best_l2->l2.ms_weight;
+                    out.dovi_color.l2_target_max_pq = best_target_pq;
+                }
             }
 
             // L5 metadata: active area offsets (letterbox hints from colorist)

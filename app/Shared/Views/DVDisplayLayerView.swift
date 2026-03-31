@@ -22,12 +22,12 @@ class DVDisplayNSView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         // Enable extended dynamic range on the layer tree
-        layer!.wantsExtendedDynamicRangeContent = true
+        layer!.preferredDynamicRange = .high
         layer!.addSublayer(displayLayer)
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = CGColor.black
         displayLayer.preventsDisplaySleepDuringVideoPlayback = true
-        displayLayer.wantsExtendedDynamicRangeContent = true
+        displayLayer.preferredDynamicRange = .high
     }
 
     @available(*, unavailable)
@@ -62,10 +62,11 @@ class DVDisplayUIView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         layer.addSublayer(displayLayer)
+        layer.preferredDynamicRange = .high
         displayLayer.videoGravity = .resizeAspect
         displayLayer.backgroundColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
         displayLayer.preventsDisplaySleepDuringVideoPlayback = true
-        displayLayer.wantsExtendedDynamicRangeContent = true
+        displayLayer.preferredDynamicRange = .high
     }
 
     @available(*, unavailable)
