@@ -46,6 +46,10 @@ public:
     // Check if a display layer has been set
     bool has_display_layer() const;
 
+    // Stats for debug overlay (lock-free, called from main/stats thread)
+    int packets_submitted_count() const;
+    int64_t last_pts_us() const;
+
     void close();
 
 private:

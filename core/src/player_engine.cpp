@@ -781,10 +781,13 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         .passthrough_ring_capacity = impl_->audio_pipeline->passthrough_ring_capacity(),
         .clock = impl_->clock,
         .playback_speed = impl_->playback_speed,
+        .is_dv_output = impl_->is_dv_output,
+#ifdef __APPLE__
+        .dv_packets_submitted = impl_->dv_output ? impl_->dv_output->packets_submitted_count() : 0,
+        .dv_video_pts_us = impl_->dv_output ? impl_->dv_output->last_pts_us() : 0,
+#endif
     };
-    auto stats = gather_playback_stats(ctx);
-    stats.dv_asbdl_active = impl_->is_dv_output;
-    return stats;
+    return gather_playback_stats(ctx);
 }
 
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {

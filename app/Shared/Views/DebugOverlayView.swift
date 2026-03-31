@@ -10,8 +10,14 @@ struct DebugOverlayView: View {
                 row("Resolution", "\(stats.video_width)x\(stats.video_height)")
                 row("FPS", String(format: "%.3f", stats.video_fps))
                 row("HDR", hdrLabel)
-                row("Frames", "\(stats.frames_rendered) rendered, \(stats.frames_dropped) dropped")
-                row("Frame Queue", "\(stats.video_queue_size) frames")
+                if stats.dv_asbdl_active {
+                    row("Frames", "\(stats.frames_rendered) submitted")
+                } else {
+                    row("Frames", "\(stats.frames_rendered) rendered, \(stats.frames_dropped) dropped")
+                }
+                if !stats.dv_asbdl_active {
+                    row("Frame Queue", "\(stats.video_queue_size) frames")
+                }
                 row("Packet Queue", "\(stats.video_packet_queue_size) packets")
             }
 
@@ -46,17 +52,22 @@ struct DebugOverlayView: View {
                     } else {
                         row("Rendering", stats.dv_has_reshaping ? "Metal (RPU)" : "Metal (no reshape)")
                     }
-                    row("Reshaping", stats.dv_has_reshaping ? "Active" : "None")
-                    if stats.dv_has_l1 {
-                        let minN = pqToNits(Float(stats.dv_l1_min_pq) / 4095.0)
-                        let maxN = pqToNits(Float(stats.dv_l1_max_pq) / 4095.0)
-                        let avgN = pqToNits(Float(stats.dv_l1_avg_pq) / 4095.0)
-                        row("L1 Min", String(format: "%.3f nits (PQ %d)", minN, stats.dv_l1_min_pq))
-                        row("L1 Max", String(format: "%.0f nits (PQ %d)", maxN, stats.dv_l1_max_pq))
-                        row("L1 Avg", String(format: "%.0f nits (PQ %d)", avgN, stats.dv_l1_avg_pq))
+                    if stats.dv_asbdl_active {
+                        row("RPU", "Processed by System Compositor")
+                        row("Decode", "ASBDL (HW)")
+                    } else {
+                        row("Reshaping", stats.dv_has_reshaping ? "Active" : "None")
+                        if stats.dv_has_l1 {
+                            let minN = pqToNits(Float(stats.dv_l1_min_pq) / 4095.0)
+                            let maxN = pqToNits(Float(stats.dv_l1_max_pq) / 4095.0)
+                            let avgN = pqToNits(Float(stats.dv_l1_avg_pq) / 4095.0)
+                            row("L1 Min", String(format: "%.3f nits (PQ %d)", minN, stats.dv_l1_min_pq))
+                            row("L1 Max", String(format: "%.0f nits (PQ %d)", maxN, stats.dv_l1_max_pq))
+                            row("L1 Avg", String(format: "%.0f nits (PQ %d)", avgN, stats.dv_l1_avg_pq))
+                        }
+                        row("L2 Trim", stats.dv_has_l2 ? "Active" : "None")
+                        row("Decode", stats.hardware_decode ? "VT (HW)" : "FFmpeg (SW)")
                     }
-                    row("L2 Trim", stats.dv_has_l2 ? "Active" : "None")
-                    row("Decode", stats.hardware_decode ? "VT (HW)" : "FFmpeg (SW)")
                 }
             }
 

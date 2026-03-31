@@ -32,6 +32,10 @@ struct StatsFixture {
     Clock clock;
     std::atomic<double> playback_speed{1.0};
 
+    bool is_dv_output = false;
+    int dv_packets_submitted = 0;
+    int64_t dv_video_pts_us = 0;
+
     StatsContext make_context() {
         return StatsContext{
             .media_info = media_info,
@@ -52,6 +56,9 @@ struct StatsFixture {
             .passthrough_ring_capacity = passthrough_ring_capacity,
             .clock = clock,
             .playback_speed = playback_speed,
+            .is_dv_output = is_dv_output,
+            .dv_packets_submitted = dv_packets_submitted,
+            .dv_video_pts_us = dv_video_pts_us,
         };
     }
 };
@@ -213,4 +220,40 @@ TEST_CASE("gather_playback_stats presented frame metadata") {
 
     REQUIRE(stats.hardware_decode == true);
     REQUIRE(stats.video_pts_us == 5000000);
+}
+
+TEST_CASE("gather_playback_stats DV ASBDL path") {
+    StatsFixture f;
+    f.is_dv_output = true;
+    f.dv_packets_submitted = 500;
+    f.dv_video_pts_us = 10000000;
+
+    auto ctx = f.make_context();
+    auto stats = gather_playback_stats(ctx);
+
+    REQUIRE(stats.dv_asbdl_active == true);
+    REQUIRE(stats.hardware_decode == true);
+    REQUIRE(stats.frames_rendered == 500);
+    REQUIRE(stats.frames_dropped == 0);
+    REQUIRE(stats.video_pts_us == 10000000);
+    REQUIRE(stats.video_queue_size == 0);
+}
+
+TEST_CASE("gather_playback_stats non-DV path unaffected by DV fields") {
+    StatsFixture f;
+    f.is_dv_output = false;
+    f.frames_rendered.store(100);
+    f.frames_dropped.store(3);
+    f.presented_frame = std::make_unique<VideoFrame>();
+    f.presented_frame->hardware_frame = true;
+    f.presented_frame->pts_us = 7000000;
+
+    auto ctx = f.make_context();
+    auto stats = gather_playback_stats(ctx);
+
+    REQUIRE(stats.dv_asbdl_active == false);
+    REQUIRE(stats.frames_rendered == 100);
+    REQUIRE(stats.frames_dropped == 3);
+    REQUIRE(stats.hardware_decode == true);
+    REQUIRE(stats.video_pts_us == 7000000);
 }

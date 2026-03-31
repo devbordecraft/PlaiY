@@ -52,36 +52,46 @@ PlaybackStats gather_playback_stats(const StatsContext& ctx) {
         s.audio_dts_hd = is_dts_hd_stream(at.codec_id, at.codec_profile);
     }
 
-    // Hardware decode and per-frame metadata — check from presented frame
-    {
-        std::lock_guard lock(ctx.presented_frame_mutex);
-        if (ctx.presented_frame) {
-            s.hardware_decode = ctx.presented_frame->hardware_frame;
-            s.video_pts_us = ctx.presented_frame->pts_us;
-            // Override track-level color info with actual frame values
-            // (VT decoder may override these for DV Profile 5)
-            s.color_space = ctx.presented_frame->color_space;
-            s.transfer_func = ctx.presented_frame->color_trc;
+    // DV ASBDL flag
+    s.dv_asbdl_active = ctx.is_dv_output;
 
-            // DV per-frame metadata from presented frame
-            const auto& dovi = ctx.presented_frame->dovi_color;
-            s.dv_has_reshaping = dovi.has_reshaping;
-            s.dv_has_l1 = dovi.has_l1;
-            s.dv_has_l2 = dovi.has_l2;
-            if (dovi.has_l1) {
-                s.dv_l1_min_pq = dovi.l1_min_pq;
-                s.dv_l1_max_pq = dovi.l1_max_pq;
-                s.dv_l1_avg_pq = dovi.l1_avg_pq;
+    if (ctx.is_dv_output) {
+        // ASBDL always uses hardware decode
+        s.hardware_decode = true;
+        s.video_pts_us = ctx.dv_video_pts_us;
+        s.frames_rendered = ctx.dv_packets_submitted;
+        // frames_dropped stays 0 — ASBDL manages timing internally
+        s.video_queue_size = 0;
+    } else {
+        // Hardware decode and per-frame metadata — check from presented frame
+        {
+            std::lock_guard lock(ctx.presented_frame_mutex);
+            if (ctx.presented_frame) {
+                s.hardware_decode = ctx.presented_frame->hardware_frame;
+                s.video_pts_us = ctx.presented_frame->pts_us;
+                // Override track-level color info with actual frame values
+                // (VT decoder may override these for DV Profile 5)
+                s.color_space = ctx.presented_frame->color_space;
+                s.transfer_func = ctx.presented_frame->color_trc;
+
+                // DV per-frame metadata from presented frame
+                const auto& dovi = ctx.presented_frame->dovi_color;
+                s.dv_has_reshaping = dovi.has_reshaping;
+                s.dv_has_l1 = dovi.has_l1;
+                s.dv_has_l2 = dovi.has_l2;
+                if (dovi.has_l1) {
+                    s.dv_l1_min_pq = dovi.l1_min_pq;
+                    s.dv_l1_max_pq = dovi.l1_max_pq;
+                    s.dv_l1_avg_pq = dovi.l1_avg_pq;
+                }
             }
         }
+
+        s.frames_rendered = ctx.frames_rendered.load(std::memory_order_relaxed);
+        s.frames_dropped = ctx.frames_dropped.load(std::memory_order_relaxed);
+        s.video_queue_size = static_cast<int>(ctx.video_frame_queue.size());
     }
 
-    // Frame stats
-    s.frames_rendered = ctx.frames_rendered.load(std::memory_order_relaxed);
-    s.frames_dropped = ctx.frames_dropped.load(std::memory_order_relaxed);
-
-    // Queue sizes
-    s.video_queue_size = static_cast<int>(ctx.video_frame_queue.size());
     s.video_packet_queue_size = static_cast<int>(ctx.video_packet_queue.size());
     s.audio_packet_queue_size = static_cast<int>(ctx.audio_packet_queue.size());
 

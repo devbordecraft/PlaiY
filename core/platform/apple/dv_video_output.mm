@@ -17,7 +17,8 @@ struct DVVideoOutput::Impl {
     CMTimebaseRef timebase = nullptr;
     AVSampleBufferDisplayLayer* display_layer = nil;
     bool opened = false;
-    int packets_submitted = 0;
+    std::atomic<int> packets_submitted{0};
+    std::atomic<int64_t> last_pts_us{0};
 
     // Event-driven readiness signaling (replaces polling loop)
     std::mutex ready_mutex;
@@ -147,7 +148,8 @@ Error DVVideoOutput::open(const TrackInfo& track) {
     CMTimebaseSetTime(impl_->timebase, kCMTimeZero);
 
     impl_->opened = true;
-    impl_->packets_submitted = 0;
+    impl_->packets_submitted.store(0, std::memory_order_relaxed);
+    impl_->last_pts_us.store(0, std::memory_order_relaxed);
     PY_LOG_INFO(TAG, "Opened DV output: %dx%d, profile %d",
                 track.width, track.height, track.dv_profile);
     return Error::Ok();
@@ -226,7 +228,8 @@ Error DVVideoOutput::submit_packet(const Packet& pkt) {
 
         if (status != noErr || !sample_buffer) {
             PY_LOG_ERROR(TAG, "CMSampleBufferCreateReady failed: %d (pkt#%d)",
-                         (int)status, impl_->packets_submitted);
+                         (int)status,
+                         impl_->packets_submitted.load(std::memory_order_relaxed));
             return {ErrorCode::DecoderError,
                     "DVVideoOutput: sample buffer creation failed: "
                     + std::to_string(status)};
@@ -234,7 +237,8 @@ Error DVVideoOutput::submit_packet(const Packet& pkt) {
 
         [impl_->display_layer.sampleBufferRenderer enqueueSampleBuffer:sample_buffer];
         CFRelease(sample_buffer);
-        impl_->packets_submitted++;
+        impl_->packets_submitted.fetch_add(1, std::memory_order_relaxed);
+        impl_->last_pts_us.store(pkt.pts_us(), std::memory_order_relaxed);
 
         // Check for ASBDL errors after enqueue
         AVQueuedSampleBufferRenderingStatus rendererStatus =
@@ -244,11 +248,12 @@ Error DVVideoOutput::submit_packet(const Packet& pkt) {
             NSString* errDesc = rendererError.localizedDescription
                 ? rendererError.localizedDescription : @"unknown";
             PY_LOG_ERROR(TAG, "ASBDL rendering failed after pkt#%d: %s",
-                         impl_->packets_submitted, errDesc.UTF8String);
+                         impl_->packets_submitted.load(std::memory_order_relaxed),
+                         errDesc.UTF8String);
             return {ErrorCode::DecoderError, "ASBDL: " + std::string(errDesc.UTF8String)};
         }
 
-        if (impl_->packets_submitted == 1) {
+        if (impl_->packets_submitted.load(std::memory_order_relaxed) == 1) {
             PY_LOG_DEBUG(TAG, "First packet enqueued, renderer status=%d",
                          (int)rendererStatus);
         }
@@ -261,8 +266,10 @@ void DVVideoOutput::flush() {
     @autoreleasepool {
         if (impl_->display_layer) {
             [impl_->display_layer.sampleBufferRenderer flush];
-            PY_LOG_DEBUG(TAG, "Flushed after %d packets", impl_->packets_submitted);
-            impl_->packets_submitted = 0;
+            PY_LOG_DEBUG(TAG, "Flushed after %d packets",
+                         impl_->packets_submitted.load(std::memory_order_relaxed));
+            impl_->packets_submitted.store(0, std::memory_order_relaxed);
+            impl_->last_pts_us.store(0, std::memory_order_relaxed);
         }
     }
 }
@@ -305,10 +312,19 @@ bool DVVideoOutput::has_display_layer() const {
     return impl_->display_layer != nil;
 }
 
+int DVVideoOutput::packets_submitted_count() const {
+    return impl_->packets_submitted.load(std::memory_order_relaxed);
+}
+
+int64_t DVVideoOutput::last_pts_us() const {
+    return impl_->last_pts_us.load(std::memory_order_relaxed);
+}
+
 void DVVideoOutput::close() {
     @autoreleasepool {
         if (impl_->opened) {
-            PY_LOG_DEBUG(TAG, "Closing (total packets: %d)", impl_->packets_submitted);
+            PY_LOG_DEBUG(TAG, "Closing (total packets: %d)",
+                         impl_->packets_submitted.load(std::memory_order_relaxed));
         }
         if (impl_->display_layer && impl_->ready_queue) {
             [impl_->display_layer.sampleBufferRenderer stopRequestingMediaData];

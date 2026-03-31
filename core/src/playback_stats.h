@@ -44,6 +44,11 @@ struct StatsContext {
 
     const Clock& clock;
     const std::atomic<double>& playback_speed;
+
+    // DV ASBDL stats (only meaningful when is_dv_output is true)
+    bool is_dv_output = false;
+    int dv_packets_submitted = 0;
+    int64_t dv_video_pts_us = 0;
 };
 
 PlaybackStats gather_playback_stats(const StatsContext& ctx);
