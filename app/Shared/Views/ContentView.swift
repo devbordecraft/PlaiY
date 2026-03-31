@@ -9,6 +9,7 @@ struct ContentView: View {
 
     enum Screen { case library, sources, settings, player }
     @State private var screen: Screen = .library
+    @State private var screenBeforePlayer: Screen = .library
     @State private var selectedFilePath: String?
 
     var body: some View {
@@ -35,6 +36,7 @@ struct ContentView: View {
                   let path = components.queryItems?.first(where: { $0.name == "path" })?.value
             else { return }
             selectedFilePath = path
+            screenBeforePlayer = screen
             screen = .player
         }
     }
@@ -59,7 +61,7 @@ struct ContentView: View {
                 settings.volume = Double(playerVM.volume)
                 playerVM.stop()
                 playQueue.clear()
-                screen = .sources
+                screen = screenBeforePlayer
                 selectedFilePath = nil
             },
             onNextTrack: { skipToNext() },
@@ -101,7 +103,7 @@ struct ContentView: View {
             settings.volume = Double(playerVM.volume)
             playerVM.stop()
             playQueue.clear()
-            screen = .sources
+            screen = screenBeforePlayer
             selectedFilePath = nil
         }
     }
@@ -132,6 +134,7 @@ struct ContentView: View {
         guard !items.isEmpty else { return }
         playQueue.setQueue(items, startIndex: 0)
         selectedFilePath = items[0].path
+        screenBeforePlayer = screen
         screen = .player
     }
 
@@ -189,6 +192,7 @@ struct ContentView: View {
                     sourcesVM: sourcesVM,
                     onSelect: { uri in
                         selectedFilePath = uri
+                        screenBeforePlayer = screen
                         screen = .player
                     },
                     onPlayAll: { items in playAllFromSource(items) },
@@ -200,6 +204,7 @@ struct ContentView: View {
                 LibraryView(
                     onSelect: { path in
                         selectedFilePath = path
+                        screenBeforePlayer = screen
                         screen = .player
                     },
                     onPlayAll: { items in playAllFromSource(items) },
@@ -236,6 +241,7 @@ struct ContentView: View {
                         sourcesVM: sourcesVM,
                         onSelect: { uri in
                             selectedFilePath = uri
+                            screenBeforePlayer = screen
                             screen = .player
                         },
                         onPlayAll: { items in playAllFromSource(items) },
@@ -250,6 +256,7 @@ struct ContentView: View {
                     LibraryView(
                         onSelect: { path in
                             selectedFilePath = path
+                            screenBeforePlayer = screen
                             screen = .player
                         },
                         onPlayAll: { items in playAllFromSource(items) },
