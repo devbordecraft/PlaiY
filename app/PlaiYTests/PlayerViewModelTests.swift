@@ -66,6 +66,14 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isPlaying)
     }
 
+    func testSeekThumbnailIntervalSelectionPrefersDensePreviewsForShortMedia() {
+        XCTAssertEqual(PlayerViewModel.seekThumbnailIntervalSeconds(for: 600_000_000), 1)
+        XCTAssertEqual(PlayerViewModel.seekThumbnailIntervalSeconds(for: 1_800_000_000), 1)
+        XCTAssertEqual(PlayerViewModel.seekThumbnailIntervalSeconds(for: 3_600_000_000), 2)
+        XCTAssertEqual(PlayerViewModel.seekThumbnailIntervalSeconds(for: 10_800_000_000), 5)
+        XCTAssertEqual(PlayerViewModel.seekThumbnailIntervalSeconds(for: 21_600_000_000), 10)
+    }
+
     // MARK: - Seek
 
     func testSeekToFraction() {
@@ -312,6 +320,26 @@ final class PlayerViewModelTests: XCTestCase {
 
         try? await Task.sleep(nanoseconds: 150_000_000)
         XCTAssertNil(vm.transport.seekPreviewImage)
+    }
+
+    func testTimelineHoverRetriesThumbnailWhenGenerationProgresses() async {
+        mock.stubSeekThumbnailProgress = 40
+        mock.seekThumbnailHandler = { [weak mock] _ in
+            guard let mock else { return nil }
+            if mock.seekThumbnailCallCount == 1 {
+                return nil
+            }
+            mock.stubSeekThumbnailProgress = 100
+            return Self.makeTestImage()
+        }
+        vm.transport.duration = 10_000_000
+
+        vm.timelineHoverChanged(true)
+        vm.timelineHoverMoved(fraction: 0.5)
+
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertNotNil(vm.transport.seekPreviewImage)
+        XCTAssertGreaterThanOrEqual(mock.seekThumbnailCallCount, 2)
     }
 
     private static func makeTestImage() -> CGImage? {

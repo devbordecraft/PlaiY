@@ -17,6 +17,7 @@ add_executable(plaiy_tests
     test_bridge_error_propagation.cpp
     test_filesystem_error_handling.cpp
     test_library_performance.cpp
+    test_seek_thumbnail_generator.cpp
 )
 
 target_link_libraries(plaiy_tests PRIVATE

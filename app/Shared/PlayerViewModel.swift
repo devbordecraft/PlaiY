@@ -148,6 +148,8 @@ class PlayerViewModel: ObservableObject {
     private let thumbQueue = DispatchQueue(label: "com.plaiy.seekthumb", qos: .userInitiated)
     private var thumbRequestId: UInt64 = 0
     private var lastThumbIndex: Int = -1
+    private var thumbRetryWork: DispatchWorkItem?
+    private let thumbRetryDelay: TimeInterval = 0.12
 
     private var pendingSeekFraction: Double?
     private var hoverEndWork: DispatchWorkItem?
@@ -170,6 +172,21 @@ class PlayerViewModel: ObservableObject {
     private func cancelPendingThumbnailRequest() {
         thumbRequestId &+= 1
         lastThumbIndex = -1
+        thumbRetryWork?.cancel()
+        thumbRetryWork = nil
+    }
+
+    static func seekThumbnailIntervalSeconds(for durationUs: Int64) -> Int32 {
+        switch durationUs {
+        case ...1_800_000_000:
+            return 1
+        case ...5_400_000_000:
+            return 2
+        case ...14_400_000_000:
+            return 5
+        default:
+            return 10
+        }
     }
 
 
@@ -265,7 +282,7 @@ class PlayerViewModel: ObservableObject {
             disableSubtitles()
         }
 
-        let interval: Int32 = transport.duration > 7_200_000_000 ? 30 : 10
+        let interval = Self.seekThumbnailIntervalSeconds(for: transport.duration)
         bridge.startSeekThumbnails(interval: interval)
 
         NowPlayingManager.shared.setup(
@@ -559,26 +576,47 @@ class PlayerViewModel: ObservableObject {
         cancelPendingThumbnailRequest()
     }
 
-    private func updateSeekPreview(fraction: Double) {
+    private func scheduleThumbnailRetry(fraction: Double, requestId: UInt64) {
+        thumbRetryWork?.cancel()
+
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard self.thumbRequestId == requestId else { return }
+                guard self.transport.isHoveringTimeline || self.transport.isDraggingTimeline else { return }
+                self.updateSeekPreview(fraction: fraction, forceRefresh: true)
+            }
+        }
+        thumbRetryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + thumbRetryDelay, execute: work)
+    }
+
+    private func updateSeekPreview(fraction: Double, forceRefresh: Bool = false) {
         guard transport.duration > 0 else { return }
         let timestampUs = Int64(fraction * Double(transport.duration))
 
-        let intervalSec = transport.duration > 7_200_000_000 ? 30 : 10
+        let intervalSec = Int(Self.seekThumbnailIntervalSeconds(for: transport.duration))
         let index = Int(timestampUs / 1_000_000) / intervalSec
-        guard index != lastThumbIndex else { return }
+        guard forceRefresh || index != lastThumbIndex else { return }
         lastThumbIndex = index
 
         thumbRequestId &+= 1
         let requestId = thumbRequestId
         let bridge = self.bridge
+        thumbRetryWork?.cancel()
+        thumbRetryWork = nil
 
         thumbQueue.async { [weak self] in
             guard let self, self.thumbRequestId == requestId else { return }
             let image = bridge.seekThumbnail(at: timestampUs)
+            let progress = bridge.seekThumbnailProgress
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.thumbRequestId == requestId else { return }
                 guard self.transport.isHoveringTimeline || self.transport.isDraggingTimeline else { return }
                 self.transport.seekPreviewImage = image
+                if image == nil && progress < 100 {
+                    self.scheduleThumbnailRetry(fraction: fraction, requestId: requestId)
+                }
             }
         }
     }

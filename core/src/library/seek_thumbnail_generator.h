@@ -9,10 +9,17 @@
 #include <unordered_map>
 #include <cstdint>
 
+#include "plaiy/types.h"
+
 namespace py {
 
 class SeekThumbnailGenerator {
 public:
+    enum class ThumbnailMode {
+        LegacySwscale,
+        CustomMetalP5,
+    };
+
     SeekThumbnailGenerator();
     ~SeekThumbnailGenerator();
 
@@ -21,7 +28,8 @@ public:
     // cache_dir: directory to write thumb_NNNN.jpg files.
     void start(const std::string& video_path,
                const std::string& cache_dir,
-               int interval_seconds);
+               int interval_seconds,
+               const TrackInfo* video_track = nullptr);
 
     // Cancel in-progress generation.
     void cancel();
@@ -33,6 +41,8 @@ public:
 
     // Progress 0-100.
     int progress() const { return progress_.load(); }
+
+    static ThumbnailMode select_mode(const TrackInfo& track);
 
 private:
     struct DecodedThumbnail {
@@ -53,6 +63,12 @@ private:
                                   int* out_width,
                                   int* out_height);
     void store_decoded_thumbnail(int index, DecodedThumbnail thumbnail);
+    bool generate_legacy_thumbnails(const std::string& video_path,
+                                    const std::string& cache_dir,
+                                    int interval_seconds);
+    bool generate_custom_p5_thumbnails(const std::string& video_path,
+                                       const std::string& cache_dir,
+                                       int interval_seconds);
 
     std::atomic<bool> cancel_flag_{false};
     std::atomic<int> progress_{0};
@@ -60,6 +76,7 @@ private:
     std::atomic<int> generated_count_{0};
     int interval_seconds_ = 10;
     std::string cache_dir_;
+    ThumbnailMode mode_{ThumbnailMode::LegacySwscale};
 
     std::thread worker_;
     std::mutex data_mutex_;

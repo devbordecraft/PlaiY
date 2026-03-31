@@ -131,7 +131,7 @@ struct TimelineSectionView: View {
                             image: previewImage,
                             timeText: onPreviewText(previewFraction)
                         )
-                        .position(x: previewX, y: -86)
+                        .position(x: previewX, y: -96)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
@@ -156,35 +156,44 @@ struct TimelineSectionView: View {
 private struct TimelinePreviewCard: View {
     let image: CGImage?
     let timeText: String
+    private let cardShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.black.opacity(0.3))
-                    .frame(width: 248, height: 140)
-
                 if let image {
                     Image(decorative: image, scale: 1.0)
                         .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 248, height: 140)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "film.stack.fill")
-                            .font(.title3.weight(.semibold))
-                        Text("Preview")
-                            .font(.caption2.weight(.medium))
+                    ZStack {
+                        cardShape
+                            .fill(.black.opacity(0.3))
+
+                        VStack(spacing: 8) {
+                            Image(systemName: "film.stack.fill")
+                                .font(.title3.weight(.semibold))
+                            Text("Preview")
+                                .font(.caption2.weight(.medium))
+                        }
+                        .foregroundStyle(.white.opacity(0.7))
                     }
-                    .foregroundStyle(.white.opacity(0.7))
                 }
             }
+            .frame(width: 248, height: 140)
+            .clipShape(cardShape)
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(.white.opacity(0.14), lineWidth: 1)
+                Group {
+                    if image == nil {
+                        cardShape
+                            .stroke(.white.opacity(0.14), lineWidth: 1)
+                    }
+                }
             )
-            .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
+            .shadow(color: .black.opacity(image == nil ? 0.35 : 0.0),
+                    radius: image == nil ? 18 : 0,
+                    y: image == nil ? 10 : 0)
 
             Text(timeText)
                 .font(.caption.weight(.semibold))

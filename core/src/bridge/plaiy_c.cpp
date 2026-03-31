@@ -7,6 +7,7 @@
 #include "sources/direct_media_source.h"
 
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <string>
 #include <mutex>
 #include <exception>
@@ -756,23 +757,41 @@ void py_log_set_callback(PYLogCallback cb, void* userdata) {
 
 // ---- Seek preview thumbnails ----
 
-static std::string seek_thumb_cache_dir(const std::string& video_path) {
+static std::string seek_thumb_cache_dir(const std::string& video_path,
+                                        int interval_seconds,
+                                        py::SeekThumbnailGenerator::ThumbnailMode mode) {
     // Simple hash of path for cache directory name
     std::hash<std::string> hasher;
     size_t h = hasher(video_path);
     char hex[32];
     snprintf(hex, sizeof(hex), "%016zx", h);
 
+    static constexpr int kSeekThumbCacheVersion = 2;
+    const char* mode_name =
+        (mode == py::SeekThumbnailGenerator::ThumbnailMode::CustomMetalP5) ? "custom_p5" : "legacy";
+
     const char* home = getenv("HOME");
     std::string dir = std::string(home ? home : "/tmp") +
-                      "/Library/Caches/PlaiY/seek_thumbs/" + hex;
+                      "/Library/Caches/PlaiY/seek_thumbs/" + hex +
+                      "/v" + std::to_string(kSeekThumbCacheVersion) +
+                      "_" + mode_name +
+                      "_i" + std::to_string(std::max(interval_seconds, 1));
     return dir;
 }
 
 void py_player_start_seek_thumbnails(PYPlayer* p, int interval_seconds) {
     if (!p || p->video_path.empty()) return;
-    std::string cache_dir = seek_thumb_cache_dir(p->video_path);
-    p->seek_thumbs.start(p->video_path, cache_dir, interval_seconds);
+    const py::MediaInfo& info = p->engine.media_info();
+    const py::TrackInfo* video_track = nullptr;
+    if (info.best_video_index >= 0 &&
+        info.best_video_index < static_cast<int>(info.tracks.size())) {
+        video_track = &info.tracks[static_cast<size_t>(info.best_video_index)];
+    }
+    const py::SeekThumbnailGenerator::ThumbnailMode mode =
+        video_track ? py::SeekThumbnailGenerator::select_mode(*video_track)
+                    : py::SeekThumbnailGenerator::ThumbnailMode::LegacySwscale;
+    std::string cache_dir = seek_thumb_cache_dir(p->video_path, interval_seconds, mode);
+    p->seek_thumbs.start(p->video_path, cache_dir, interval_seconds, video_track);
 }
 
 void py_player_cancel_seek_thumbnails(PYPlayer* p) {

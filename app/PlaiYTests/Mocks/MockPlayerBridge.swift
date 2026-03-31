@@ -42,6 +42,7 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var lastSetHeadTracking: Bool?
     var startSeekThumbnailsCalled = false
     var cancelSeekThumbnailsCalled = false
+    var seekThumbnailCallCount = 0
 
     // MARK: - PlayerBridgeProtocol
 
@@ -100,7 +101,8 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     func startSeekThumbnails(interval: Int32) { startSeekThumbnailsCalled = true }
     func cancelSeekThumbnails() { cancelSeekThumbnailsCalled = true }
     func seekThumbnail(at timestampUs: Int64) -> CGImage? {
-        seekThumbnailHandler?(timestampUs)
+        seekThumbnailCallCount += 1
+        return seekThumbnailHandler?(timestampUs)
     }
     var seekThumbnailProgress: Int32 { stubSeekThumbnailProgress }
 

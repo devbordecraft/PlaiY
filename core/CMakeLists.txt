@@ -75,6 +75,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/ns_http_client.mm
+        platform/apple/seek_thumbnail_renderer.mm
         platform/apple/dv_video_output.mm
     )
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
@@ -159,6 +160,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/ns_http_client.mm
+        platform/apple/seek_thumbnail_renderer.mm
         platform/apple/dv_video_output.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
