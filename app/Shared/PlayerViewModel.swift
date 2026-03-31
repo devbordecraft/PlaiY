@@ -114,6 +114,7 @@ class PlayerViewModel: ObservableObject {
     @Published var aspectRatioMode: AspectRatioMode = .auto
     @Published var cropActive: Bool = false
     @Published var openError: String?
+    @Published var isDolbyVision = false
 
     // NOT @Published — ContentView reads this in one-shot closures (onBack, playbackEnded),
     // not in body. Avoiding @Published prevents once-per-second PlayerView rebuilds.
@@ -157,6 +158,7 @@ class PlayerViewModel: ObservableObject {
         }
         openError = nil
         transport.duration = bridge.duration
+        isDolbyVision = playerBridge.isDolbyVision
 
         bridge.setAudioPassthrough(settings.audioPassthrough)
         passthroughEnabled = settings.audioPassthrough

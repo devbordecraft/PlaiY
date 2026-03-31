@@ -111,5 +111,5 @@ clean:
 	@rm -rf build/apple-debug build/apple-release
 	@rm -rf build/ios-Debug build/ios-Release build/ios-sim-Debug build/ios-sim-Release
 	@rm -rf build/tvos-Debug build/tvos-Release
-	@cd $(APP_DIR) && xcodebuild -project PlaiY.xcodeproj -scheme $(SCHEME) -configuration $(CONFIG) clean 2>/dev/null || true
+	@rm -rf ~/Library/Developer/Xcode/DerivedData/PlaiY-*
 	@echo "Cleaned."

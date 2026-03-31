@@ -116,6 +116,11 @@ public:
 
     PlaybackStats get_playback_stats() const;
 
+    // Dolby Vision: set the AVSampleBufferDisplayLayer for DV output.
+    // Must be called after open_file() and before play().
+    void set_dv_display_layer(void* layer);
+    bool is_dolby_vision() const;
+
     // Video frame acquisition for the Metal renderer
     // Returns nullptr if no frame is ready
     VideoFrame* acquire_video_frame(int64_t target_pts_us);

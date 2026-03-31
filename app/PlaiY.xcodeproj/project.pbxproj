@@ -53,6 +53,7 @@
 		53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
 		5312B4CCA03C36909AF0A4A3 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7985FD2B159C59D7CA921B /* KeychainHelper.swift */; };
 		54D1E3E387F33E41688AB4C7 /* TimeFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BE4FCAB1AAD2A1C89CADFA /* TimeFormattingTests.swift */; };
+		58DB79A5CAC345FBFF31C5F6 /* DVDisplayLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */; };
 		59A465F92D44A1C49313D082 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
 		6535157B0ACB395CCC675993 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
 		67DAA9277B86D6836DCB899C /* MediaItemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */; };
@@ -62,6 +63,7 @@
 		6A9203721AFAB44C17695B41 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3827F923362873679C629098 /* ContentProvider.swift */; };
 		6D3F5534C4ED24B830A3CE2C /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */; };
 		70A3F4E1453F784F07CD2C4B /* SourceManagerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */; };
+		70BCED2474D69E9F95F0B3BE /* DVDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */; };
 		7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
 		77AC86D17BCB012CE832A480 /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
 		797727605E3C329324F413F6 /* PlexAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08DADFD7E921DE10F509F231 /* PlexAuth.swift */; };
@@ -74,10 +76,12 @@
 		83545C0D32833ACFE12379B3 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
 		83E9AFFE397D8A15AABF7F01 /* SourceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */; };
 		86A787552A6258882D056F1B /* ColorFilterUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */; };
+		87CCC5C93A0485978A0992EA /* DVDisplayLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */; };
 		8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D888DC06954A914994F0D3EC /* TrackSelectionView.swift */; };
 		89621421365ED1BE4620A938 /* AddSourceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */; };
 		8C1F10FC293503EA3C2C8A4B /* SourcesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2859B8BA9FFDB1E85454DAD /* SourcesViewModel.swift */; };
 		8DA705B09C731208699611A9 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
+		91389711205D5253EB73D56C /* DVDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */; };
 		91A28C441EF1293D30284BCF /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */; };
 		96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		97AB0DCAC3648FFDA6E2BE75 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
@@ -93,6 +97,7 @@
 		A48FCEE490F5E986BE4BC1D4 /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
+		B1CF24A9AA6EC6AEE82DA49E /* DVDisplayLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */; };
 		B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
 		B793F06F838726972E3CFDB9 /* SourceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */; };
 		BE1A651BACF92BF98B86A038 /* SourceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */; };
@@ -127,6 +132,7 @@
 		E1565D0064E80D10029AD72F /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */; };
 		E44CA4BFDA6391B6D7D4B141 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
 		E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
+		EB58D4C0600EBAB7FCE96C36 /* DVDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */; };
 		ECC24E6BD1F21ED34821C882 /* PlayerBridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */; };
 		EED5907059EC6A940EE22B75 /* LayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */; };
 		EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
@@ -198,6 +204,7 @@
 		3607CF6035239073AEE20781 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		3827F923362873679C629098 /* ContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentProvider.swift; sourceTree = "<group>"; };
 		3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConfig.swift; sourceTree = "<group>"; };
+		4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVDisplayLayerView.swift; sourceTree = "<group>"; };
 		5206B0B7315CCF3BBB96D988 /* TopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TopShelf.entitlements; sourceTree = "<group>"; };
 		59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRUniformBuilder.swift; sourceTree = "<group>"; };
 		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
@@ -208,6 +215,7 @@
 		605D92FB022572469E826CE1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
 		6969ACD6B001ECEDE1F998F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVDebugLogger.swift; sourceTree = "<group>"; };
 		7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryItemTests.swift; sourceTree = "<group>"; };
 		89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailManager.swift; sourceTree = "<group>"; };
 		89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorFilterUniformBuilder.swift; sourceTree = "<group>"; };
@@ -309,6 +317,7 @@
 				A8E09681CB51FF9D91BFA6B7 /* AddSourceView.swift */,
 				2E13F471AA3B2426876CCB66 /* ContentView.swift */,
 				FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */,
+				4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */,
 				2959BC28D55EDB4E02F90CCA /* LibraryView.swift */,
 				60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */,
 				BDB547B3DA8B8642C4AF4AF3 /* MetalPlayerView.swift */,
@@ -337,6 +346,7 @@
 			isa = PBXGroup;
 			children = (
 				89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */,
+				73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */,
 				59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */,
 				20FDE7B7B258E9A330A36754 /* MetalViewCoordinator.swift */,
 			);
@@ -553,6 +563,8 @@
 				29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */,
 				DA9CC834A6CC252610EE836E /* ColorFilterUniformBuilder.swift in Sources */,
 				AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */,
+				70BCED2474D69E9F95F0B3BE /* DVDebugLogger.swift in Sources */,
+				87CCC5C93A0485978A0992EA /* DVDisplayLayerView.swift in Sources */,
 				96F064E6CD5016CCEE8E3B23 /* DebugOverlayView.swift in Sources */,
 				7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */,
 				FDC949BE282F6623C8635169 /* KeychainHelper.swift in Sources */,
@@ -601,6 +613,8 @@
 				D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */,
 				86A787552A6258882D056F1B /* ColorFilterUniformBuilder.swift in Sources */,
 				F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */,
+				EB58D4C0600EBAB7FCE96C36 /* DVDebugLogger.swift in Sources */,
+				58DB79A5CAC345FBFF31C5F6 /* DVDisplayLayerView.swift in Sources */,
 				2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */,
 				384152C1489E05CB6E1315BF /* HDRUniformBuilder.swift in Sources */,
 				E100C777BB1798DEACC4DB4B /* KeychainHelper.swift in Sources */,
@@ -649,6 +663,8 @@
 				53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */,
 				09F0DC01D5E2432514A48C48 /* ColorFilterUniformBuilder.swift in Sources */,
 				24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */,
+				91389711205D5253EB73D56C /* DVDebugLogger.swift in Sources */,
+				B1CF24A9AA6EC6AEE82DA49E /* DVDisplayLayerView.swift in Sources */,
 				F13BD1A6F5020058D746CBFC /* DebugOverlayView.swift in Sources */,
 				D37A28A5DEF642E44014405E /* HDRUniformBuilder.swift in Sources */,
 				5312B4CCA03C36909AF0A4A3 /* KeychainHelper.swift in Sources */,

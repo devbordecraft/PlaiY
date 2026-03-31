@@ -295,17 +295,13 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p) {
     out.dv_profile = s.dv_profile;
     out.dv_level = s.dv_level;
     out.dv_bl_compatibility_id = s.dv_bl_compatibility_id;
-    out.dv_rpu_present = s.dv_rpu_present;
-    out.dv_min_pq = s.dv_min_pq;
-    out.dv_max_pq = s.dv_max_pq;
-    out.dv_avg_pq = s.dv_avg_pq;
-    out.dv_source_min_pq = s.dv_source_min_pq;
-    out.dv_source_max_pq = s.dv_source_max_pq;
-    out.dv_trim_slope = s.dv_trim_slope;
-    out.dv_trim_offset = s.dv_trim_offset;
-    out.dv_trim_power = s.dv_trim_power;
-    out.dv_trim_chroma_weight = s.dv_trim_chroma_weight;
-    out.dv_trim_saturation_gain = s.dv_trim_saturation_gain;
+    out.dv_asbdl_active = s.dv_asbdl_active;
+    out.dv_has_reshaping = s.dv_has_reshaping;
+    out.dv_has_l1 = s.dv_has_l1;
+    out.dv_has_l2 = s.dv_has_l2;
+    out.dv_l1_min_pq = s.dv_l1_min_pq;
+    out.dv_l1_max_pq = s.dv_l1_max_pq;
+    out.dv_l1_avg_pq = s.dv_l1_avg_pq;
     return out;
 }
 
@@ -351,6 +347,18 @@ const char* py_player_get_media_info_json(PYPlayer* p) {
 
     p->media_info_json = j.dump();
     return p->media_info_json.c_str();
+}
+
+// ---- Dolby Vision output ----
+
+bool py_player_is_dolby_vision(PYPlayer* p) {
+    if (!p) return false;
+    return p->engine.is_dolby_vision();
+}
+
+void py_player_set_dv_display_layer(PYPlayer* p, void* layer) {
+    if (!p) return;
+    p->engine.set_dv_display_layer(layer);
 }
 
 // ---- Video frame ----
@@ -494,37 +502,74 @@ void py_player_frame_hdr10plus_maxscl(void* frame, float* rgb3) {
     rgb3[2] = vf->hdr10plus.maxscl[2];
 }
 
-// ---- Dolby Vision per-frame RPU metadata ----
+// ---- Dolby Vision per-frame color metadata ----
 
-bool py_player_frame_has_dovi(void* frame) {
+bool py_player_frame_has_dovi_color(void* frame) {
     if (!frame) return false;
-    return static_cast<py::VideoFrame*>(frame)->dovi.present;
+    return static_cast<py::VideoFrame*>(frame)->dovi_color.present;
 }
 
-bool py_player_frame_get_dovi(void* frame, PYDoviMetadata* out) {
-    if (!frame || !out) return false;
+bool py_player_frame_dovi_ycc_to_rgb(void* frame, float* matrix9, float* offset3) {
+    if (!frame || !matrix9 || !offset3) return false;
     auto* vf = static_cast<py::VideoFrame*>(frame);
-    if (!vf->dovi.present) return false;
+    if (!vf->dovi_color.present) return false;
+    for (int i = 0; i < 9; i++) matrix9[i] = vf->dovi_color.ycc_to_rgb_matrix[i];
+    for (int i = 0; i < 3; i++) offset3[i] = vf->dovi_color.ycc_to_rgb_offset[i];
+    return true;
+}
 
-    for (int c = 0; c < 3; c++) {
-        const auto& src = vf->dovi.curves[c];
-        out->curves[c].num_pivots = src.num_pivots;
-        for (int i = 0; i < 9; i++) out->curves[c].pivots[i] = src.pivots[i];
-        for (int i = 0; i < 8; i++) {
-            out->curves[c].poly_order[i] = src.poly_order[i];
-            for (int j = 0; j < 3; j++) out->curves[c].poly_coef[i][j] = src.poly_coef[i][j];
-        }
-    }
-    out->min_pq = vf->dovi.min_pq;
-    out->max_pq = vf->dovi.max_pq;
-    out->avg_pq = vf->dovi.avg_pq;
-    out->source_max_pq = vf->dovi.source_max_pq;
-    out->source_min_pq = vf->dovi.source_min_pq;
-    out->trim_slope = vf->dovi.trim_slope;
-    out->trim_offset = vf->dovi.trim_offset;
-    out->trim_power = vf->dovi.trim_power;
-    out->trim_chroma_weight = vf->dovi.trim_chroma_weight;
-    out->trim_saturation_gain = vf->dovi.trim_saturation_gain;
+bool py_player_frame_dovi_rgb_to_lms(void* frame, float* matrix9) {
+    if (!frame || !matrix9) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.present) return false;
+    for (int i = 0; i < 9; i++) matrix9[i] = vf->dovi_color.rgb_to_lms_matrix[i];
+    return true;
+}
+
+bool py_player_frame_dovi_lms_to_rgb(void* frame, float* matrix9) {
+    if (!frame || !matrix9) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.present) return false;
+    for (int i = 0; i < 9; i++) matrix9[i] = vf->dovi_color.lms_to_rgb_matrix[i];
+    return true;
+}
+
+bool py_player_frame_dovi_l1(void* frame, uint16_t* min_pq, uint16_t* max_pq, uint16_t* avg_pq) {
+    if (!frame || !min_pq || !max_pq || !avg_pq) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_l1) return false;
+    *min_pq = vf->dovi_color.l1_min_pq;
+    *max_pq = vf->dovi_color.l1_max_pq;
+    *avg_pq = vf->dovi_color.l1_avg_pq;
+    return true;
+}
+
+bool py_player_frame_dovi_l2(void* frame, uint16_t* slope, uint16_t* offset,
+                              uint16_t* power, uint16_t* chroma_weight,
+                              uint16_t* saturation_gain, int16_t* ms_weight) {
+    if (!frame || !slope || !offset || !power || !chroma_weight ||
+        !saturation_gain || !ms_weight) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_l2) return false;
+    *slope = vf->dovi_color.l2_trim_slope;
+    *offset = vf->dovi_color.l2_trim_offset;
+    *power = vf->dovi_color.l2_trim_power;
+    *chroma_weight = vf->dovi_color.l2_trim_chroma_weight;
+    *saturation_gain = vf->dovi_color.l2_trim_saturation_gain;
+    *ms_weight = vf->dovi_color.l2_ms_weight;
+    return true;
+}
+
+bool py_player_frame_dovi_has_reshaping(void* frame) {
+    if (!frame) return false;
+    return static_cast<py::VideoFrame*>(frame)->dovi_color.has_reshaping;
+}
+
+bool py_player_frame_dovi_reshape_lut(void* frame, int component, float* lut1024) {
+    if (!frame || !lut1024 || component < 0 || component > 2) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_reshaping) return false;
+    for (int i = 0; i < 1024; i++) lut1024[i] = vf->dovi_color.reshape_lut[component][i];
     return true;
 }
 

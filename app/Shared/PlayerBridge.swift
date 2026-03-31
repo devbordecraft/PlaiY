@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import CoreVideo
 import CoreGraphics
 
@@ -39,6 +40,15 @@ final class PlayerBridge: @unchecked Sendable {
     func open(path: String) -> Bool {
         let result = py_player_open(handle, path)
         return result == Int32(PY_OK.rawValue)
+    }
+
+    var isDolbyVision: Bool {
+        py_player_is_dolby_vision(handle)
+    }
+
+    func setDVDisplayLayer(_ layer: AVSampleBufferDisplayLayer) {
+        let ptr = Unmanaged.passUnretained(layer).toOpaque()
+        py_player_set_dv_display_layer(handle, ptr)
     }
 
     @inline(always) func play() {
@@ -349,11 +359,57 @@ final class PlayerBridge: @unchecked Sendable {
         return rgb
     }
 
-    // Dolby Vision per-frame RPU metadata
-    static func frameGetDovi(_ frame: UnsafeMutableRawPointer) -> PYDoviMetadata? {
-        var meta = PYDoviMetadata()
-        guard py_player_frame_get_dovi(frame, &meta) else { return nil }
-        return meta
+    // Dolby Vision per-frame color metadata
+    @inline(always) static func frameHasDoviColor(_ frame: UnsafeMutableRawPointer) -> Bool {
+        py_player_frame_has_dovi_color(frame)
+    }
+
+    static func frameDoviYccToRgb(_ frame: UnsafeMutableRawPointer) -> (matrix: [Float], offset: [Float])? {
+        var matrix = [Float](repeating: 0, count: 9)
+        var offset = [Float](repeating: 0, count: 3)
+        guard py_player_frame_dovi_ycc_to_rgb(frame, &matrix, &offset) else { return nil }
+        return (matrix, offset)
+    }
+
+    static func frameDoviRgbToLms(_ frame: UnsafeMutableRawPointer) -> [Float]? {
+        var matrix = [Float](repeating: 0, count: 9)
+        guard py_player_frame_dovi_rgb_to_lms(frame, &matrix) else { return nil }
+        return matrix
+    }
+
+    static func frameDoviLmsToRgb(_ frame: UnsafeMutableRawPointer) -> [Float]? {
+        var matrix = [Float](repeating: 0, count: 9)
+        guard py_player_frame_dovi_lms_to_rgb(frame, &matrix) else { return nil }
+        return matrix
+    }
+
+    static func frameDoviL1(_ frame: UnsafeMutableRawPointer) -> (minPQ: UInt16, maxPQ: UInt16, avgPQ: UInt16)? {
+        var minPQ: UInt16 = 0
+        var maxPQ: UInt16 = 0
+        var avgPQ: UInt16 = 0
+        guard py_player_frame_dovi_l1(frame, &minPQ, &maxPQ, &avgPQ) else { return nil }
+        return (minPQ, maxPQ, avgPQ)
+    }
+
+    static func frameDoviL2(_ frame: UnsafeMutableRawPointer) -> (slope: UInt16, offset: UInt16, power: UInt16, chromaWeight: UInt16, saturationGain: UInt16, msWeight: Int16)? {
+        var slope: UInt16 = 0
+        var offset: UInt16 = 0
+        var power: UInt16 = 0
+        var chromaWeight: UInt16 = 0
+        var saturationGain: UInt16 = 0
+        var msWeight: Int16 = 0
+        guard py_player_frame_dovi_l2(frame, &slope, &offset, &power, &chromaWeight, &saturationGain, &msWeight) else { return nil }
+        return (slope, offset, power, chromaWeight, saturationGain, msWeight)
+    }
+
+    @inline(always) static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
+        py_player_frame_dovi_has_reshaping(frame)
+    }
+
+    static func frameDoviReshapeLUT(_ frame: UnsafeMutableRawPointer, component: Int32) -> [Float]? {
+        var lut = [Float](repeating: 0, count: 1024)
+        guard py_player_frame_dovi_reshape_lut(frame, component, &lut) else { return nil }
+        return lut
     }
 
     // Seek preview thumbnails

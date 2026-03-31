@@ -29,50 +29,32 @@ struct VideoUniforms {
 
     // Chroma subsampling format: 0=4:2:0, 1=4:2:2, 2=4:4:4
     var chromaFormat: Int32 = 0
-}
 
-struct DoviUniforms {
-    var present: Int32 = 0
+    // Dolby Vision color matrices (from RPU metadata)
+    var doviPresent: Int32 = 0
+    var doviYccToRgb: (Float, Float, Float, Float, Float, Float, Float, Float, Float) = (0,0,0,0,0,0,0,0,0)
+    var doviYccOffset: (Float, Float, Float) = (0, 0, 0)
+    var doviRgbToLms: (Float, Float, Float, Float, Float, Float, Float, Float, Float) = (0,0,0,0,0,0,0,0,0)
 
-    // Per-component reshaping curves
-    var numPivots: (Int32, Int32, Int32) = (0, 0, 0)
-    var pivots: ((Float,Float,Float,Float,Float,Float,Float,Float,Float),
-                 (Float,Float,Float,Float,Float,Float,Float,Float,Float),
-                 (Float,Float,Float,Float,Float,Float,Float,Float,Float)) =
-        ((0,0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0,0))
-    var polyOrder: ((Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32),
-                    (Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32),
-                    (Int32,Int32,Int32,Int32,Int32,Int32,Int32,Int32)) =
-        ((0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0),(0,0,0,0,0,0,0,0))
-    var polyCoef: (
-        // component 0: 8 pieces x 3 coefficients
-        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
-         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float)),
-        // component 1
-        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
-         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float)),
-        // component 2
-        ((Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float),
-         (Float,Float,Float),(Float,Float,Float),(Float,Float,Float),(Float,Float,Float))
-    ) = (
-        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)),
-        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0)),
-        ((0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0),(0,0,0))
-    )
+    // DV pre-inverted LMS-to-RGB matrix
+    var doviLmsToRgb: (Float, Float, Float, Float, Float, Float, Float, Float, Float) = (0,0,0,0,0,0,0,0,0)
 
-    // Per-frame brightness
-    var minPQ: Float = 0
-    var maxPQ: Float = 0
-    var avgPQ: Float = 0
-    var sourceMaxPQ: Float = 0
-    var sourceMinPQ: Float = 0
+    // DV L1 per-scene brightness metadata
+    var doviHasL1: Int32 = 0
+    var doviL1MinPQ: Float = 0.0   // PQ-encoded [0,1] (raw / 4095)
+    var doviL1MaxPQ: Float = 1.0
+    var doviL1AvgPQ: Float = 0.0
 
-    // Trim
-    var trimSlope: Float = 1.0
-    var trimOffset: Float = 0.0
-    var trimPower: Float = 1.0
-    var trimChromaWeight: Float = 1.0
-    var trimSaturationGain: Float = 1.0
+    // DV L2 display trim metadata
+    var doviHasL2: Int32 = 0
+    var doviL2Slope: Float = 1.0    // normalized (raw / 2048)
+    var doviL2Offset: Float = 1.0
+    var doviL2Power: Float = 1.0
+    var doviL2ChromaWeight: Float = 0.0
+    var doviL2SatGain: Float = 1.0
+
+    // DV reshaping present flag (LUT data passed as separate texture)
+    var doviHasReshaping: Int32 = 0
 }
 
 struct CropUniforms {
@@ -113,6 +95,9 @@ class MetalViewCoordinator {
 
     // Frame counter for temporal dithering (wraps on overflow)
     private var frameCounter: UInt32 = 0
+
+    // DV reshape LUT buffer (3 components x 1024 entries x 4 bytes = 12KB)
+    private var reshapeLUTBuffer: MTLBuffer?
 
     // Display link rate management — drop to 4fps when paused to save power
     private weak var mtkView: MTKView?
@@ -318,7 +303,22 @@ class MetalViewCoordinator {
         // Build HDR uniforms from frame metadata
         var uniforms = HDRUniformBuilder.buildVideoUniforms(
             framePtr: framePtr, edrHeadroom: cachedEDRHeadroom)
-        var doviUniforms = HDRUniformBuilder.buildDoviUniforms(framePtr: framePtr)
+
+        // Upload DV reshaping LUT to GPU buffer
+        var reshapeLUTData: [Float]?
+        if uniforms.doviHasReshaping != 0 {
+            reshapeLUTData = HDRUniformBuilder.buildDoviReshapeLUT(framePtr: framePtr)
+            if reshapeLUTData == nil {
+                uniforms.doviHasReshaping = 0 // No data available, disable in shader
+            }
+        }
+
+        #if DEBUG
+        DVDebugLogger.shared.log(
+            uniforms: uniforms,
+            reshapingActive: reshapeLUTData != nil,
+            edrHeadroom: cachedEDRHeadroom)
+        #endif
 
         // Configure CAEDRMetadata and request elevated display headroom.
         // Only update when the content type changes to avoid per-frame overhead.
@@ -344,6 +344,8 @@ class MetalViewCoordinator {
                     PYLog.info("HDR mode activated: PQ, max \(maxNits) nits", tag: "Metal")
                 } else if uniforms.transferFunc == 2 {
                     PYLog.info("HDR mode activated: HLG", tag: "Metal")
+                } else if uniforms.transferFunc == 3 {
+                    PYLog.info("HDR mode activated: DV Profile 5 (IPTPQc2)", tag: "Metal")
                 }
             }
         }
@@ -395,9 +397,27 @@ class MetalViewCoordinator {
         var colorFilterUniforms = ColorFilterUniformBuilder.build(playerBridge: playerBridge, frameCounter: frameCounter)
 
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)
-        encoder.setFragmentBytes(&doviUniforms, length: MemoryLayout<DoviUniforms>.size, index: 1)
-        encoder.setFragmentBytes(&cropUniforms, length: MemoryLayout<CropUniforms>.size, index: 2)
-        encoder.setFragmentBytes(&colorFilterUniforms, length: MemoryLayout<ColorFilterUniforms>.size, index: 3)
+        encoder.setFragmentBytes(&cropUniforms, length: MemoryLayout<CropUniforms>.size, index: 1)
+        encoder.setFragmentBytes(&colorFilterUniforms, length: MemoryLayout<ColorFilterUniforms>.size, index: 2)
+
+        // Bind DV reshaping LUT buffer (12KB = 3072 floats, exceeds setFragmentBytes 4KB limit)
+        if let lutData = reshapeLUTData {
+            let byteCount = lutData.count * MemoryLayout<Float>.size
+            if reshapeLUTBuffer == nil || reshapeLUTBuffer!.length < byteCount {
+                reshapeLUTBuffer = device.makeBuffer(length: byteCount, options: .storageModeShared)
+            }
+            if let buffer = reshapeLUTBuffer {
+                lutData.withUnsafeBufferPointer { ptr in
+                    memcpy(buffer.contents(), ptr.baseAddress!, byteCount)
+                }
+                encoder.setFragmentBuffer(buffer, offset: 0, index: 3)
+            }
+        } else {
+            // Shader declares buffer(3) — bind a dummy to avoid validation errors
+            var zero: Float = 0
+            encoder.setFragmentBytes(&zero, length: MemoryLayout<Float>.size, index: 3)
+        }
+
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 

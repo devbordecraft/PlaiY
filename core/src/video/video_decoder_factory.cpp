@@ -1,6 +1,5 @@
 #include "video_decoder_factory.h"
 #include "ff_video_decoder.h"
-#include "dv_seek_decoder.h"
 #include "plaiy/logger.h"
 #include "plaiy/types.h"
 
@@ -33,29 +32,19 @@ std::unique_ptr<IVideoDecoder> VideoDecoderFactory::create(
                 break;
         }
 
-        // HDR10+ and DV Profile 8: use FFmpeg SW decoder so per-frame dynamic
-        // metadata (bezier curves, RPU) is available via AVFrame side data.
+        // HDR10+: use FFmpeg SW decoder so per-frame dynamic metadata
+        // (bezier curves) is available via AVFrame side data.
         // VideoToolbox strips this metadata from the bitstream.
         if (vt_candidate && track.hdr_metadata.type == HDRType::HDR10Plus) {
             PY_LOG_INFO(TAG, "HDR10+ content: using FFmpeg decoder for dynamic metadata");
             vt_candidate = false;
         }
-        if (vt_candidate && track.hdr_metadata.type == HDRType::DolbyVision) {
-            if (track.dv_profile == 10) {
-                // AV1 DV Profile 10: force FFmpeg to preserve RPU metadata.
-                // DVSeekDecoder not usable (VT has no AV1 DV support).
-                PY_LOG_INFO(TAG, "DV Profile 10 (AV1): using FFmpeg decoder for RPU metadata");
-                vt_candidate = false;
-            } else if (track.dv_profile == 7 || track.dv_profile == 8) {
-                PY_LOG_INFO(TAG, "DV Profile %d: using DVSeekDecoder (FFmpeg + VT shadow)",
-                            track.dv_profile);
-                auto dv = std::make_unique<DVSeekDecoder>();
-                Error err = dv->open(track);
-                if (err.ok()) return dv;
-                PY_LOG_WARN(TAG, "DVSeekDecoder failed: %s, falling back to FFmpeg-only",
-                            err.message.c_str());
-                vt_candidate = false;
-            }
+
+        // Any DV content reaching this factory must use FFmpeg.
+        // VT corrupts IPTPQc2 chroma during its internal pixel format conversion.
+        if (vt_candidate && track.dv_profile > 0) {
+            PY_LOG_INFO(TAG, "DV Profile %d: forcing FFmpeg (skip VT)", track.dv_profile);
+            vt_candidate = false;
         }
 
         if (vt_candidate) {

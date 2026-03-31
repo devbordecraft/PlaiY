@@ -160,6 +160,10 @@ void FFDemuxer::populate_media_info() {
             track.extradata.assign(par->extradata, par->extradata + par->extradata_size);
         }
 
+        // Store AVCodecParameters pointer for decoder init (needed for DV
+        // coded_side_data propagation to thread contexts).
+        track.codec_parameters = par;
+
         switch (par->codec_type) {
             case AVMEDIA_TYPE_VIDEO:
                 track.type = MediaType::Video;
@@ -206,18 +210,32 @@ void FFDemuxer::populate_media_info() {
                         track.dv_profile = dovi->dv_profile;
                         track.dv_level = dovi->dv_level;
                         track.dv_bl_signal_compatibility_id = dovi->dv_bl_signal_compatibility_id;
+                        track.dv_config_raw.assign(sd->data, sd->data + sd->size);
                         track.hdr_metadata.type = HDRType::DolbyVision;
                         PY_LOG_INFO(TAG, "Stream %d: Dolby Vision profile %d.%d, compat_id=%d",
                                     i, dovi->dv_profile, dovi->dv_level,
                                     dovi->dv_bl_signal_compatibility_id);
 
-                        // Profile 8 with bl_signal_compatibility_id 1 or 2:
-                        // Base layer is HDR10-compatible, use HDR10 rendering path
-                        if (dovi->dv_profile == 8 &&
-                            (dovi->dv_bl_signal_compatibility_id == 1 ||
-                             dovi->dv_bl_signal_compatibility_id == 2)) {
-                            PY_LOG_INFO(TAG, "  -> BL compatible with HDR10, using HDR10 rendering path");
+                        // DV: force PQ transfer function (SPS often says "unspecified").
+                        // For color_space: Profile 5 is IPTPQc2 (leave unspecified so
+                        // the shader uses ICtCp conversion). Others are BT.2020.
+                        if (track.color_trc == 0 || track.color_trc == 2) {
+                            track.color_trc = 16;   // SMPTE2084 (PQ)
                         }
+                        if (track.color_primaries == 0 || track.color_primaries == 2) {
+                            track.color_primaries = 9;  // BT.2020
+                        }
+                        if (dovi->dv_profile != 5) {
+                            // Non-Profile-5: base layer is BT.2020
+                            if (track.color_space == 0 || track.color_space == 2) {
+                                track.color_space = 9;  // BT.2020_NCL
+                            }
+                        }
+                        // Profile 5: leave color_space as-is (likely unspecified)
+                        // so the uniform builder routes to ICtCp shader path.
+                        PY_LOG_INFO(TAG, "  -> DV P%d color: cs=%d trc=%d pri=%d",
+                                    dovi->dv_profile, track.color_space, track.color_trc,
+                                    track.color_primaries);
                     }
                 }
 

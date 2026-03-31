@@ -385,6 +385,17 @@ void VTVideoDecoder::Impl::decompressionCallback(
     frame.sar_num = self->track_info.sar_num;
     frame.sar_den = self->track_info.sar_den;
 
+    // DV content: the SPS/VUI often signals color info as "unspecified".
+    // Force BT.2020 + PQ unconditionally for all DV content decoded by VT.
+    if (self->track_info.hdr_metadata.type == HDRType::DolbyVision ||
+        frame.color_space == 0 || frame.color_space == 2) {
+        if (self->track_info.hdr_metadata.type == HDRType::DolbyVision) {
+            frame.color_space = 9;   // AVCOL_SPC_BT2020_NCL
+            frame.color_trc = 16;    // AVCOL_TRC_SMPTE2084 (PQ)
+            frame.color_primaries = 9; // AVCOL_PRI_BT2020
+        }
+    }
+
     // Override with per-frame HDR metadata from CVPixelBuffer attachments
     CFDictionaryRef attachments = CVBufferCopyAttachments(imageBuffer, kCVAttachmentMode_ShouldPropagate);
     if (attachments) {

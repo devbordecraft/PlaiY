@@ -1,12 +1,16 @@
 #include "ff_video_decoder.h"
 #include "plaiy/logger.h"
 
+#include <algorithm>
+#include <cmath>
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/hdr_dynamic_metadata.h>
 #include <libavutil/dovi_meta.h>
+
 #include <libswscale/swscale.h>
 }
 
@@ -38,21 +42,41 @@ Error FFVideoDecoder::open(const TrackInfo& track) {
         return {ErrorCode::OutOfMemory, "Failed to allocate codec context"};
     }
 
-    codec_ctx_->width = track.width;
-    codec_ctx_->height = track.height;
-    codec_ctx_->pix_fmt = AV_PIX_FMT_NONE;
+    // Initialize codec context from AVCodecParameters when available.
+    // This properly copies coded_side_data (including AV_PKT_DATA_DOVI_CONF)
+    // which is essential for DV RPU parsing with frame-level threading.
+    if (track.codec_parameters) {
+        avcodec_parameters_to_context(
+            codec_ctx_, static_cast<const AVCodecParameters*>(track.codec_parameters));
+    } else {
+        codec_ctx_->width = track.width;
+        codec_ctx_->height = track.height;
+        codec_ctx_->pix_fmt = AV_PIX_FMT_NONE;
 
-    // Set extradata
-    if (!track.extradata.empty()) {
-        codec_ctx_->extradata_size = static_cast<int>(track.extradata.size());
-        codec_ctx_->extradata = static_cast<uint8_t*>(
-            av_mallocz(track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
-        if (codec_ctx_->extradata) {
-            memcpy(codec_ctx_->extradata, track.extradata.data(), track.extradata.size());
+        // Set extradata
+        if (!track.extradata.empty()) {
+            codec_ctx_->extradata_size = static_cast<int>(track.extradata.size());
+            codec_ctx_->extradata = static_cast<uint8_t*>(
+                av_mallocz(track.extradata.size() + AV_INPUT_BUFFER_PADDING_SIZE));
+            if (codec_ctx_->extradata) {
+                memcpy(codec_ctx_->extradata, track.extradata.data(), track.extradata.size());
+            }
+        }
+
+        // Manual DOVI config fallback when codec_parameters is not available
+        if (!track.dv_config_raw.empty()) {
+            AVPacketSideData* sd = av_packet_side_data_new(
+                &codec_ctx_->coded_side_data,
+                &codec_ctx_->nb_coded_side_data,
+                AV_PKT_DATA_DOVI_CONF,
+                track.dv_config_raw.size(), 0);
+            if (sd) {
+                memcpy(sd->data, track.dv_config_raw.data(), track.dv_config_raw.size());
+            }
         }
     }
 
-    // Request multi-threaded decoding
+    // Request multi-threaded decoding (frame + slice parallelism)
     codec_ctx_->thread_count = 0; // auto
     codec_ctx_->thread_type = FF_THREAD_FRAME | FF_THREAD_SLICE;
 
@@ -60,6 +84,13 @@ Error FFVideoDecoder::open(const TrackInfo& track) {
     // If film_grain_synthesis_ is false, export raw params instead of applying.
     if (!film_grain_synthesis_) {
         codec_ctx_->export_side_data |= AV_CODEC_EXPORT_DATA_FILM_GRAIN;
+    }
+
+    if (track.dv_profile > 0) {
+        PY_LOG_INFO(TAG, "DV Profile %d: codec_parameters=%s, nb_coded_side_data=%d",
+                    track.dv_profile,
+                    track.codec_parameters ? "from demuxer" : "manual",
+                    codec_ctx_->nb_coded_side_data);
     }
 
     int ret = avcodec_open2(codec_ctx_, codec, nullptr);
@@ -225,6 +256,15 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     out.color_trc = av_frame->color_trc;
     out.color_range = av_frame->color_range;
 
+    // DV Profile 5: base layer is IPTPQc2 (NOT BT.2020 YCbCr).
+    // Set color_space to unspecified so the uniform builder routes to the
+    // IPTPQc2 shader path. Force PQ transfer function and full range.
+    if (track_info_.dv_profile == 5) {
+        out.color_space = 2;   // AVCOL_SPC_UNSPECIFIED → triggers IPTPQc2 in uniform builder
+        out.color_trc = 16;    // AVCOL_TRC_SMPTE2084 (PQ)
+        out.color_range = 2;   // AVCOL_RANGE_JPEG (full range for IPTPQc2)
+    }
+
     // PTS in microseconds
     if (av_frame->pts != AV_NOPTS_VALUE) {
         AVRational tb = codec_ctx_->time_base;
@@ -279,62 +319,155 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
     {
         AVFrameSideData* sd = av_frame_get_side_data(
             av_frame, AV_FRAME_DATA_DOVI_METADATA);
-        if (sd && sd->data) {
+        if (!sd && track_info_.dv_profile > 0) {
+            static bool warned = false;
+            if (!warned) {
+                warned = true;
+                PY_LOG_WARN(TAG, "DV Profile %d: no AV_FRAME_DATA_DOVI_METADATA in frame (RPU not available)",
+                            track_info_.dv_profile);
+            }
+        }
+        if (sd) {
             auto* dovi = reinterpret_cast<const AVDOVIMetadata*>(sd->data);
-            const AVDOVIDataMapping* mapping = av_dovi_get_mapping(dovi);
-            const AVDOVIColorMetadata* color = av_dovi_get_color(dovi);
-            const AVDOVIRpuDataHeader* header = av_dovi_get_header(dovi);
+            auto* header = av_dovi_get_header(dovi);
+            auto* mapping = av_dovi_get_mapping(dovi);
+            auto* color = av_dovi_get_color(dovi);
 
-            if (mapping && color && header) {
-                out.dovi.present = true;
-                out.dovi.source_max_pq = static_cast<float>(color->source_max_pq) / 4095.0f;
-                out.dovi.source_min_pq = static_cast<float>(color->source_min_pq) / 4095.0f;
-
-                float coef_scale = 1.0f / static_cast<float>(1 << header->coef_log2_denom);
-
-                // Extract reshaping curves per component
-                for (int c = 0; c < 3; c++) {
-                    const AVDOVIReshapingCurve& src = mapping->curves[c];
-                    auto& dst = out.dovi.curves[c];
-                    dst.num_pivots = src.num_pivots;
-                    for (int i = 0; i < src.num_pivots && i < 9; i++) {
-                        dst.pivots[i] = static_cast<float>(src.pivots[i]) / 4095.0f;
-                    }
-                    for (int i = 0; i < src.num_pivots - 1 && i < 8; i++) {
-                        if (src.mapping_idc[i] == AV_DOVI_MAPPING_POLYNOMIAL) {
-                            dst.poly_order[i] = src.poly_order[i];
-                            for (int j = 0; j <= src.poly_order[i] && j < 3; j++) {
-                                dst.poly_coef[i][j] =
-                                    static_cast<float>(src.poly_coef[i][j]) * coef_scale;
-                            }
-                        }
-                    }
+            // Color matrices: ycc_to_rgb and rgb_to_lms
+            out.dovi_color.present = true;
+            static bool logged = false;
+            if (!logged) {
+                PY_LOG_INFO(TAG, "DV RPU: ycc_to_rgb[0..2] = %.4f, %.4f, %.4f  offset = %.4f, %.4f, %.4f",
+                            av_q2d(color->ycc_to_rgb_matrix[0]), av_q2d(color->ycc_to_rgb_matrix[1]),
+                            av_q2d(color->ycc_to_rgb_matrix[2]),
+                            av_q2d(color->ycc_to_rgb_offset[0]), av_q2d(color->ycc_to_rgb_offset[1]),
+                            av_q2d(color->ycc_to_rgb_offset[2]));
+                const AVDOVIDmData* l1_blk = av_dovi_find_level(dovi, 1);
+                if (l1_blk) {
+                    PY_LOG_INFO(TAG, "DV RPU L1: min=%d max=%d avg=%d",
+                                l1_blk->l1.min_pq, l1_blk->l1.max_pq, l1_blk->l1.avg_pq);
                 }
+                PY_LOG_INFO(TAG, "DV RPU: coef_log2_denom=%d, bl_bit_depth=%d, reshaping pivots: Y=%d Cb=%d Cr=%d",
+                            header->coef_log2_denom, header->bl_bit_depth,
+                            mapping->curves[0].num_pivots, mapping->curves[1].num_pivots,
+                            mapping->curves[2].num_pivots);
+                logged = true;
+            }
+            for (int i = 0; i < 9; i++) {
+                out.dovi_color.ycc_to_rgb_matrix[i] =
+                    static_cast<float>(av_q2d(color->ycc_to_rgb_matrix[i]));
+                out.dovi_color.rgb_to_lms_matrix[i] =
+                    static_cast<float>(av_q2d(color->rgb_to_lms_matrix[i]));
+            }
+            for (int i = 0; i < 3; i++) {
+                out.dovi_color.ycc_to_rgb_offset[i] =
+                    static_cast<float>(av_q2d(color->ycc_to_rgb_offset[i]));
+            }
 
-                // DM Level 1: per-frame brightness
-                AVDOVIDmData* l1 = av_dovi_find_level(dovi, 1);
-                if (l1) {
-                    out.dovi.min_pq = static_cast<float>(l1->l1.min_pq) / 4095.0f;
-                    out.dovi.max_pq = static_cast<float>(l1->l1.max_pq) / 4095.0f;
-                    out.dovi.avg_pq = static_cast<float>(l1->l1.avg_pq) / 4095.0f;
-                }
-
-                // DM Level 2: trim for target display
-                // L2 trim values use 2048 as unity/zero point:
-                //   slope:           2048 = 1.0 (identity)
-                //   offset:          2048 = 0.0 (no offset)
-                //   power:           2048 = 1.0 (identity)
-                //   chroma_weight:   2048 = 1.0 (identity)
-                //   saturation_gain: 2048 = 1.0 (identity)
-                AVDOVIDmData* l2 = av_dovi_find_level(dovi, 2);
-                if (l2) {
-                    out.dovi.trim_slope = static_cast<float>(l2->l2.trim_slope) / 2048.0f;
-                    out.dovi.trim_offset = (static_cast<float>(l2->l2.trim_offset) - 2048.0f) / 2048.0f;
-                    out.dovi.trim_power = static_cast<float>(l2->l2.trim_power) / 2048.0f;
-                    out.dovi.trim_chroma_weight = static_cast<float>(l2->l2.trim_chroma_weight) / 2048.0f;
-                    out.dovi.trim_saturation_gain = static_cast<float>(l2->l2.trim_saturation_gain) / 2048.0f;
+            // Compose: HPE LMS-to-BT.2020 * rgb_to_lms (matching libplacebo).
+            // The RPU's rgb_to_lms converts the reshaped signal into HPE LMS space.
+            // The hardcoded HPE matrix converts HPE LMS to BT.2020 linear RGB.
+            // Composing them gives a single matrix for the linear-light step.
+            {
+                // Hardcoded HPE D65 LMS → BT.2020 RGB (from libplacebo dovi_lms2rgb)
+                static const float hpe[9] = {
+                     3.06441879f, -2.16597676f,  0.10155818f,
+                    -0.65612108f,  1.78554118f, -0.12943749f,
+                     0.01736321f, -0.04725154f,  1.03004253f,
+                };
+                const float* B = out.dovi_color.rgb_to_lms_matrix; // row-major
+                float* C = out.dovi_color.lms_to_rgb_matrix;       // result: HPE * B
+                // Row-major 3x3 multiply: C = hpe * B
+                for (int r = 0; r < 3; r++) {
+                    for (int c = 0; c < 3; c++) {
+                        C[r * 3 + c] = hpe[r * 3 + 0] * B[0 * 3 + c]
+                                      + hpe[r * 3 + 1] * B[1 * 3 + c]
+                                      + hpe[r * 3 + 2] * B[2 * 3 + c];
+                    }
                 }
             }
+
+            // L1 metadata: per-scene brightness (min/max/avg PQ)
+            const AVDOVIDmData* l1_block = av_dovi_find_level(dovi, 1);
+            if (l1_block) {
+                out.dovi_color.has_l1 = true;
+                out.dovi_color.l1_min_pq = l1_block->l1.min_pq;
+                out.dovi_color.l1_max_pq = l1_block->l1.max_pq;
+                out.dovi_color.l1_avg_pq = l1_block->l1.avg_pq;
+            }
+
+            // L2 metadata: display trim (slope/offset/power/chroma/saturation)
+            const AVDOVIDmData* l2_block = av_dovi_find_level(dovi, 2);
+            if (l2_block) {
+                out.dovi_color.has_l2 = true;
+                out.dovi_color.l2_trim_slope = l2_block->l2.trim_slope;
+                out.dovi_color.l2_trim_offset = l2_block->l2.trim_offset;
+                out.dovi_color.l2_trim_power = l2_block->l2.trim_power;
+                out.dovi_color.l2_trim_chroma_weight = l2_block->l2.trim_chroma_weight;
+                out.dovi_color.l2_trim_saturation_gain = l2_block->l2.trim_saturation_gain;
+                out.dovi_color.l2_ms_weight = l2_block->l2.ms_weight;
+            }
+
+            // Reshaping curves: evaluate into 1024-entry LUTs per component
+            float coef_scale = 1.0f / static_cast<float>(1 << header->coef_log2_denom);
+            bool any_reshaping = false;
+            for (int c = 0; c < 3; c++) {
+                const auto& curve = mapping->curves[c];
+                if (curve.num_pivots < 2) continue;
+                any_reshaping = true;
+
+                // Pivot values are in [0, (1<<bl_bit_depth)-1].
+                float bl_max = static_cast<float>((1 << header->bl_bit_depth) - 1);
+
+                for (int s = 0; s < 1024; s++) {
+                    float x = static_cast<float>(s) / 1023.0f; // input [0,1]
+                    float x_raw = x * bl_max;                   // back to raw range
+
+                    // Find the piece this input falls into
+                    int piece = static_cast<int>(curve.num_pivots) - 2;
+                    for (int p = 0; p < static_cast<int>(curve.num_pivots) - 1; p++) {
+                        if (x_raw < static_cast<float>(curve.pivots[p + 1])) {
+                            piece = p;
+                            break;
+                        }
+                    }
+
+                    float y;
+                    if (curve.mapping_idc[piece] == AV_DOVI_MAPPING_POLYNOMIAL) {
+                        float c0 = static_cast<float>(curve.poly_coef[piece][0]) * coef_scale;
+                        float c1 = static_cast<float>(curve.poly_coef[piece][1]) * coef_scale;
+                        float c2 = (curve.poly_order[piece] >= 2)
+                            ? static_cast<float>(curve.poly_coef[piece][2]) * coef_scale
+                            : 0.0f;
+                        y = c0 + c1 * x + c2 * x * x;
+                    } else {
+                        // MMR: Multi-variate Model with Residuals.
+                        // Full formula uses all 3 input channels; since this is a 1D LUT
+                        // indexed by this component's value, use the diagonal approximation
+                        // (s0 = s1 = s2 = x) which captures cross-term powers of x.
+                        float R = static_cast<float>(curve.mmr_constant[piece]) * coef_scale;
+                        int order = std::min(static_cast<int>(curve.mmr_order[piece]), 3);
+                        float sp = 1.0f; // x^(o+1) accumulator
+                        for (int o = 0; o < order; o++) {
+                            sp *= x;
+                            // 7 coefficients per order: s0, s1, s2, s0*s1, s0*s2, s1*s2, s0*s1*s2
+                            // With diagonal approximation: s0=s1=s2=x, so s0^k = x^k, s0*s1 = x^2, etc.
+                            float sp2 = sp * sp;    // x^(2*(o+1))
+                            float sp3 = sp2 * sp;   // x^(3*(o+1))
+                            R += static_cast<float>(curve.mmr_coef[piece][o][0]) * coef_scale * sp;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][1]) * coef_scale * sp;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][2]) * coef_scale * sp;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][3]) * coef_scale * sp2;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][4]) * coef_scale * sp2;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][5]) * coef_scale * sp2;
+                            R += static_cast<float>(curve.mmr_coef[piece][o][6]) * coef_scale * sp3;
+                        }
+                        y = R;
+                    }
+                    out.dovi_color.reshape_lut[c][s] = std::clamp(y, 0.0f, 1.0f);
+                }
+            }
+            out.dovi_color.has_reshaping = any_reshaping;
         }
     }
 
@@ -482,19 +615,55 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
         sws_src_fmt_ = src_fmt;
         sws_dst_fmt_ = dst_fmt;
 
-        // Set correct color space for the scaler to avoid wrong chroma coefficients
+        // Set correct color space for the scaler to avoid wrong chroma coefficients.
+        // For DV Profile 5 (IPTPQc2), the data is NOT BT.2020 YCbCr — it's ICtCp.
+        // Use full-range identity to pass through chroma values without conversion.
         if (sws_ctx_) {
-            int cs = (av_frame->colorspace == AVCOL_SPC_BT2020_NCL ||
+            int cs;
+            int full_range;
+            if (track_info_.dv_profile == 5) {
+                // IPTPQc2: pass through chroma unchanged
+                cs = SWS_CS_DEFAULT;
+                full_range = 1;
+            } else {
+                cs = (av_frame->colorspace == AVCOL_SPC_BT2020_NCL ||
                       av_frame->colorspace == AVCOL_SPC_BT2020_CL)
-                ? SWS_CS_BT2020 : SWS_CS_ITU709;
+                    ? SWS_CS_BT2020 : SWS_CS_ITU709;
+                full_range = (av_frame->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
+            }
             const int* coefs = sws_getCoefficients(cs);
-            int full_range = (av_frame->color_range == AVCOL_RANGE_JPEG) ? 1 : 0;
             sws_setColorspaceDetails(sws_ctx_, coefs, full_range,
                                      coefs, full_range, 0, 1 << 16, 1 << 16);
         }
     }
 
-    if (sws_ctx_) {
+    // DV Profile 5: bypass swscale. swscale applies color matrix coefficients
+    // even for planar→biplanar, corrupting IPTPQc2 chroma values.
+    if (track_info_.dv_profile == 5 &&
+        av_frame->format == AV_PIX_FMT_YUV420P10LE) {
+        int w = av_frame->width;
+        int h = av_frame->height;
+        for (int row = 0; row < h; row++) {
+            auto* dst_y = reinterpret_cast<uint16_t*>(dst_data[0] + row * dst_linesize[0]);
+            auto* src_y = reinterpret_cast<const uint16_t*>(
+                av_frame->data[0] + row * av_frame->linesize[0]);
+            for (int col = 0; col < w; col++) {
+                dst_y[col] = static_cast<uint16_t>(src_y[col] << 6);
+            }
+        }
+        int hw = w / 2, hh = h / 2;
+        for (int row = 0; row < hh; row++) {
+            auto* dst = reinterpret_cast<uint16_t*>(dst_data[1] + row * dst_linesize[1]);
+            auto* src_u = reinterpret_cast<const uint16_t*>(
+                av_frame->data[1] + row * av_frame->linesize[1]);
+            auto* src_v = reinterpret_cast<const uint16_t*>(
+                av_frame->data[2] + row * av_frame->linesize[2]);
+            for (int col = 0; col < hw; col++) {
+                dst[col * 2]     = static_cast<uint16_t>(src_u[col] << 6);
+                dst[col * 2 + 1] = static_cast<uint16_t>(src_v[col] << 6);
+            }
+        }
+    } else if (sws_ctx_) {
         int sws_ret = sws_scale(sws_ctx_, av_frame->data, av_frame->linesize, 0, av_frame->height,
                                 dst_data, dst_linesize);
         if (sws_ret < 0) {

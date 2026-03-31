@@ -9,24 +9,100 @@ struct HDRUniformBuilder {
     ) -> VideoUniforms {
         var uniforms = VideoUniforms()
         let colorTrc = PlayerBridge.frameColorTrc(framePtr)
-        let colorMatrix = PlayerBridge.frameColorSpace(framePtr) // AVCOL_SPC_* (YCbCr matrix)
+        var colorMatrix = PlayerBridge.frameColorSpace(framePtr) // AVCOL_SPC_* (YCbCr matrix)
         let colorRange = PlayerBridge.frameColorRange(framePtr)
+        let hdrType = PlayerBridge.frameHDRType(framePtr) // 0=SDR,1=HDR10,2=HDR10+,3=HLG,4=DV
 
-        // Transfer function: AVCOL_TRC_SMPTE2084 = 16 (PQ), AVCOL_TRC_ARIB_STD_B67 = 18 (HLG)
-        if colorTrc == 16 {
-            uniforms.transferFunc = 1 // PQ
-        } else if colorTrc == 18 {
-            uniforms.transferFunc = 2 // HLG
-        }
+        // DV content: the SPS/VUI often signals color info as "unspecified".
+        // Force correct color space based on HDR type.
+        if hdrType == 4 { // Dolby Vision
+            // If color matrix is unspecified, the base layer is IPTPQc2 (Profile 5).
+            if colorMatrix == 0 || colorMatrix == 2 {
+                uniforms.colorSpace = 3  // ICtCp / IPTPQc2
+                uniforms.transferFunc = 3 // PQ + ICtCp (shader checks this directly)
+            } else {
+                uniforms.colorSpace = 1  // BT.2020
+                uniforms.transferFunc = 1 // PQ
+            }
 
-        // YCbCr color matrix selection (AVCOL_SPC_*)
-        // BT.2020: AVCOL_SPC_BT2020_NCL = 9, AVCOL_SPC_BT2020_CL = 10
-        // BT.601:  AVCOL_SPC_BT470BG = 5, AVCOL_SPC_SMPTE170M = 6
-        // BT.709:  AVCOL_SPC_BT709 = 1 (default)
-        if colorMatrix == 9 || colorMatrix == 10 {
-            uniforms.colorSpace = 1  // BT.2020
-        } else if colorMatrix == 5 || colorMatrix == 6 {
-            uniforms.colorSpace = 2  // BT.601
+            // Populate DV color matrices from RPU metadata
+            if PlayerBridge.frameHasDoviColor(framePtr) {
+                uniforms.doviPresent = 1
+                struct LogOnce { nonisolated(unsafe) static var done = false }
+                if !LogOnce.done {
+                    LogOnce.done = true
+                    PYLog.info("DV RPU active: doviPresent=1, using per-frame RPU matrices", tag: "HDR")
+                }
+                if let ycc = PlayerBridge.frameDoviYccToRgb(framePtr) {
+                    withUnsafeMutablePointer(to: &uniforms.doviYccToRgb) { ptr in
+                        ptr.withMemoryRebound(to: Float.self, capacity: 9) { fp in
+                            for i in 0..<9 { fp[i] = ycc.matrix[i] }
+                        }
+                    }
+                    withUnsafeMutablePointer(to: &uniforms.doviYccOffset) { ptr in
+                        ptr.withMemoryRebound(to: Float.self, capacity: 3) { fp in
+                            for i in 0..<3 { fp[i] = ycc.offset[i] }
+                        }
+                    }
+                }
+                if let lms = PlayerBridge.frameDoviRgbToLms(framePtr) {
+                    withUnsafeMutablePointer(to: &uniforms.doviRgbToLms) { ptr in
+                        ptr.withMemoryRebound(to: Float.self, capacity: 9) { fp in
+                            for i in 0..<9 { fp[i] = lms[i] }
+                        }
+                    }
+                }
+                if let inv = PlayerBridge.frameDoviLmsToRgb(framePtr) {
+                    withUnsafeMutablePointer(to: &uniforms.doviLmsToRgb) { ptr in
+                        ptr.withMemoryRebound(to: Float.self, capacity: 9) { fp in
+                            for i in 0..<9 { fp[i] = inv[i] }
+                        }
+                    }
+                }
+
+                // L1 per-scene brightness
+                if let l1 = PlayerBridge.frameDoviL1(framePtr) {
+                    uniforms.doviHasL1 = 1
+                    uniforms.doviL1MinPQ = Float(l1.minPQ) / 4095.0
+                    uniforms.doviL1MaxPQ = Float(l1.maxPQ) / 4095.0
+                    uniforms.doviL1AvgPQ = Float(l1.avgPQ) / 4095.0
+                }
+
+                // L2 display trim
+                if let l2 = PlayerBridge.frameDoviL2(framePtr) {
+                    uniforms.doviHasL2 = 1
+                    uniforms.doviL2Slope = Float(l2.slope) / 2048.0
+                    uniforms.doviL2Offset = Float(l2.offset) / 2048.0
+                    uniforms.doviL2Power = Float(l2.power) / 2048.0
+                    uniforms.doviL2ChromaWeight = Float(l2.chromaWeight) / 4095.0
+                    uniforms.doviL2SatGain = Float(l2.saturationGain) / 2048.0
+                }
+
+                // Reshaping flag
+                if PlayerBridge.frameDoviHasReshaping(framePtr) {
+                    uniforms.doviHasReshaping = 1
+                }
+            } else {
+                struct FallbackLog { nonisolated(unsafe) static var done = false }
+                if !FallbackLog.done {
+                    FallbackLog.done = true
+                    PYLog.warning("DV Profile 5: no RPU matrices available, using hardcoded fallback", tag: "HDR")
+                }
+            }
+        } else {
+            // Transfer function: AVCOL_TRC_SMPTE2084 = 16 (PQ), AVCOL_TRC_ARIB_STD_B67 = 18 (HLG)
+            if colorTrc == 16 {
+                uniforms.transferFunc = 1 // PQ
+            } else if colorTrc == 18 {
+                uniforms.transferFunc = 2 // HLG
+            }
+
+            // YCbCr color matrix selection (AVCOL_SPC_*)
+            if colorMatrix == 9 || colorMatrix == 10 {
+                uniforms.colorSpace = 1  // BT.2020
+            } else if colorMatrix == 5 || colorMatrix == 6 {
+                uniforms.colorSpace = 2  // BT.601
+            }
         }
 
         // AVCOL_RANGE_JPEG = 2 -> full range
@@ -77,69 +153,21 @@ struct HDRUniformBuilder {
         return uniforms
     }
 
-    /// Populate DoviUniforms from frame's DV RPU metadata.
-    /// Returns default (present=0) if no DV metadata is available.
-    static func buildDoviUniforms(framePtr: UnsafeMutableRawPointer) -> DoviUniforms {
-        var doviUniforms = DoviUniforms()
-        guard let dovi = PlayerBridge.frameGetDovi(framePtr) else {
-            return doviUniforms
-        }
-
-        doviUniforms.present = 1
-        doviUniforms.minPQ = dovi.min_pq
-        doviUniforms.maxPQ = dovi.max_pq
-        doviUniforms.avgPQ = dovi.avg_pq
-        doviUniforms.sourceMaxPQ = dovi.source_max_pq
-        doviUniforms.sourceMinPQ = dovi.source_min_pq
-        doviUniforms.trimSlope = dovi.trim_slope
-        doviUniforms.trimOffset = dovi.trim_offset
-        doviUniforms.trimPower = dovi.trim_power
-        doviUniforms.trimChromaWeight = dovi.trim_chroma_weight
-        doviUniforms.trimSaturationGain = dovi.trim_saturation_gain
-
-        // Copy reshaping curves from C struct tuples into DoviUniforms.
-        // C arrays are imported as tuples in Swift; use withMemoryRebound
-        // to bulk-copy the flat memory layout.
-        withUnsafePointer(to: dovi.curves) { srcPtr in
-            srcPtr.withMemoryRebound(to: PYDoviCurve.self, capacity: 3) { curves in
-                for c in 0..<3 {
-                    withUnsafeMutablePointer(to: &doviUniforms.numPivots) { p in
-                        p.withMemoryRebound(to: Int32.self, capacity: 3) { dst in
-                            dst[c] = curves[c].num_pivots
-                        }
-                    }
-                    withUnsafePointer(to: curves[c].pivots) { src in
-                        src.withMemoryRebound(to: Float.self, capacity: 9) { srcF in
-                            withUnsafeMutablePointer(to: &doviUniforms.pivots) { dst in
-                                dst.withMemoryRebound(to: Float.self, capacity: 27) { dstF in
-                                    for i in 0..<9 { dstF[c * 9 + i] = srcF[i] }
-                                }
-                            }
-                        }
-                    }
-                    withUnsafePointer(to: curves[c].poly_order) { src in
-                        src.withMemoryRebound(to: Int32.self, capacity: 8) { srcI in
-                            withUnsafeMutablePointer(to: &doviUniforms.polyOrder) { dst in
-                                dst.withMemoryRebound(to: Int32.self, capacity: 24) { dstI in
-                                    for i in 0..<8 { dstI[c * 8 + i] = srcI[i] }
-                                }
-                            }
-                        }
-                    }
-                    withUnsafePointer(to: curves[c].poly_coef) { src in
-                        src.withMemoryRebound(to: Float.self, capacity: 24) { srcF in
-                            withUnsafeMutablePointer(to: &doviUniforms.polyCoef) { dst in
-                                dst.withMemoryRebound(to: Float.self, capacity: 72) { dstF in
-                                    for i in 0..<24 { dstF[c * 24 + i] = srcF[i] }
-                                }
-                            }
-                        }
-                    }
-                }
+    /// Returns the DV reshaping LUT data (3072 floats: 3 components x 1024 entries)
+    /// if reshaping is active for this frame, nil otherwise.
+    static func buildDoviReshapeLUT(framePtr: UnsafeMutableRawPointer) -> [Float]? {
+        guard PlayerBridge.frameDoviHasReshaping(framePtr) else { return nil }
+        var lut = [Float](repeating: 0, count: 3072)
+        for c: Int32 in 0..<3 {
+            guard let componentLUT = PlayerBridge.frameDoviReshapeLUT(framePtr, component: c) else {
+                return nil
+            }
+            let offset = Int(c) * 1024
+            for i in 0..<1024 {
+                lut[offset + i] = componentLUT[i]
             }
         }
-
-        return doviUniforms
+        return lut
     }
 
     /// Determine the CAEDRMetadata for a given transfer function and luminance.
@@ -149,8 +177,8 @@ struct HDRUniformBuilder {
         maxLuminance: Float,
         sdrWhite: Float
     ) -> CAEDRMetadata? {
-        if transferFunc == 1 {
-            // PQ (HDR10/HDR10+/DV)
+        if transferFunc == 1 || transferFunc == 3 {
+            // PQ (HDR10/HDR10+/DV Profile 5 IPTPQc2)
             let maxNits = maxLuminance > 0 ? maxLuminance : 1000.0
             return CAEDRMetadata.hdr10(
                 minLuminance: 0.0001,

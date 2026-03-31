@@ -32,8 +32,13 @@ struct PlayerView: View {
     var body: some View {
         ZStack {
             // Video layer
-            MetalPlayerView(playerBridge: viewModel.playerBridge, transport: viewModel.transport)
-                .ignoresSafeArea()
+            if viewModel.isDolbyVision {
+                DVDisplayLayerView(playerBridge: viewModel.playerBridge)
+                    .ignoresSafeArea()
+            } else {
+                MetalPlayerView(playerBridge: viewModel.playerBridge, transport: viewModel.transport)
+                    .ignoresSafeArea()
+            }
 
             // ── Display-link tick + subtitle ──
             // Lightweight TimelineView: only runs tick() and subtitle overlay.

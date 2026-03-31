@@ -208,21 +208,19 @@ typedef struct {
     int color_space;
     int transfer_func;
 
-    // Dolby Vision
+    // Dolby Vision (stream-level)
     uint8_t dv_profile;
     uint8_t dv_level;
     uint8_t dv_bl_compatibility_id;
-    bool dv_rpu_present;
-    float dv_min_pq;
-    float dv_max_pq;
-    float dv_avg_pq;
-    float dv_source_min_pq;
-    float dv_source_max_pq;
-    float dv_trim_slope;
-    float dv_trim_offset;
-    float dv_trim_power;
-    float dv_trim_chroma_weight;
-    float dv_trim_saturation_gain;
+    bool dv_asbdl_active;
+
+    // DV per-frame metadata
+    bool dv_has_reshaping;
+    bool dv_has_l1;
+    bool dv_has_l2;
+    uint16_t dv_l1_min_pq;
+    uint16_t dv_l1_max_pq;
+    uint16_t dv_l1_avg_pq;
 } PYPlaybackStats;
 
 PYPlaybackStats py_player_get_playback_stats(PYPlayer* p);
@@ -231,6 +229,13 @@ PYPlaybackStats py_player_get_playback_stats(PYPlayer* p);
 // Ownership: returned string is owned by the player and valid until
 // the next call to py_player_open() or py_player_destroy().
 const char* py_player_get_media_info_json(PYPlayer* p);
+
+// ---- Dolby Vision output (ASBDL-based rendering) ----
+// Returns true if the currently open file uses ASBDL output (DV Profile 5/8/10).
+bool        py_player_is_dolby_vision(PYPlayer* p);
+// Set the AVSampleBufferDisplayLayer for DV rendering (pass as void*).
+// Must be called after py_player_open() and before py_player_play().
+void        py_player_set_dv_display_layer(PYPlayer* p, void* layer);
 
 // ---- Video frame acquisition (called from display-link / render thread) ----
 // Returns an opaque frame handle; NULL if no frame ready.
@@ -267,24 +272,22 @@ int         py_player_frame_hdr10plus_num_anchors(void* frame);
 int         py_player_frame_hdr10plus_anchors(void* frame, float* anchors, int max_count);
 void        py_player_frame_hdr10plus_maxscl(void* frame, float* rgb3);
 
-// ---- Dolby Vision per-frame RPU metadata ----
-typedef struct {
-    int num_pivots;
-    float pivots[9];
-    int poly_order[8];
-    float poly_coef[8][3];
-} PYDoviCurve;
-
-typedef struct {
-    PYDoviCurve curves[3];  // Y, Cb, Cr
-    float min_pq, max_pq, avg_pq;
-    float source_max_pq, source_min_pq;
-    float trim_slope, trim_offset, trim_power;
-    float trim_chroma_weight, trim_saturation_gain;
-} PYDoviMetadata;
-
-bool        py_player_frame_has_dovi(void* frame);
-bool        py_player_frame_get_dovi(void* frame, PYDoviMetadata* out);
+// ---- Dolby Vision per-frame color metadata ----
+bool        py_player_frame_has_dovi_color(void* frame);
+// Fills 9 floats (3x3 row-major matrix) + 3 offsets
+bool        py_player_frame_dovi_ycc_to_rgb(void* frame, float* matrix9, float* offset3);
+bool        py_player_frame_dovi_rgb_to_lms(void* frame, float* matrix9);
+// Pre-inverted LMS-to-RGB matrix (avoids per-pixel inversion in shader)
+bool        py_player_frame_dovi_lms_to_rgb(void* frame, float* matrix9);
+// L1 per-scene brightness metadata (PQ domain, 12-bit)
+bool        py_player_frame_dovi_l1(void* frame, uint16_t* min_pq, uint16_t* max_pq, uint16_t* avg_pq);
+// L2 display trim metadata
+bool        py_player_frame_dovi_l2(void* frame, uint16_t* slope, uint16_t* offset,
+                                     uint16_t* power, uint16_t* chroma_weight,
+                                     uint16_t* saturation_gain, int16_t* ms_weight);
+// Pre-computed reshaping LUT (1024 float entries for the given component 0=Y, 1=Cb, 2=Cr)
+bool        py_player_frame_dovi_has_reshaping(void* frame);
+bool        py_player_frame_dovi_reshape_lut(void* frame, int component, float* lut1024);
 
 // ---- Subtitle ----
 typedef struct {

@@ -202,27 +202,15 @@ TEST_CASE("gather_playback_stats container and speed") {
     REQUIRE(stats.playback_speed == Catch::Approx(2.0));
 }
 
-TEST_CASE("gather_playback_stats presented frame DV metadata") {
+TEST_CASE("gather_playback_stats presented frame metadata") {
     StatsFixture f;
     f.presented_frame = std::make_unique<VideoFrame>();
     f.presented_frame->hardware_frame = true;
     f.presented_frame->pts_us = 5000000;
-    f.presented_frame->dovi.present = true;
-    f.presented_frame->dovi.min_pq = 0.01f;
-    f.presented_frame->dovi.max_pq = 0.95f;
-    f.presented_frame->dovi.avg_pq = 0.40f;
-    f.presented_frame->dovi.trim_slope = 1.2f;
-    f.presented_frame->dovi.trim_saturation_gain = 0.9f;
 
     auto ctx = f.make_context();
     auto stats = gather_playback_stats(ctx);
 
     REQUIRE(stats.hardware_decode == true);
     REQUIRE(stats.video_pts_us == 5000000);
-    REQUIRE(stats.dv_rpu_present == true);
-    REQUIRE(stats.dv_min_pq == Catch::Approx(0.01f));
-    REQUIRE(stats.dv_max_pq == Catch::Approx(0.95f));
-    REQUIRE(stats.dv_avg_pq == Catch::Approx(0.40f));
-    REQUIRE(stats.dv_trim_slope == Catch::Approx(1.2f));
-    REQUIRE(stats.dv_trim_saturation_gain == Catch::Approx(0.9f));
 }

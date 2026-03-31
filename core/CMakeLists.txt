@@ -38,7 +38,6 @@ set(CORE_SOURCES
     src/demuxer/ff_demuxer.cpp
     src/video/video_decoder_factory.cpp
     src/video/ff_video_decoder.cpp
-    src/video/dv_seek_decoder.cpp
     src/video/deinterlace_filter.cpp
     src/audio/audio_decoder.cpp
     src/audio/audio_resampler.cpp
@@ -76,6 +75,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/ns_http_client.mm
+        platform/apple/dv_video_output.mm
     )
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")
         list(APPEND CORE_SOURCES platform/apple/smb_media_source.mm)
@@ -158,6 +158,7 @@ if(APPLE)
         platform/apple/spatial_audio_output.mm
         platform/apple/spatial_audio_detector.mm
         platform/apple/ns_http_client.mm
+        platform/apple/dv_video_output.mm
         PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
     )
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "tvOS")

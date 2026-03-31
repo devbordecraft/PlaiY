@@ -107,34 +107,42 @@ struct HDR10PlusMetadata {
     float maxscl[3] = {};
 };
 
-// Dolby Vision per-frame RPU metadata (Profile 8)
-struct DoviMetadata {
+// Dolby Vision per-frame color metadata (from RPU)
+struct DoviColorMetadata {
     bool present = false;
 
-    // Per-component polynomial reshaping curves
-    struct ReshapingCurve {
-        int num_pivots = 0;         // [2, 9]
-        float pivots[9] = {};       // normalized [0, 1]
-        int poly_order[8] = {};     // 1 or 2 per piece
-        float poly_coef[8][3] = {}; // c0, c1, c2 per piece
-    };
-    ReshapingCurve curves[3];       // Y, Cb, Cr
+    // YCC-to-RGB matrix (3x3, row-major): converts decoded YCbCr to
+    // an intermediate PQ-encoded signal BEFORE PQ linearization.
+    float ycc_to_rgb_matrix[9] = {};
+    float ycc_to_rgb_offset[3] = {};
 
-    // DM Level 1: per-frame brightness (PQ-normalized [0, 1])
-    float min_pq = 0.0f;
-    float max_pq = 0.0f;
-    float avg_pq = 0.0f;
+    // RGB-to-LMS matrix (3x3, row-major): converts PQ-linearized signal
+    // to LMS. The inverse of this yields BT.2020 linear RGB.
+    float rgb_to_lms_matrix[9] = {};
 
-    // DM Level 2: trim for target display
-    float trim_slope = 1.0f;
-    float trim_offset = 0.0f;
-    float trim_power = 1.0f;
-    float trim_chroma_weight = 1.0f;
-    float trim_saturation_gain = 1.0f;
+    // Pre-computed inverse of rgb_to_lms (LMS -> BT.2020 linear RGB).
+    // Computed on the CPU to avoid per-pixel matrix inversion in the shader.
+    float lms_to_rgb_matrix[9] = {};
 
-    // Source signal range (PQ-normalized)
-    float source_max_pq = 0.0f;
-    float source_min_pq = 0.0f;
+    // L1 per-scene brightness metadata (PQ domain, 12-bit [0, 4095])
+    bool has_l1 = false;
+    uint16_t l1_min_pq = 0;
+    uint16_t l1_max_pq = 4095;
+    uint16_t l1_avg_pq = 0;
+
+    // L2 display trim metadata
+    bool has_l2 = false;
+    uint16_t l2_trim_slope = 2048;      // neutral = 2048
+    uint16_t l2_trim_offset = 2048;     // neutral = 2048
+    uint16_t l2_trim_power = 2048;      // neutral = 2048
+    uint16_t l2_trim_chroma_weight = 0;
+    uint16_t l2_trim_saturation_gain = 2048;
+    int16_t l2_ms_weight = 0;
+
+    // Pre-computed reshaping LUTs (1024 entries per component: Y, Cb, Cr).
+    // Evaluated on the CPU from polynomial/MMR reshaping curves in the RPU.
+    bool has_reshaping = false;
+    float reshape_lut[3][1024] = {};
 };
 
 struct TrackInfo {
@@ -163,6 +171,7 @@ struct TrackInfo {
     uint8_t dv_profile = 0;
     uint8_t dv_level = 0;
     uint8_t dv_bl_signal_compatibility_id = 0;
+    std::vector<uint8_t> dv_config_raw;  // Raw DOVI configuration record bytes
 
     // Audio-specific
     int sample_rate = 0;
@@ -176,6 +185,11 @@ struct TrackInfo {
 
     // Codec extradata (needed for decoder init)
     std::vector<uint8_t> extradata;
+
+    // Opaque AVCodecParameters* — set by the demuxer, used by the decoder
+    // to properly initialize via avcodec_parameters_to_context (preserves
+    // coded_side_data for DV RPU threading). Caller must manage lifetime.
+    void* codec_parameters = nullptr;
 };
 
 struct MediaInfo {
@@ -212,6 +226,13 @@ struct Packet {
         return (pts / time_base_den) * 1000000LL * time_base_num
              + (pts % time_base_den) * 1000000LL * time_base_num / time_base_den;
     }
+
+    // Convert DTS to microseconds
+    int64_t dts_us() const {
+        if (dts < 0) return -1;
+        return (dts / time_base_den) * 1000000LL * time_base_num
+             + (dts % time_base_den) * 1000000LL * time_base_num / time_base_den;
+    }
 };
 
 // Wraps a decoded video frame
@@ -234,7 +255,7 @@ struct VideoFrame {
 
     // Per-frame dynamic HDR metadata
     HDR10PlusMetadata hdr10plus;
-    DoviMetadata dovi;
+    DoviColorMetadata dovi_color;
 
     // Software decoded frame: plane pointers and strides
     uint8_t* planes[4] = {};
@@ -346,21 +367,19 @@ struct PlaybackStats {
     int color_space = 0;
     int transfer_func = 0;
 
-    // Dolby Vision (only populated when hdr_type == 4)
+    // Dolby Vision (stream-level, populated when hdr_type == 4)
     uint8_t dv_profile = 0;
     uint8_t dv_level = 0;
     uint8_t dv_bl_compatibility_id = 0;
-    bool dv_rpu_present = false;       // current frame has RPU metadata
-    float dv_min_pq = 0.0f;           // L1 min brightness (PQ-normalized)
-    float dv_max_pq = 0.0f;           // L1 max brightness (PQ-normalized)
-    float dv_avg_pq = 0.0f;           // L1 avg brightness (PQ-normalized)
-    float dv_source_min_pq = 0.0f;    // source signal min
-    float dv_source_max_pq = 0.0f;    // source signal max
-    float dv_trim_slope = 0.0f;       // L2 trim slope
-    float dv_trim_offset = 0.0f;      // L2 trim offset
-    float dv_trim_power = 0.0f;       // L2 trim power
-    float dv_trim_chroma_weight = 0.0f;
-    float dv_trim_saturation_gain = 0.0f;
+    bool dv_asbdl_active = false;  // true when using System Compositor (ASBDL)
+
+    // DV per-frame metadata (populated from presented frame when Metal rendering)
+    bool dv_has_reshaping = false;
+    bool dv_has_l1 = false;
+    bool dv_has_l2 = false;
+    uint16_t dv_l1_min_pq = 0;
+    uint16_t dv_l1_max_pq = 0;
+    uint16_t dv_l1_avg_pq = 0;
 };
 
 // Media library item

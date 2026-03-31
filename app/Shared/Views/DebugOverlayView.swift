@@ -41,24 +41,22 @@ struct DebugOverlayView: View {
             if stats.hdr_type == 4 {
                 section("Dolby Vision") {
                     row("Profile", "P\(stats.dv_profile).\(stats.dv_level) (BL compat \(stats.dv_bl_compatibility_id))")
-                    row("RPU", stats.dv_rpu_present ? "Active" : "None")
-                    if stats.dv_rpu_present {
-                        row("L1 Min", String(format: "%.1f nits", pqToNits(stats.dv_min_pq)))
-                        row("L1 Max", String(format: "%.0f nits", pqToNits(stats.dv_max_pq)))
-                        row("L1 Avg", String(format: "%.1f nits", pqToNits(stats.dv_avg_pq)))
-                        row("Source", String(format: "%.2f–%.0f nits",
-                                             pqToNits(stats.dv_source_min_pq),
-                                             pqToNits(stats.dv_source_max_pq)))
-                        if stats.dv_trim_slope != 0 {
-                            row("L2 Trim", String(format: "S%.2f O%.2f P%.2f",
-                                                  stats.dv_trim_slope,
-                                                  stats.dv_trim_offset,
-                                                  stats.dv_trim_power))
-                            row("L2 Chroma", String(format: "W%.2f Sat%.2f",
-                                                    stats.dv_trim_chroma_weight,
-                                                    stats.dv_trim_saturation_gain))
-                        }
+                    if stats.dv_asbdl_active {
+                        row("Rendering", "System Compositor")
+                    } else {
+                        row("Rendering", stats.dv_has_reshaping ? "Metal (RPU)" : "Metal (no reshape)")
                     }
+                    row("Reshaping", stats.dv_has_reshaping ? "Active" : "None")
+                    if stats.dv_has_l1 {
+                        let minN = pqToNits(Float(stats.dv_l1_min_pq) / 4095.0)
+                        let maxN = pqToNits(Float(stats.dv_l1_max_pq) / 4095.0)
+                        let avgN = pqToNits(Float(stats.dv_l1_avg_pq) / 4095.0)
+                        row("L1 Min", String(format: "%.3f nits (PQ %d)", minN, stats.dv_l1_min_pq))
+                        row("L1 Max", String(format: "%.0f nits (PQ %d)", maxN, stats.dv_l1_max_pq))
+                        row("L1 Avg", String(format: "%.0f nits (PQ %d)", avgN, stats.dv_l1_avg_pq))
+                    }
+                    row("L2 Trim", stats.dv_has_l2 ? "Active" : "None")
+                    row("Decode", stats.hardware_decode ? "VT (HW)" : "FFmpeg (SW)")
                 }
             }
 

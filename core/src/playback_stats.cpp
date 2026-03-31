@@ -58,20 +58,20 @@ PlaybackStats gather_playback_stats(const StatsContext& ctx) {
         if (ctx.presented_frame) {
             s.hardware_decode = ctx.presented_frame->hardware_frame;
             s.video_pts_us = ctx.presented_frame->pts_us;
+            // Override track-level color info with actual frame values
+            // (VT decoder may override these for DV Profile 5)
+            s.color_space = ctx.presented_frame->color_space;
+            s.transfer_func = ctx.presented_frame->color_trc;
 
-            const auto& dovi = ctx.presented_frame->dovi;
-            s.dv_rpu_present = dovi.present;
-            if (dovi.present) {
-                s.dv_min_pq = dovi.min_pq;
-                s.dv_max_pq = dovi.max_pq;
-                s.dv_avg_pq = dovi.avg_pq;
-                s.dv_source_min_pq = dovi.source_min_pq;
-                s.dv_source_max_pq = dovi.source_max_pq;
-                s.dv_trim_slope = dovi.trim_slope;
-                s.dv_trim_offset = dovi.trim_offset;
-                s.dv_trim_power = dovi.trim_power;
-                s.dv_trim_chroma_weight = dovi.trim_chroma_weight;
-                s.dv_trim_saturation_gain = dovi.trim_saturation_gain;
+            // DV per-frame metadata from presented frame
+            const auto& dovi = ctx.presented_frame->dovi_color;
+            s.dv_has_reshaping = dovi.has_reshaping;
+            s.dv_has_l1 = dovi.has_l1;
+            s.dv_has_l2 = dovi.has_l2;
+            if (dovi.has_l1) {
+                s.dv_l1_min_pq = dovi.l1_min_pq;
+                s.dv_l1_max_pq = dovi.l1_max_pq;
+                s.dv_l1_avg_pq = dovi.l1_avg_pq;
             }
         }
     }

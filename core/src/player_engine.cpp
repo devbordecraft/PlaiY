@@ -24,6 +24,9 @@
 #include "frame_presenter.h"
 #include "audio_pipeline.h"
 
+#ifdef __APPLE__
+#include "../platform/apple/dv_video_output.h"
+#endif
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -194,6 +197,15 @@ struct PlayerEngine::Impl {
 
     // For audio pipeline restart (live toggle / track change)
     std::atomic<bool> audio_restart_requested{false};
+
+    // Dolby Vision output (ASBDL-based, replaces decoder + frame queue for DV)
+#ifdef __APPLE__
+    std::unique_ptr<DVVideoOutput> dv_output;
+#endif
+    bool is_dv_output = false;
+    std::atomic<bool> dv_fallback_needed{false};
+
+    void dv_video_decode_loop();
 };
 
 PlayerEngine::PlayerEngine() : impl_(std::make_unique<Impl>()) {
@@ -232,12 +244,37 @@ Error PlayerEngine::open_file(const std::string& path) {
     impl_->active_audio_stream = impl_->media_info.best_audio_index;
     impl_->active_subtitle_stream = impl_->media_info.best_subtitle_index;
 
-    // Open video decoder
+    // Open video decoder (or DV output for Dolby Vision Profile 5/8/10)
     if (impl_->active_video_stream >= 0) {
         const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_video_stream)];
-        impl_->video_decoder = VideoDecoderFactory::create(track, impl_->hw_decode_pref);
-        if (!impl_->video_decoder) {
-            return {ErrorCode::DecoderInitFailed, "No video decoder available"};
+
+#ifdef __APPLE__
+        if (track.hdr_metadata.type == HDRType::DolbyVision &&
+            (track.dv_profile == 8 || track.dv_profile == 10)) {
+            // DV Profile 8/10: use AVSampleBufferDisplayLayer for decoding + display.
+            // ASBDL handles RPU reshaping, tone mapping, and color management.
+            // Profile 5 (IPTPQc2): ASBDL silently accepts but doesn't render on macOS —
+            // use FFmpeg + Metal with RPU metadata extraction instead.
+            // Profile 7: dual-layer, not supported — falls through to VT + Metal.
+            impl_->dv_output = std::make_unique<DVVideoOutput>();
+            Error dv_err = impl_->dv_output->open(track);
+            if (dv_err.ok()) {
+                impl_->is_dv_output = true;
+                PY_LOG_INFO(TAG, "DV Profile %d: using ASBDL output", track.dv_profile);
+            } else {
+                PY_LOG_WARN(TAG, "DV output failed: %s, falling back to decoder",
+                            dv_err.message.c_str());
+                impl_->dv_output.reset();
+                impl_->is_dv_output = false;
+            }
+        }
+#endif
+
+        if (!impl_->is_dv_output) {
+            impl_->video_decoder = VideoDecoderFactory::create(track, impl_->hw_decode_pref);
+            if (!impl_->video_decoder) {
+                return {ErrorCode::DecoderInitFailed, "No video decoder available"};
+            }
         }
         impl_->subtitle_manager->set_video_size(track.width, track.height);
     }
@@ -253,15 +290,17 @@ Error PlayerEngine::open_file(const std::string& path) {
         impl_->subtitle_manager->set_embedded_track(track);
     }
 
-    // Create frame presenter for A-V sync
-    impl_->frame_presenter = std::make_unique<FramePresenter>(
-        impl_->video_frame_queue,
-        impl_->clock,
-        impl_->presented_frame_mutex,
-        impl_->presented_frame,
-        impl_->waiting_for_first_frame,
-        impl_->frames_rendered,
-        impl_->frames_dropped);
+    // Create frame presenter for A-V sync (not needed for DV — ASBDL manages timing)
+    if (!impl_->is_dv_output) {
+        impl_->frame_presenter = std::make_unique<FramePresenter>(
+            impl_->video_frame_queue,
+            impl_->clock,
+            impl_->presented_frame_mutex,
+            impl_->presented_frame,
+            impl_->waiting_for_first_frame,
+            impl_->frames_rendered,
+            impl_->frames_dropped);
+    }
 
     impl_->set_state(PlaybackState::Ready);
     PY_LOG_INFO(TAG, "File opened: %s (%.1fs)",
@@ -297,6 +336,11 @@ void PlayerEngine::play() {
 
     impl_->clock.set_paused(false);
     if (impl_->audio_output) impl_->audio_output->start();
+#ifdef __APPLE__
+    if (impl_->is_dv_output && impl_->dv_output) {
+        impl_->dv_output->set_rate(impl_->playback_speed.load());
+    }
+#endif
     impl_->set_state(PlaybackState::Playing);
 }
 
@@ -305,6 +349,11 @@ void PlayerEngine::pause() {
 
     impl_->clock.set_paused(true);
     if (impl_->audio_output) impl_->audio_output->stop();
+#ifdef __APPLE__
+    if (impl_->is_dv_output && impl_->dv_output) {
+        impl_->dv_output->set_rate(0);
+    }
+#endif
     impl_->set_state(PlaybackState::Paused);
 }
 
@@ -314,10 +363,20 @@ void PlayerEngine::seek(int64_t timestamp_us) {
 
     // Freeze clock and hold audio until the video renderer presents its first
     // post-seek frame (prevents the clock from running ahead of video).
+    // For DV output, we don't freeze — ASBDL manages its own timing.
     // For audio-only files, just set the PTS without freezing.
     if (impl_->active_video_stream >= 0) {
-        impl_->waiting_for_first_frame.store(true);
-        impl_->clock.seek_to(timestamp_us);
+        if (impl_->is_dv_output) {
+#ifdef __APPLE__
+            if (impl_->dv_output) impl_->dv_output->set_time(timestamp_us);
+#endif
+            impl_->clock.seek_to(timestamp_us);
+            // Release first-frame gate immediately — ASBDL handles display timing
+            impl_->waiting_for_first_frame.store(false);
+        } else {
+            impl_->waiting_for_first_frame.store(true);
+            impl_->clock.seek_to(timestamp_us);
+        }
     } else {
         impl_->clock.set_audio_pts(timestamp_us);
     }
@@ -328,7 +387,7 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     // Flush queues
     impl_->video_packet_queue.flush();
     impl_->audio_packet_queue.flush();
-    impl_->video_frame_queue.flush();
+    if (!impl_->is_dv_output) impl_->video_frame_queue.flush();
 
     // Flush ring buffer and wake decode thread
     impl_->audio_pipeline->flush_ring(timestamp_us);
@@ -359,6 +418,14 @@ void PlayerEngine::stop() {
     impl_->audio_ring.release();
     impl_->subtitle_manager->close();
     impl_->demuxer->close();
+
+#ifdef __APPLE__
+    if (impl_->dv_output) {
+        impl_->dv_output->close();
+        impl_->dv_output.reset();
+    }
+    impl_->is_dv_output = false;
+#endif
 
     {
         std::lock_guard lock(impl_->presented_frame_mutex);
@@ -556,6 +623,20 @@ float PlayerEngine::volume() const {
     return impl_->volume;
 }
 
+void PlayerEngine::set_dv_display_layer(void* layer) {
+#ifdef __APPLE__
+    if (impl_->dv_output) {
+        impl_->dv_output->set_display_layer(layer);
+    }
+#else
+    (void)layer;
+#endif
+}
+
+bool PlayerEngine::is_dolby_vision() const {
+    return impl_->is_dv_output;
+}
+
 void PlayerEngine::set_playback_speed(double speed) {
     speed = std::max(0.25, std::min(4.0, speed));
 
@@ -575,6 +656,13 @@ void PlayerEngine::set_playback_speed(double speed) {
         impl_->audio_ring.reset();
     }
     impl_->audio_ring_not_full.notify_one();
+
+#ifdef __APPLE__
+    if (impl_->is_dv_output && impl_->dv_output &&
+        impl_->state.load() == PlaybackState::Playing) {
+        impl_->dv_output->set_rate(speed);
+    }
+#endif
 
     PY_LOG_INFO(TAG, "Playback speed set to %.2fx", speed);
 }
@@ -693,7 +781,9 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         .clock = impl_->clock,
         .playback_speed = impl_->playback_speed,
     };
-    return gather_playback_stats(ctx);
+    auto stats = gather_playback_stats(ctx);
+    stats.dv_asbdl_active = impl_->is_dv_output;
+    return stats;
 }
 
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
@@ -780,7 +870,101 @@ void PlayerEngine::Impl::demux_loop() {
     PY_LOG_INFO(TAG, "Demux thread ended");
 }
 
+void PlayerEngine::Impl::dv_video_decode_loop() {
+#ifdef __APPLE__
+    PY_LOG_INFO(TAG, "DV video output thread started");
+
+    // Wait for the display layer to be set from Swift before consuming packets.
+    // The layer is created asynchronously by SwiftUI after open() returns.
+    PY_LOG_INFO(TAG, "DV output: waiting for display layer...");
+    while (!dv_output->has_display_layer() && running.load(std::memory_order_relaxed)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (!running.load(std::memory_order_relaxed)) return;
+    PY_LOG_INFO(TAG, "DV output: display layer ready, starting packet feed");
+
+    bool first_packet = true;
+
+    while (running.load(std::memory_order_relaxed)) {
+        Packet pkt;
+        if (!video_packet_queue.pop(pkt)) break;
+
+        if (pkt.is_flush) {
+            dv_output->flush();
+            first_packet = true;
+            if (pkt.is_eof) {
+                PY_LOG_INFO(TAG, "DV output: end of file");
+                break;
+            }
+            continue;
+        }
+
+        if (pkt.data.empty()) continue;
+
+        // Wait until the display layer is ready for more data
+        int wait_count = 0;
+        while (!dv_output->is_ready() && running.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (++wait_count > 1000) {
+                PY_LOG_WARN(TAG, "DV output: layer not ready for >1s");
+                wait_count = 0;
+            }
+        }
+        if (!running.load(std::memory_order_relaxed)) break;
+
+        Error err = dv_output->submit_packet(pkt);
+        if (err) {
+            PY_LOG_WARN(TAG, "DV output submit failed: %s", err.message.c_str());
+        }
+
+        // Release first-frame gate after first successful packet submission
+        if (first_packet && err.ok()) {
+            first_packet = false;
+            waiting_for_first_frame.store(false, std::memory_order_release);
+
+            // Check ASBDL renderer status after a brief delay to detect
+            // silent failures (e.g., Profile 5 not supported by ASBDL).
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (!dv_output->is_ready()) {
+                PY_LOG_WARN(TAG, "DV ASBDL: renderer failed after first packet, requesting fallback");
+                dv_fallback_needed.store(true, std::memory_order_release);
+                break;
+            }
+        }
+    }
+
+    PY_LOG_INFO(TAG, "DV video output thread ended");
+#endif
+}
+
 void PlayerEngine::Impl::video_decode_loop() {
+    // DV content: route to ASBDL output loop instead
+    if (is_dv_output) {
+        dv_video_decode_loop();
+
+        // If ASBDL failed (e.g., Profile 5 unsupported), fall back to FFmpeg + Metal
+        if (dv_fallback_needed.load(std::memory_order_acquire)) {
+            PY_LOG_INFO(TAG, "DV ASBDL fallback: switching to FFmpeg + Metal");
+#ifdef __APPLE__
+            dv_output->close();
+            dv_output.reset();
+#endif
+            is_dv_output = false;
+            dv_fallback_needed.store(false, std::memory_order_release);
+
+            // Create FFmpeg decoder and restart
+            const auto& track = media_info.tracks[static_cast<size_t>(active_video_stream)];
+            video_decoder = VideoDecoderFactory::create(track, hw_decode_pref);
+            if (!video_decoder) {
+                PY_LOG_ERROR(TAG, "DV fallback: no decoder available");
+                return;
+            }
+            // Fall through to normal decode loop below
+        } else {
+            return;
+        }
+    }
+
     PY_LOG_INFO(TAG, "Video decode thread started");
 
     if (!video_decoder) return;
