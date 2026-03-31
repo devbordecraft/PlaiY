@@ -446,10 +446,6 @@ struct PlayerView: View {
         }
     }
 
-    private func formatTime(_ us: Int64) -> String {
-        TimeFormatting.display(us)
-    }
-
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
         guard !showSettings else { return }

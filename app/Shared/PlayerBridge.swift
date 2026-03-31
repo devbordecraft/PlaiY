@@ -51,132 +51,132 @@ final class PlayerBridge: @unchecked Sendable {
         py_player_set_dv_display_layer(handle, ptr)
     }
 
-    @inline(always) func play() {
+    func play() {
         py_player_play(handle)
     }
 
-    @inline(always) func pause() {
+    func pause() {
         py_player_pause(handle)
     }
 
-    @inline(always) func seek(to microseconds: Int64) {
+    func seek(to microseconds: Int64) {
         py_player_seek(handle, microseconds)
     }
 
-    @inline(always) func stop() {
+    func stop() {
         py_player_stop(handle)
     }
 
-    @inline(always) var state: Int32 {
+    var state: Int32 {
         py_player_get_state(handle)
     }
 
-    @inline(always) var position: Int64 {
+    var position: Int64 {
         py_player_get_position(handle)
     }
 
-    @inline(always) var duration: Int64 {
+    var duration: Int64 {
         py_player_get_duration(handle)
     }
 
-    @inline(always) var audioTrackCount: Int32 {
+    var audioTrackCount: Int32 {
         py_player_get_audio_track_count(handle)
     }
 
-    @inline(always) var subtitleTrackCount: Int32 {
+    var subtitleTrackCount: Int32 {
         py_player_get_subtitle_track_count(handle)
     }
 
-    @inline(always) func selectAudioTrack(_ index: Int32) {
+    func selectAudioTrack(_ index: Int32) {
         py_player_select_audio_track(handle, index)
     }
 
-    @inline(always) func selectSubtitleTrack(_ index: Int32) {
+    func selectSubtitleTrack(_ index: Int32) {
         py_player_select_subtitle_track(handle, index)
     }
 
-    @inline(always) var activeAudioStream: Int32 {
+    var activeAudioStream: Int32 {
         py_player_get_active_audio_stream(handle)
     }
 
-    @inline(always) var activeSubtitleStream: Int32 {
+    var activeSubtitleStream: Int32 {
         py_player_get_active_subtitle_stream(handle)
     }
 
-    @inline(always) func setHWDecodePref(_ pref: Int32) {
+    func setHWDecodePref(_ pref: Int32) {
         py_player_set_hw_decode_pref(handle, pref)
     }
 
-    @inline(always) func setSubtitleFontScale(_ scale: Double) {
+    func setSubtitleFontScale(_ scale: Double) {
         py_player_set_subtitle_font_scale(handle, scale)
     }
 
     // MARK: - Audio Filters
 
     // Equalizer
-    @inline(always) func setEQEnabled(_ enabled: Bool) { py_player_set_eq_enabled(handle, enabled) }
-    @inline(always) var isEQEnabled: Bool { py_player_is_eq_enabled(handle) }
-    @inline(always) func setEQBand(_ band: Int32, gain: Float) { py_player_set_eq_band(handle, band, gain) }
-    @inline(always) func eqBand(_ band: Int32) -> Float { py_player_get_eq_band(handle, band) }
-    @inline(always) func setEQPreset(_ preset: Int32) { py_player_set_eq_preset(handle, preset) }
-    @inline(always) var eqPreset: Int32 { py_player_get_eq_preset(handle) }
+    func setEQEnabled(_ enabled: Bool) { py_player_set_eq_enabled(handle, enabled) }
+    var isEQEnabled: Bool { py_player_is_eq_enabled(handle) }
+    func setEQBand(_ band: Int32, gain: Float) { py_player_set_eq_band(handle, band, gain) }
+    func eqBand(_ band: Int32) -> Float { py_player_get_eq_band(handle, band) }
+    func setEQPreset(_ preset: Int32) { py_player_set_eq_preset(handle, preset) }
+    var eqPreset: Int32 { py_player_get_eq_preset(handle) }
 
     // Compressor
-    @inline(always) func setCompressorEnabled(_ enabled: Bool) { py_player_set_compressor_enabled(handle, enabled) }
-    @inline(always) var isCompressorEnabled: Bool { py_player_is_compressor_enabled(handle) }
-    @inline(always) func setCompressorThreshold(_ db: Float) { py_player_set_compressor_threshold(handle, db) }
-    @inline(always) func setCompressorRatio(_ ratio: Float) { py_player_set_compressor_ratio(handle, ratio) }
-    @inline(always) func setCompressorAttack(_ ms: Float) { py_player_set_compressor_attack(handle, ms) }
-    @inline(always) func setCompressorRelease(_ ms: Float) { py_player_set_compressor_release(handle, ms) }
-    @inline(always) func setCompressorMakeup(_ db: Float) { py_player_set_compressor_makeup(handle, db) }
+    func setCompressorEnabled(_ enabled: Bool) { py_player_set_compressor_enabled(handle, enabled) }
+    var isCompressorEnabled: Bool { py_player_is_compressor_enabled(handle) }
+    func setCompressorThreshold(_ db: Float) { py_player_set_compressor_threshold(handle, db) }
+    func setCompressorRatio(_ ratio: Float) { py_player_set_compressor_ratio(handle, ratio) }
+    func setCompressorAttack(_ ms: Float) { py_player_set_compressor_attack(handle, ms) }
+    func setCompressorRelease(_ ms: Float) { py_player_set_compressor_release(handle, ms) }
+    func setCompressorMakeup(_ db: Float) { py_player_set_compressor_makeup(handle, db) }
 
     // Dialogue Boost
-    @inline(always) func setDialogueBoostEnabled(_ enabled: Bool) { py_player_set_dialogue_boost_enabled(handle, enabled) }
-    @inline(always) var isDialogueBoostEnabled: Bool { py_player_is_dialogue_boost_enabled(handle) }
-    @inline(always) func setDialogueBoostAmount(_ amount: Float) { py_player_set_dialogue_boost_amount(handle, amount) }
-    @inline(always) var dialogueBoostAmount: Float { py_player_get_dialogue_boost_amount(handle) }
+    func setDialogueBoostEnabled(_ enabled: Bool) { py_player_set_dialogue_boost_enabled(handle, enabled) }
+    var isDialogueBoostEnabled: Bool { py_player_is_dialogue_boost_enabled(handle) }
+    func setDialogueBoostAmount(_ amount: Float) { py_player_set_dialogue_boost_amount(handle, amount) }
+    var dialogueBoostAmount: Float { py_player_get_dialogue_boost_amount(handle) }
 
     // MARK: - Video Filters (GPU)
 
-    @inline(always) func setBrightness(_ value: Float) { py_player_set_brightness(handle, value) }
-    @inline(always) var brightness: Float { py_player_get_brightness(handle) }
+    func setBrightness(_ value: Float) { py_player_set_brightness(handle, value) }
+    var brightness: Float { py_player_get_brightness(handle) }
 
-    @inline(always) func setContrast(_ value: Float) { py_player_set_contrast(handle, value) }
-    @inline(always) var contrast: Float { py_player_get_contrast(handle) }
+    func setContrast(_ value: Float) { py_player_set_contrast(handle, value) }
+    var contrast: Float { py_player_get_contrast(handle) }
 
-    @inline(always) func setSaturation(_ value: Float) { py_player_set_saturation(handle, value) }
-    @inline(always) var saturation: Float { py_player_get_saturation(handle) }
+    func setSaturation(_ value: Float) { py_player_set_saturation(handle, value) }
+    var saturation: Float { py_player_get_saturation(handle) }
 
-    @inline(always) func setSharpness(_ value: Float) { py_player_set_sharpness(handle, value) }
-    @inline(always) var sharpness: Float { py_player_get_sharpness(handle) }
+    func setSharpness(_ value: Float) { py_player_set_sharpness(handle, value) }
+    var sharpness: Float { py_player_get_sharpness(handle) }
 
-    @inline(always) func setDebandEnabled(_ enabled: Bool) { py_player_set_deband_enabled(handle, enabled) }
-    @inline(always) var isDebandEnabled: Bool { py_player_is_deband_enabled(handle) }
+    func setDebandEnabled(_ enabled: Bool) { py_player_set_deband_enabled(handle, enabled) }
+    var isDebandEnabled: Bool { py_player_is_deband_enabled(handle) }
 
-    @inline(always) func setLanczosUpscaling(_ enabled: Bool) { py_player_set_lanczos_upscaling(handle, enabled) }
-    @inline(always) var isLanczosUpscaling: Bool { py_player_is_lanczos_upscaling(handle) }
+    func setLanczosUpscaling(_ enabled: Bool) { py_player_set_lanczos_upscaling(handle, enabled) }
+    var isLanczosUpscaling: Bool { py_player_is_lanczos_upscaling(handle) }
 
-    @inline(always) func setFilmGrainEnabled(_ enabled: Bool) { py_player_set_film_grain_enabled(handle, enabled) }
-    @inline(always) var isFilmGrainEnabled: Bool { py_player_is_film_grain_enabled(handle) }
+    func setFilmGrainEnabled(_ enabled: Bool) { py_player_set_film_grain_enabled(handle, enabled) }
+    var isFilmGrainEnabled: Bool { py_player_is_film_grain_enabled(handle) }
 
-    @inline(always) func resetVideoAdjustments() { py_player_reset_video_adjustments(handle) }
+    func resetVideoAdjustments() { py_player_reset_video_adjustments(handle) }
 
     // MARK: - Video Filters (CPU: Deinterlace)
 
-    @inline(always) func setDeinterlaceEnabled(_ enabled: Bool) { py_player_set_deinterlace_enabled(handle, enabled) }
-    @inline(always) var isDeinterlaceEnabled: Bool { py_player_is_deinterlace_enabled(handle) }
-    @inline(always) func setDeinterlaceMode(_ mode: Int32) { py_player_set_deinterlace_mode(handle, mode) }
-    @inline(always) var deinterlaceMode: Int32 { py_player_get_deinterlace_mode(handle) }
+    func setDeinterlaceEnabled(_ enabled: Bool) { py_player_set_deinterlace_enabled(handle, enabled) }
+    var isDeinterlaceEnabled: Bool { py_player_is_deinterlace_enabled(handle) }
+    func setDeinterlaceMode(_ mode: Int32) { py_player_set_deinterlace_mode(handle, mode) }
+    var deinterlaceMode: Int32 { py_player_get_deinterlace_mode(handle) }
 
-    @inline(always) func setAudioPassthrough(_ enabled: Bool) {
+    func setAudioPassthrough(_ enabled: Bool) {
         py_player_set_audio_passthrough(handle, enabled)
     }
 
-    @inline(always) var isPassthroughActive: Bool {
+    var isPassthroughActive: Bool {
         py_player_is_passthrough_active(handle)
     }
 
-    @inline(always) func queryPassthroughSupport() -> PYPassthroughCapabilities {
+    func queryPassthroughSupport() -> PYPassthroughCapabilities {
         py_player_query_passthrough_support(handle)
     }
 
@@ -201,51 +201,51 @@ final class PlayerBridge: @unchecked Sendable {
 
     // MARK: - Spatial audio
 
-    @inline(always) func setSpatialAudioMode(_ mode: Int32) {
+func setSpatialAudioMode(_ mode: Int32) {
         py_player_set_spatial_audio_mode(handle, mode)
     }
 
-    @inline(always) var spatialAudioMode: Int32 {
+var spatialAudioMode: Int32 {
         py_player_get_spatial_audio_mode(handle)
     }
 
-    @inline(always) var isSpatialActive: Bool {
+var isSpatialActive: Bool {
         py_player_is_spatial_active(handle)
     }
 
-    @inline(always) func setHeadTracking(_ enabled: Bool) {
+func setHeadTracking(_ enabled: Bool) {
         py_player_set_head_tracking(handle, enabled)
     }
 
-    @inline(always) var isHeadTracking: Bool {
+var isHeadTracking: Bool {
         py_player_is_head_tracking(handle)
     }
 
-    @inline(always) func setMuted(_ muted: Bool) {
+func setMuted(_ muted: Bool) {
         py_player_set_muted(handle, muted)
     }
 
-    @inline(always) var isMuted: Bool {
+var isMuted: Bool {
         py_player_is_muted(handle)
     }
 
-    @inline(always) func setVolume(_ volume: Float) {
+func setVolume(_ volume: Float) {
         py_player_set_volume(handle, volume)
     }
 
-    @inline(always) var volume: Float {
+var volume: Float {
         py_player_get_volume(handle)
     }
 
-    @inline(always) func setPlaybackSpeed(_ speed: Double) {
+func setPlaybackSpeed(_ speed: Double) {
         py_player_set_playback_speed(handle, speed)
     }
 
-    @inline(always) var playbackSpeed: Double {
+var playbackSpeed: Double {
         py_player_get_playback_speed(handle)
     }
 
-    @inline(always) func getPlaybackStats() -> PYPlaybackStats {
+func getPlaybackStats() -> PYPlaybackStats {
         py_player_get_playback_stats(handle)
     }
 
@@ -255,11 +255,11 @@ final class PlayerBridge: @unchecked Sendable {
     }
 
     // Video frame acquisition for Metal rendering
-    @inline(always) func acquireVideoFrame(targetPts: Int64) -> UnsafeMutableRawPointer? {
+func acquireVideoFrame(targetPts: Int64) -> UnsafeMutableRawPointer? {
         py_player_acquire_video_frame(handle, targetPts)
     }
 
-    @inline(always) func releaseVideoFrame(_ frame: UnsafeMutableRawPointer) {
+func releaseVideoFrame(_ frame: UnsafeMutableRawPointer) {
         py_player_release_video_frame(handle, frame)
     }
 
@@ -268,76 +268,76 @@ final class PlayerBridge: @unchecked Sendable {
         return Unmanaged<CVPixelBuffer>.fromOpaque(ptr).takeUnretainedValue()
     }
 
-    @inline(always) static func frameWidth(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameWidth(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_width(frame)
     }
 
-    @inline(always) static func frameHeight(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameHeight(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_height(frame)
     }
 
-    @inline(always) static func frameHDRType(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameHDRType(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_hdr_type(frame)
     }
 
-    @inline(always) static func frameMaxLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
+static func frameMaxLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
         py_player_frame_get_max_luminance(frame)
     }
 
-    @inline(always) static func frameMaxCLL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
+static func frameMaxCLL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
         py_player_frame_get_max_cll(frame)
     }
 
-    @inline(always) static func frameMaxFALL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
+static func frameMaxFALL(_ frame: UnsafeMutableRawPointer) -> UInt16 {
         py_player_frame_get_max_fall(frame)
     }
 
-    @inline(always) static func frameColorTrc(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameColorTrc(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_trc(frame)
     }
 
-    @inline(always) static func frameColorSpace(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameColorSpace(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_space(frame)
     }
 
-    @inline(always) static func framePts(_ frame: UnsafeMutableRawPointer) -> Int64 {
+static func framePts(_ frame: UnsafeMutableRawPointer) -> Int64 {
         py_player_frame_get_pts(frame)
     }
 
-    @inline(always) static func frameSarNum(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameSarNum(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_sar_num(frame)
     }
 
-    @inline(always) static func frameSarDen(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameSarDen(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_sar_den(frame)
     }
 
-    @inline(always) static func frameColorPrimaries(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameColorPrimaries(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_primaries(frame)
     }
 
-    @inline(always) static func frameColorRange(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameColorRange(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_color_range(frame)
     }
 
-    @inline(always) static func frameChromaFormat(_ frame: UnsafeMutableRawPointer) -> Int32 {
+static func frameChromaFormat(_ frame: UnsafeMutableRawPointer) -> Int32 {
         py_player_frame_get_chroma_format(frame)
     }
 
     // HDR10+ per-frame dynamic metadata
-    @inline(always) static func frameHasHDR10Plus(_ frame: UnsafeMutableRawPointer) -> Bool {
+static func frameHasHDR10Plus(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_has_hdr10plus(frame)
     }
 
-    @inline(always) static func frameHDR10PlusTargetMaxLum(_ frame: UnsafeMutableRawPointer) -> Float {
+static func frameHDR10PlusTargetMaxLum(_ frame: UnsafeMutableRawPointer) -> Float {
         py_player_frame_hdr10plus_target_max_lum(frame)
     }
 
-    @inline(always) static func frameHDR10PlusKneeX(_ frame: UnsafeMutableRawPointer) -> Float {
+static func frameHDR10PlusKneeX(_ frame: UnsafeMutableRawPointer) -> Float {
         py_player_frame_hdr10plus_knee_x(frame)
     }
 
-    @inline(always) static func frameHDR10PlusKneeY(_ frame: UnsafeMutableRawPointer) -> Float {
+static func frameHDR10PlusKneeY(_ frame: UnsafeMutableRawPointer) -> Float {
         py_player_frame_hdr10plus_knee_y(frame)
     }
 
@@ -360,7 +360,7 @@ final class PlayerBridge: @unchecked Sendable {
     }
 
     // Dolby Vision per-frame color metadata
-    @inline(always) static func frameHasDoviColor(_ frame: UnsafeMutableRawPointer) -> Bool {
+static func frameHasDoviColor(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_has_dovi_color(frame)
     }
 
@@ -420,11 +420,11 @@ final class PlayerBridge: @unchecked Sendable {
         return (maxLum, minLum, maxCLL, maxFALL)
     }
 
-    @inline(always) static func frameMinLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
+static func frameMinLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
         py_player_frame_get_min_luminance(frame)
     }
 
-    @inline(always) static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
+static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_dovi_has_reshaping(frame)
     }
 
@@ -435,11 +435,11 @@ final class PlayerBridge: @unchecked Sendable {
     }
 
     // Seek preview thumbnails
-    @inline(always) func startSeekThumbnails(interval: Int32 = 10) {
+func startSeekThumbnails(interval: Int32 = 10) {
         py_player_start_seek_thumbnails(handle, interval)
     }
 
-    @inline(always) func cancelSeekThumbnails() {
+func cancelSeekThumbnails() {
         py_player_cancel_seek_thumbnails(handle)
     }
 
@@ -467,7 +467,7 @@ final class PlayerBridge: @unchecked Sendable {
                        intent: .defaultIntent)
     }
 
-    @inline(always) var seekThumbnailProgress: Int32 {
+var seekThumbnailProgress: Int32 {
         py_player_get_seek_thumbnail_progress(handle)
     }
 
@@ -512,19 +512,19 @@ final class LibraryBridge: @unchecked Sendable {
         py_library_destroy(handle)
     }
 
-    @inline(always) var itemCount: Int32 {
+var itemCount: Int32 {
         py_library_get_item_count(handle)
     }
 
-    @inline(always) var folderCount: Int32 {
+var folderCount: Int32 {
         py_library_get_folder_count(handle)
     }
 
-    @inline(always) func removeFolder(at index: Int32) -> Bool {
+func removeFolder(at index: Int32) -> Bool {
         py_library_remove_folder(handle, index) == Int32(PY_OK.rawValue)
     }
 
-    @inline(always) static func generateThumbnail(videoPath: String, outputPath: String,
+static func generateThumbnail(videoPath: String, outputPath: String,
                                                     maxWidth: Int32, maxHeight: Int32) -> Bool {
         py_thumbnail_generate(videoPath, outputPath, maxWidth, maxHeight) == Int32(PY_OK.rawValue)
     }

@@ -5,6 +5,9 @@
 #include "dv_video_output.h"
 #include "plaiy/logger.h"
 
+#include <mutex>
+#include <condition_variable>
+
 static constexpr const char* TAG = "DVVideoOutput";
 
 namespace py {
@@ -15,6 +18,12 @@ struct DVVideoOutput::Impl {
     AVSampleBufferDisplayLayer* display_layer = nil;
     bool opened = false;
     int packets_submitted = 0;
+
+    // Event-driven readiness signaling (replaces polling loop)
+    std::mutex ready_mutex;
+    std::condition_variable ready_cv;
+    std::atomic<bool> ready_flag{false};
+    dispatch_queue_t ready_queue = nullptr;
 };
 
 DVVideoOutput::DVVideoOutput() : impl_(std::make_unique<Impl>()) {}
@@ -149,6 +158,20 @@ void DVVideoOutput::set_display_layer(void* layer) {
         impl_->display_layer = (__bridge AVSampleBufferDisplayLayer*)layer;
         if (impl_->display_layer && impl_->timebase) {
             impl_->display_layer.controlTimebase = impl_->timebase;
+
+            // Set up event-driven readiness notification
+            if (!impl_->ready_queue) {
+                impl_->ready_queue = dispatch_queue_create(
+                    "py.dv_video_output.ready", DISPATCH_QUEUE_SERIAL);
+            }
+            auto* impl = impl_.get();
+            [impl_->display_layer.sampleBufferRenderer
+                requestMediaDataWhenReadyOnQueue:impl_->ready_queue
+                usingBlock:^{
+                    impl->ready_flag.store(true, std::memory_order_release);
+                    impl->ready_cv.notify_one();
+                }];
+
             PY_LOG_INFO(TAG, "Display layer set, timebase attached");
         }
     }
@@ -259,6 +282,18 @@ void DVVideoOutput::set_time(int64_t pts_us) {
     }
 }
 
+bool DVVideoOutput::wait_until_ready(const std::atomic<bool>& running) {
+    if (is_ready()) return true;
+
+    std::unique_lock<std::mutex> lock(impl_->ready_mutex);
+    impl_->ready_cv.wait_for(lock, std::chrono::milliseconds(100), [&] {
+        return impl_->ready_flag.load(std::memory_order_acquire) ||
+               !running.load(std::memory_order_relaxed);
+    });
+    impl_->ready_flag.store(false, std::memory_order_relaxed);
+    return is_ready() && running.load(std::memory_order_relaxed);
+}
+
 bool DVVideoOutput::is_ready() const {
     @autoreleasepool {
         if (!impl_->display_layer) return false;
@@ -275,6 +310,12 @@ void DVVideoOutput::close() {
         if (impl_->opened) {
             PY_LOG_DEBUG(TAG, "Closing (total packets: %d)", impl_->packets_submitted);
         }
+        if (impl_->display_layer && impl_->ready_queue) {
+            [impl_->display_layer.sampleBufferRenderer stopRequestingMediaData];
+        }
+        // Wake any thread blocked in wait_until_ready
+        impl_->ready_flag.store(true, std::memory_order_release);
+        impl_->ready_cv.notify_all();
         impl_->display_layer = nil;
 
         if (impl_->timebase) {

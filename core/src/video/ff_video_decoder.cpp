@@ -143,28 +143,12 @@ void FFVideoDecoder::flush() {
         codec_ctx_->skip_idct = AVDISCARD_DEFAULT;
     }
     skip_mode_ = false;
-    pts_only_output_ = false;
-}
-
-void FFVideoDecoder::set_pts_only_output(bool enabled) {
-    pts_only_output_ = enabled;
 }
 
 void FFVideoDecoder::set_film_grain_synthesis(bool enabled) {
     film_grain_synthesis_ = enabled;
     // Note: this takes effect on next open(), not mid-stream, since
     // the codec context flag must be set before avcodec_open2().
-}
-
-void FFVideoDecoder::set_fast_replay_mode(bool enabled) {
-    if (!codec_ctx_) return;
-    if (enabled) {
-        codec_ctx_->skip_loop_filter = AVDISCARD_ALL;
-        codec_ctx_->skip_idct = AVDISCARD_NONREF;
-    } else {
-        codec_ctx_->skip_loop_filter = AVDISCARD_DEFAULT;
-        codec_ctx_->skip_idct = AVDISCARD_DEFAULT;
-    }
 }
 
 void FFVideoDecoder::set_skip_mode(bool skip) {
@@ -224,7 +208,7 @@ Error FFVideoDecoder::receive_frame(VideoFrame& out) {
     if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};
     if (ret < 0) return {ErrorCode::DecoderError, "receive_frame failed"};
 
-    if (skip_mode_ || pts_only_output_) {
+    if (skip_mode_) {
         // Skip mode: extract only PTS for skip-to-target comparison.
         // Avoids metadata extraction, CVPixelBuffer alloc, and sws_scale.
         out = VideoFrame{};

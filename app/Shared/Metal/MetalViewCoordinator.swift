@@ -338,10 +338,10 @@ class MetalViewCoordinator {
         activeYTexture = yTexture
         activeUVTexture = uvTexture
 
-        // Refresh EDR headroom: always during HDR (tracks ramp-up and throttling),
-        // only when stale during SDR (optimization for idle draws)
+        // Refresh EDR headroom during HDR playback (tracks ramp-up and throttling).
+        // Skip during SDR — headroom is always 1.0 and querying is wasteful.
         #if os(macOS)
-        if currentHDRMode > 0 || cachedEDRHeadroom <= 1.0, let window = view.window {
+        if currentHDRMode > 0, let window = view.window {
             updateEDRHeadroom(window: window)
         }
         #else

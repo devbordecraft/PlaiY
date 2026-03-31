@@ -2,6 +2,7 @@
 
 #include "plaiy/types.h"
 #include "plaiy/error.h"
+#include <atomic>
 #include <memory>
 
 namespace py {
@@ -36,6 +37,11 @@ public:
 
     // Check if the display layer is ready for more data
     bool is_ready() const;
+
+    // Block until the display layer is ready or the running flag is cleared.
+    // Uses requestMediaDataWhenReady for event-driven wake-up instead of polling.
+    // Returns true if ready, false if stopped.
+    bool wait_until_ready(const std::atomic<bool>& running);
 
     // Check if a display layer has been set
     bool has_display_layer() const;

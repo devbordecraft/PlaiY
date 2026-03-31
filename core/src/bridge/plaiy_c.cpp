@@ -12,6 +12,25 @@
 
 using json = nlohmann::json;
 
+// ---- Error mapping ----
+
+static int map_error(py::ErrorCode code) {
+    switch (code) {
+    case py::ErrorCode::OK:               return PY_OK;
+    case py::ErrorCode::InvalidArgument:   return PY_ERROR_INVALID_ARG;
+    case py::ErrorCode::FileNotFound:      return PY_ERROR_FILE_NOT_FOUND;
+    case py::ErrorCode::UnsupportedFormat:
+    case py::ErrorCode::UnsupportedCodec:  return PY_ERROR_UNSUPPORTED;
+    case py::ErrorCode::DecoderInitFailed:
+    case py::ErrorCode::DecoderError:
+    case py::ErrorCode::DemuxerError:      return PY_ERROR_DECODER;
+    case py::ErrorCode::AudioOutputError:  return PY_ERROR_AUDIO;
+    case py::ErrorCode::SubtitleError:     return PY_ERROR_SUBTITLE;
+    case py::ErrorCode::NetworkError:      return PY_ERROR_NETWORK;
+    default:                               return PY_ERROR_UNKNOWN;
+    }
+}
+
 // ---- Player wrapper ----
 
 struct PYPlayer {
@@ -99,7 +118,7 @@ int py_player_open(PYPlayer* p, const char* path) {
     if (!p || !path) return PY_ERROR_INVALID_ARG;
 
     py::Error err = p->engine.open_file(path);
-    if (err) return PY_ERROR_FILE_NOT_FOUND;
+    if (err) return map_error(err.code);
     p->video_path = path;
     return PY_OK;
 }
@@ -747,7 +766,7 @@ void py_library_destroy(PYLibrary* lib) {
 int py_library_add_folder(PYLibrary* lib, const char* path) {
     if (!lib || !path) return PY_ERROR_INVALID_ARG;
     py::Error err = lib->library.add_folder(path);
-    return err ? PY_ERROR_FILE_NOT_FOUND : PY_OK;
+    return err ? map_error(err.code) : PY_OK;
 }
 
 int py_library_get_item_count(PYLibrary* lib) {

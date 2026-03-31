@@ -49,59 +49,40 @@ constant float3x3 bt601Matrix = float3x3(
     float3(1.596027, -0.812968,  0.0)
 );
 
+// BT.2020 → Display P3 gamut mapping matrix (Bradford chromatic adaptation)
+// Row-major BT.2020→P3 matrix, stored as columns for Metal's float3x3.
+constant float3x3 kBT2020ToP3 = float3x3(
+    float3( 1.3434, -0.0653, -0.0029),
+    float3(-0.2820,  1.0758, -0.0193),
+    float3(-0.0462,  0.0084,  1.0372));
+
 // ---- Transfer functions ----
 
-// PQ (SMPTE ST 2084) EOTF: scalar version for single values (e.g., uniform conversion)
-float pqToLinear(float pq) {
-    float m1 = 0.1593017578125;
-    float m2 = 78.84375;
-    float c1 = 0.8359375;
-    float c2 = 18.8515625;
-    float c3 = 18.6875;
+// PQ (SMPTE ST 2084) constants
+constant float PQ_m1 = 0.1593017578125;
+constant float PQ_m2 = 78.84375;
+constant float PQ_c1 = 0.8359375;
+constant float PQ_c2 = 18.8515625;
+constant float PQ_c3 = 18.6875;
 
-    float Np = pow(max(pq, 0.0), 1.0 / m2);
-    float L = pow(max(Np - c1, 0.0) / (c2 - c3 * Np), 1.0 / m1);
-
-    return L * 10000.0;
-}
-
-// PQ OETF (inverse of pqToLinear): linear cd/m2 -> PQ signal [0, 1]
+// PQ OETF: linear cd/m2 -> PQ signal [0, 1]
 float linearToPQ(float L) {
-    float m1 = 0.1593017578125;
-    float m2 = 78.84375;
-    float c1 = 0.8359375;
-    float c2 = 18.8515625;
-    float c3 = 18.6875;
-
     float Y = max(L / 10000.0, 0.0);
-    float Ym1 = pow(Y, m1);
-    return pow((c1 + c2 * Ym1) / (1.0 + c3 * Ym1), m2);
+    float Ym1 = pow(Y, PQ_m1);
+    return pow((PQ_c1 + PQ_c2 * Ym1) / (1.0 + PQ_c3 * Ym1), PQ_m2);
 }
 
-// PQ (SMPTE ST 2084) EOTF: converts PQ signal to linear light (cd/m2)
+// PQ EOTF: converts PQ signal to linear light (cd/m2)
 float3 pqEOTF(float3 pq) {
-    float m1 = 0.1593017578125;
-    float m2 = 78.84375;
-    float c1 = 0.8359375;
-    float c2 = 18.8515625;
-    float c3 = 18.6875;
-
-    float3 Np = pow(max(pq, 0.0), float3(1.0 / m2));
-    float3 L = pow(max(Np - c1, 0.0) / (c2 - c3 * Np), float3(1.0 / m1));
-
-    // L is normalized to [0, 1] where 1 = 10000 cd/m2
+    float3 Np = pow(max(pq, 0.0), float3(1.0 / PQ_m2));
+    float3 L = pow(max(Np - PQ_c1, 0.0) / (PQ_c2 - PQ_c3 * Np), float3(1.0 / PQ_m1));
     return L * 10000.0;
 }
 
 // PQ EOTF scalar version (single float, used for luminance-based tone mapping)
 float pqEOTF_scalar(float pq) {
-    float m1 = 0.1593017578125;
-    float m2 = 78.84375;
-    float c1 = 0.8359375;
-    float c2 = 18.8515625;
-    float c3 = 18.6875;
-    float Np = pow(max(pq, 0.0), 1.0 / m2);
-    float L = pow(max(Np - c1, 0.0) / (c2 - c3 * Np), 1.0 / m1);
+    float Np = pow(max(pq, 0.0), 1.0 / PQ_m2);
+    float L = pow(max(Np - PQ_c1, 0.0) / (PQ_c2 - PQ_c3 * Np), 1.0 / PQ_m1);
     return L * 10000.0;
 }
 
@@ -114,13 +95,6 @@ float3 hlgEOTF(float3 hlg) {
     float3 low  = (hlg * hlg) / 3.0;
     float3 high = (exp((hlg - c) / a) + b) / 12.0;
     return mix(low, high, step(float3(0.5), hlg)) * 1000.0; // HLG reference white ~1000 cd/m2
-}
-
-// sRGB/BT.709 gamma encode (linear -> gamma)
-float3 srgbGamma(float3 linear) {
-    float3 low  = 12.92 * linear;
-    float3 high = 1.055 * pow(linear, float3(1.0 / 2.4)) - 0.055;
-    return mix(low, high, step(float3(0.0031308), linear));
 }
 
 // sRGB/BT.709 inverse gamma (gamma-encoded -> linear)
@@ -646,13 +620,7 @@ fragment float4 fragmentBiplanar(
         }
 
         // Step 8: BT.2020 → Display P3 gamut mapping
-        // Row-major BT.2020→P3 matrix, stored as columns for Metal's float3x3.
-        // Column j = (row0[j], row1[j], row2[j])
-        const float3x3 bt2020ToP3 = float3x3(
-            float3( 1.3434, -0.0653, -0.0029),  // column 0
-            float3(-0.2820,  1.0758, -0.0193),   // column 1
-            float3(-0.0462,  0.0084,  1.0372));   // column 2
-        rgb = bt2020ToP3 * rgb;
+        rgb = kBT2020ToP3 * rgb;
         float lum = dot(rgb, float3(0.2290, 0.6917, 0.0793));
         float3 overshoot = max(rgb - peak, 0.0) + max(-rgb, 0.0);
         float maxOver = max(max(overshoot.x, overshoot.y), overshoot.z);
@@ -772,14 +740,7 @@ fragment float4 fragmentBiplanar(
     // rotation matrix followed by soft-clip desaturation toward luminance.
     if (uniforms.colorSpace == 1) {
         // BT.2020 -> Display P3 primary rotation (3x3 chromatic adaptation)
-        // Derived from BT.2020 and Display P3 primary coordinates via Bradford transform
-        // Row-major BT.2020→P3 matrix, stored as columns for Metal's float3x3.
-        // Column j = (row0[j], row1[j], row2[j])
-        const float3x3 bt2020ToP3 = float3x3(
-            float3( 1.3434, -0.0653, -0.0029),   // column 0
-            float3(-0.2820,  1.0758, -0.0193),    // column 1
-            float3(-0.0462,  0.0084,  1.0372));   // column 2
-        rgb = bt2020ToP3 * rgb;
+        rgb = kBT2020ToP3 * rgb;
 
         // Soft-clip: desaturate out-of-gamut values toward luminance instead of hard clipping
         float lum = dot(rgb, float3(0.2290, 0.6917, 0.0793)); // Display P3 luminance
@@ -895,14 +856,4 @@ fragment float4 fragmentBiplanar(
     }
 
     return float4(rgb, 1.0);
-}
-
-// ---- Subtitle overlay shader ----
-
-fragment float4 fragmentSubtitle(
-    VertexOut in [[stage_in]],
-    texture2d<float> subtitleTexture [[texture(0)]])
-{
-    constexpr sampler texSampler(mag_filter::linear, min_filter::linear);
-    return subtitleTexture.sample(texSampler, in.texCoord);
 }

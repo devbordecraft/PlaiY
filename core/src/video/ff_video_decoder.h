@@ -19,8 +19,6 @@ public:
     Error send_packet(const Packet& pkt) override;
     Error receive_frame(VideoFrame& out) override;
     void set_skip_mode(bool skip) override;
-    void set_pts_only_output(bool enabled);
-    void set_fast_replay_mode(bool enabled);
     void set_film_grain_synthesis(bool enabled);
 
 private:
@@ -31,7 +29,6 @@ private:
     AVPacket* reuse_pkt_ = nullptr;
     TrackInfo track_info_;
     bool skip_mode_ = false;
-    bool pts_only_output_ = false;
     bool film_grain_synthesis_ = true;
     int saved_skip_frame_ = 0;  // AVDISCARD_DEFAULT
 

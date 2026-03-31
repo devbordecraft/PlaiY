@@ -142,7 +142,7 @@ struct HDRUniformBuilder {
         // MaxFALL for scene-adaptive static HDR10
         let maxFALL = PlayerBridge.frameMaxFALL(framePtr)
         if maxFALL > 0 {
-            uniforms.maxFALL = Float(maxFALL)
+            uniforms.maxFALL = max(uniforms.maxFALL, Float(maxFALL))
         }
 
         // Chroma subsampling format (0=420, 1=422, 2=444)

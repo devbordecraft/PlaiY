@@ -903,13 +903,8 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
         if (pkt.data.empty()) continue;
 
         // Wait until the display layer is ready for more data
-        int wait_count = 0;
-        while (!dv_output->is_ready() && running.load(std::memory_order_relaxed)) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            if (++wait_count > 1000) {
-                PY_LOG_WARN(TAG, "DV output: layer not ready for >1s");
-                wait_count = 0;
-            }
+        while (!dv_output->wait_until_ready(running)) {
+            if (!running.load(std::memory_order_relaxed)) break;
         }
         if (!running.load(std::memory_order_relaxed)) break;
 
