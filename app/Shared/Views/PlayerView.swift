@@ -5,7 +5,6 @@ struct PlayerView: View {
     @ObservedObject var viewModel: PlayerViewModel
     @ObservedObject var playQueue: PlayQueue
     let resumePosition: Int64?
-    let autoplay: Bool
     let onBack: () -> Void
     var onNextTrack: (() -> Void)?
     var onPreviousTrack: (() -> Void)?
@@ -202,7 +201,7 @@ struct PlayerView: View {
             if showResumePrompt, let pos = resumePosition {
                 ResumePromptView(position: pos, onResume: {
                     dismissResumePrompt()
-                    viewModel.bridge.seek(to: pos)
+                    viewModel.seek(toMicroseconds: pos)
                     viewModel.play()
                 }, onStartOver: {
                     dismissResumePrompt()
@@ -259,14 +258,12 @@ struct PlayerView: View {
                         await MainActor.run {
                             dismissResumePrompt()
                             if let pos = resumePosition {
-                                viewModel.bridge.seek(to: pos)
+                                viewModel.seek(toMicroseconds: pos)
                             }
                             viewModel.play()
                         }
                     }
                 }
-            } else if autoplay {
-                viewModel.play()
             }
         }
         #if os(tvOS)

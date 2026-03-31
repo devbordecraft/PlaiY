@@ -92,6 +92,11 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     func setStateCallback(_ callback: @escaping (Int32) -> Void) { lastStateCallback = callback }
     var lastStateCallback: ((Int32) -> Void)?
 
+    func emitState(_ state: Int32) {
+        stubState = state
+        lastStateCallback?(state)
+    }
+
     func startSeekThumbnails(interval: Int32) { startSeekThumbnailsCalled = true }
     func cancelSeekThumbnails() { cancelSeekThumbnailsCalled = true }
     func seekThumbnail(at timestampUs: Int64) -> CGImage? {

@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "audio_pipeline.h"
+#include "playback_generation.h"
 
 #include <chrono>
 #include <thread>
@@ -22,6 +23,7 @@ struct AudioPipelineFixture {
     std::atomic<bool> running{true};
     std::atomic<bool> audio_restart_requested{false};
     PacketQueue audio_packet_queue{32, 10 * 1024 * 1024};
+    PlaybackGeneration packet_generation;
     AudioPipeline pipeline;
 
     AudioPipelineFixture()
@@ -38,6 +40,7 @@ struct AudioPipelineFixture {
             running,
             audio_restart_requested,
             audio_packet_queue,
+            packet_generation,
         }) {
         audio_ring.resize(256);
         pipeline.set_output_mode(AudioOutputMode::PCM);

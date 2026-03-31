@@ -328,6 +328,7 @@ bool AudioPipeline::passthrough_write_loop() {
 
         Packet pkt;
         if (!shared_.audio_packet_queue.pop(pkt)) break;
+        if (!shared_.packet_generation.matches(pkt.generation)) continue;
 
         if (pkt.is_flush) {
             if (pkt.is_eof) {

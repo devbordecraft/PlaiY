@@ -226,6 +226,7 @@ struct Packet {
     int64_t pts = 0;       // in stream time_base units
     int64_t dts = 0;
     int64_t duration = 0;
+    uint64_t generation = 0; // invalidation epoch for seek-boundary drops
     std::vector<uint8_t> data;
     bool is_keyframe = false;
     bool is_flush = false;  // sentinel to signal decoder flush

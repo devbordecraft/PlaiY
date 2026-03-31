@@ -23,6 +23,7 @@
 #endif
 #include "frame_presenter.h"
 #include "audio_pipeline.h"
+#include "playback_generation.h"
 
 #ifdef __APPLE__
 #include "../platform/apple/dv_video_output.h"
@@ -159,6 +160,7 @@ struct PlayerEngine::Impl {
     // For seek
     std::atomic<bool> seeking{false};
     std::atomic<int64_t> seek_target_us{0};
+    PlaybackGeneration packet_generation;
 
     // For audio track switching
     std::atomic<bool> audio_track_changed{false};
@@ -238,6 +240,7 @@ PlayerEngine::PlayerEngine() : impl_(std::make_unique<Impl>()) {
             .running = impl_->running,
             .audio_restart_requested = impl_->audio_restart_requested,
             .audio_packet_queue = impl_->audio_packet_queue,
+            .packet_generation = impl_->packet_generation,
         });
 }
 
@@ -385,6 +388,7 @@ void PlayerEngine::pause() {
 }
 
 void PlayerEngine::seek(int64_t timestamp_us) {
+    impl_->packet_generation.advance();
     impl_->seek_target_us.store(timestamp_us, std::memory_order_relaxed);
     impl_->seeking.store(true);
 
@@ -423,6 +427,10 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     impl_->audio_ring_not_full.notify_one();
 
     impl_->subtitle_manager->flush();
+    {
+        std::lock_guard lock(impl_->presented_frame_mutex);
+        impl_->presented_frame.reset();
+    }
     impl_->wake_workers();
 }
 
@@ -436,6 +444,12 @@ void PlayerEngine::stop() {
     impl_->clock.reset();
     impl_->playback_speed.store(1.0);
     impl_->speed_changed.store(false);
+    impl_->seeking.store(false, std::memory_order_release);
+    impl_->seek_target_us.store(0, std::memory_order_release);
+    impl_->waiting_for_first_frame.store(false, std::memory_order_release);
+    impl_->packet_generation.reset();
+    impl_->frames_rendered.store(0, std::memory_order_release);
+    impl_->frames_dropped.store(0, std::memory_order_release);
 
     if (impl_->audio_output) {
         impl_->audio_output->close();
@@ -523,6 +537,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
         impl_->audio_packet_queue.flush();
         Packet flush_pkt;
         flush_pkt.is_flush = true;
+        flush_pkt.generation = impl_->packet_generation.current();
         impl_->audio_packet_queue.push(flush_pkt);
         impl_->wake_workers();
     }
@@ -905,6 +920,7 @@ void PlayerEngine::Impl::demux_loop() {
             // Send flush packets
             Packet flush_pkt;
             flush_pkt.is_flush = true;
+            flush_pkt.generation = packet_generation.current();
 
             if (active_video_stream >= 0) {
                 flush_pkt.stream_index = active_video_stream;
@@ -920,23 +936,29 @@ void PlayerEngine::Impl::demux_loop() {
         }
 
         Packet pkt;
+        uint64_t read_generation = packet_generation.capture_for_read();
         Error err = demuxer->read_packet(pkt);
 
         if (err.code == ErrorCode::EndOfFile) {
+            if (!packet_generation.matches(read_generation)) continue;
             PY_LOG_INFO(TAG, "Demux: end of file");
             // Send EOF flush packets (marked so decode loops can
             // drain reorder buffers instead of discarding them)
             Packet eof_pkt;
             eof_pkt.is_flush = true;
             eof_pkt.is_eof = true;
+            eof_pkt.generation = read_generation;
             if (active_video_stream >= 0) video_packet_queue.push(eof_pkt);
             if (active_audio_stream.load(std::memory_order_acquire) >= 0) audio_packet_queue.push(eof_pkt);
             break;
         }
         if (err) {
+            if (!packet_generation.matches(read_generation)) continue;
             report_error(err);
             break;
         }
+        pkt.generation = read_generation;
+        if (!packet_generation.matches(pkt.generation)) continue;
 
         // Route packet to the correct queue
         if (pkt.stream_index == active_video_stream) {
@@ -1188,6 +1210,7 @@ void PlayerEngine::Impl::video_decode_loop() {
         if (!video_packet_queue.try_pop_for(pkt, std::chrono::milliseconds(16))) {
             continue; // No packet yet — loop back to drain any completed frames
         }
+        if (!packet_generation.matches(pkt.generation)) continue;
 
         if (pkt.is_flush) {
             if (pkt.is_eof) {
@@ -1391,6 +1414,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
         Packet pkt;
         if (!audio_packet_queue.pop(pkt)) break;
+        if (!packet_generation.matches(pkt.generation)) continue;
 
         // Handle speed change from the main thread
         if (speed_changed.load(std::memory_order_relaxed)) {

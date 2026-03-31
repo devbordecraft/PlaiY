@@ -61,6 +61,7 @@ VideoFrame* FramePresenter::acquire(int64_t /*target_pts_us*/) {
     // Use exchange() so only one thread unfreezes even under concurrent calls.
     if (waiting_for_first_frame_.exchange(false)) {
         clock_.unfreeze();
+        clock_us = clock_.now_us();
     }
 
     // Skip frames that are already late (PTS behind the clock).
@@ -68,10 +69,13 @@ VideoFrame* FramePresenter::acquire(int64_t /*target_pts_us*/) {
     VideoFrame skip_frame;
     while (true) {
         auto next = video_frame_queue_.peek_fields();
-        if (!next.valid || next.pts_us > clock_us) break;
+        if (!next.valid) break;
+        int64_t late_tolerance_us = next.duration_us > 0 ? next.duration_us / 2 : 8000;
+        if (next.pts_us + late_tolerance_us > clock_us) break;
         video_frame_queue_.try_pop(skip_frame);
         *presented_frame_ = std::move(skip_frame);
         frames_dropped_.fetch_add(1, std::memory_order_relaxed);
+        clock_us = clock_.now_us();
     }
 
     return presented_frame_.get();

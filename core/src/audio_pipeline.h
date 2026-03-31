@@ -8,6 +8,7 @@
 
 #include "audio/audio_decoder.h"
 #include "audio/mat_framer.h"
+#include "playback_generation.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -36,6 +37,7 @@ public:
         std::atomic<bool>& running;
         std::atomic<bool>& audio_restart_requested;
         PacketQueue& audio_packet_queue;
+        PlaybackGeneration& packet_generation;
     };
 
     explicit AudioPipeline(SharedState shared);

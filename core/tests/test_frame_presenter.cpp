@@ -111,6 +111,20 @@ TEST_CASE("FramePresenter skips late frames and increments frames_dropped") {
     REQUIRE(f.frames_dropped.load() == 2);
 }
 
+TEST_CASE("FramePresenter keeps slightly late frames that are still within tolerance") {
+    PresenterFixture f;
+    f.clock.set_audio_pts(1000000); // clock at 1s
+    f.push_frame(980000);
+    f.push_frame(990000);
+
+    auto p = f.make_presenter();
+    auto* frame = p->acquire(0);
+
+    REQUIRE(frame != nullptr);
+    REQUIRE(frame->pts_us == 980000);
+    REQUIRE(f.frames_dropped.load() == 0);
+}
+
 TEST_CASE("FramePresenter unfreezes clock on first frame") {
     PresenterFixture f;
     f.waiting_for_first_frame.store(true);

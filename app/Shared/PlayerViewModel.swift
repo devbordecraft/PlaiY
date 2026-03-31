@@ -88,6 +88,7 @@ final class PlaybackTransport {
 class PlayerViewModel: ObservableObject {
     let bridge: any PlayerBridgeProtocol
     let transport = PlaybackTransport()
+    private var playbackState = Int32(PY_STATE_IDLE.rawValue)
 
     /// Concrete bridge for views that need frame-level access (Metal rendering, controls).
     /// Force-unwraps because production code always uses PlayerBridge.
@@ -95,6 +96,17 @@ class PlayerViewModel: ObservableObject {
 
     init(bridge: any PlayerBridgeProtocol = PlayerBridge()) {
         self.bridge = bridge
+        bridge.setStateCallback { [weak self] state in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { [weak self] in
+                    self?.applyPlaybackState(state)
+                }
+            } else {
+                Task { @MainActor [weak self] in
+                    self?.applyPlaybackState(state)
+                }
+            }
+        }
     }
 
     // --- Properties that trigger view rebuilds (infrequent changes) ---
@@ -140,6 +152,21 @@ class PlayerViewModel: ObservableObject {
     private var pendingSeekFraction: Double?
     private var hoverEndWork: DispatchWorkItem?
 
+    private func applyPlaybackState(_ state: Int32) {
+        playbackState = state
+
+        let playing = state == Int32(PY_STATE_PLAYING.rawValue)
+        isPlaying = playing
+        transport.isPlaying = playing
+
+        if state != Int32(PY_STATE_STOPPED.rawValue) {
+            playbackEnded = false
+        }
+        if state == Int32(PY_STATE_STOPPED.rawValue) {
+            playbackEnded = true
+        }
+    }
+
     private func cancelPendingThumbnailRequest() {
         thumbRequestId &+= 1
         lastThumbIndex = -1
@@ -170,6 +197,7 @@ class PlayerViewModel: ObservableObject {
             return
         }
         openError = nil
+        applyPlaybackState(bridge.state)
         transport.duration = bridge.duration
         isDolbyVision = playerBridge.isDolbyVision
 
@@ -237,17 +265,6 @@ class PlayerViewModel: ObservableObject {
             disableSubtitles()
         }
 
-        bridge.setStateCallback { [weak self] state in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if state == PY_STATE_STOPPED.rawValue {
-                    self.isPlaying = false
-                    self.transport.isPlaying = false
-                    self.playbackEnded = true
-                }
-            }
-        }
-
         let interval: Int32 = transport.duration > 7_200_000_000 ? 30 : 10
         bridge.startSeekThumbnails(interval: interval)
 
@@ -262,22 +279,26 @@ class PlayerViewModel: ObservableObject {
 
     func play() {
         bridge.play()
-        isPlaying = true
-        transport.isPlaying = true
     }
 
     func pause() {
         bridge.pause()
-        isPlaying = false
-        transport.isPlaying = false
     }
 
     func togglePlayPause() {
-        if isPlaying { pause() } else { play() }
+        if bridge.state == Int32(PY_STATE_PLAYING.rawValue) {
+            pause()
+        } else {
+            play()
+        }
     }
 
     func seek(to fraction: Double) {
         let target = Int64(fraction * Double(transport.duration))
+        seek(toMicroseconds: target)
+    }
+
+    func seek(toMicroseconds target: Int64) {
         bridge.seek(to: target)
         transport.currentPosition = target
         currentPosition = target
@@ -286,9 +307,7 @@ class PlayerViewModel: ObservableObject {
     func seekRelative(seconds: Double) {
         let offsetUs = Int64(seconds * 1_000_000)
         let target = max(0, min(transport.duration, transport.currentPosition + offsetUs))
-        bridge.seek(to: target)
-        transport.currentPosition = target
-        currentPosition = target
+        seek(toMicroseconds: target)
     }
 
     func toggleMute() {
@@ -339,8 +358,10 @@ class PlayerViewModel: ObservableObject {
         cancelPendingThumbnailRequest()
         bridge.cancelSeekThumbnails()
         bridge.stop()
+        playbackState = Int32(PY_STATE_IDLE.rawValue)
         isPlaying = false
         transport.isPlaying = false
+        playbackEnded = false
         currentPosition = 0
         transport.currentPosition = 0
         playbackSpeed = 1.0
@@ -365,16 +386,14 @@ class PlayerViewModel: ObservableObject {
     func tick() {
         guard isPlaying else { return }
 
+        let state = bridge.state
+        if state != playbackState {
+            applyPlaybackState(state)
+        }
+        guard state == Int32(PY_STATE_PLAYING.rawValue) else { return }
+
         // Skip while the user is scrubbing the timeline to avoid fighting
         if transport.isScrubbing { return }
-
-        // End-of-stream detection (only @Published fire here)
-        if bridge.state == PY_STATE_STOPPED.rawValue {
-            isPlaying = false
-            transport.isPlaying = false
-            playbackEnded = true
-            return
-        }
 
         // Update transport and plain property — no objectWillChange
         transport.currentPosition = bridge.position

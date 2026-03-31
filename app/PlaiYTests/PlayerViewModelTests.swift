@@ -18,22 +18,51 @@ final class PlayerViewModelTests: XCTestCase {
 
     func testPlay() {
         vm.play()
-        XCTAssertTrue(vm.isPlaying)
         XCTAssertTrue(mock.playCalled)
+        XCTAssertFalse(vm.isPlaying)
+    }
+
+    func testStateCallbackMarksPlaybackAsPlaying() {
+        mock.emitState(Int32(PY_STATE_PLAYING.rawValue))
+        XCTAssertTrue(vm.isPlaying)
+        XCTAssertTrue(vm.transport.isPlaying)
     }
 
     func testPause() {
-        vm.play()
+        mock.emitState(Int32(PY_STATE_PLAYING.rawValue))
         vm.pause()
-        XCTAssertFalse(vm.isPlaying)
         XCTAssertTrue(mock.pauseCalled)
+        XCTAssertTrue(vm.isPlaying)
+        mock.emitState(Int32(PY_STATE_PAUSED.rawValue))
+        XCTAssertFalse(vm.isPlaying)
+        XCTAssertFalse(vm.transport.isPlaying)
     }
 
     func testTogglePlayPause() {
         XCTAssertFalse(vm.isPlaying)
+        mock.stubState = Int32(PY_STATE_READY.rawValue)
         vm.togglePlayPause()
+        XCTAssertTrue(mock.playCalled)
+        mock.emitState(Int32(PY_STATE_PLAYING.rawValue))
         XCTAssertTrue(vm.isPlaying)
+
+        mock.playCalled = false
         vm.togglePlayPause()
+        XCTAssertTrue(mock.pauseCalled)
+    }
+
+    func testStoppedStateMarksPlaybackEnded() {
+        mock.emitState(Int32(PY_STATE_STOPPED.rawValue))
+        XCTAssertTrue(vm.playbackEnded)
+        XCTAssertFalse(vm.isPlaying)
+    }
+
+    func testReadyStateClearsPlaybackEnded() {
+        mock.emitState(Int32(PY_STATE_STOPPED.rawValue))
+        XCTAssertTrue(vm.playbackEnded)
+
+        mock.emitState(Int32(PY_STATE_READY.rawValue))
+        XCTAssertFalse(vm.playbackEnded)
         XCTAssertFalse(vm.isPlaying)
     }
 
@@ -196,7 +225,7 @@ final class PlayerViewModelTests: XCTestCase {
     // MARK: - Stop
 
     func testStop() {
-        vm.play()
+        mock.emitState(Int32(PY_STATE_PLAYING.rawValue))
         vm.stop()
         XCTAssertTrue(mock.stopCalled)
         XCTAssertTrue(mock.cancelSeekThumbnailsCalled)

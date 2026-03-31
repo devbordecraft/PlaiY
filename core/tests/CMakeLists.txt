@@ -8,6 +8,7 @@ add_executable(plaiy_tests
     test_srt_parser.cpp
     test_audio_passthrough.cpp
     test_playback_stats.cpp
+    test_playback_generation.cpp
     test_frame_presenter.cpp
     test_source_manager.cpp
     test_plex_media_source.cpp
