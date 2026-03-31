@@ -50,6 +50,10 @@ public:
     int packets_submitted_count() const;
     int64_t last_pts_us() const;
 
+    // Current display time from the CMTimebase (reflects what ASBDL is showing,
+    // not the last submitted packet PTS which can be far ahead due to buffering)
+    int64_t current_display_time_us() const;
+
     void close();
 
 private:

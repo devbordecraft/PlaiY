@@ -339,7 +339,12 @@ void PlayerEngine::play() {
     if (impl_->audio_output) impl_->audio_output->start();
 #ifdef __APPLE__
     if (impl_->is_dv_output && impl_->dv_output) {
-        impl_->dv_output->set_rate(impl_->playback_speed.load());
+        // On resume from pause, restart ASBDL timebase immediately.
+        // On initial play (from Ready), defer set_rate to dv_video_decode_loop
+        // so the timebase doesn't start running before the first packet arrives.
+        if (s == PlaybackState::Paused) {
+            impl_->dv_output->set_rate(impl_->playback_speed.load());
+        }
     }
 #endif
     impl_->set_state(PlaybackState::Playing);
@@ -371,7 +376,9 @@ void PlayerEngine::seek(int64_t timestamp_us) {
 #ifdef __APPLE__
             if (impl_->dv_output) impl_->dv_output->set_time(timestamp_us);
 #endif
-            impl_->clock.seek_to(timestamp_us);
+            // Don't freeze the clock for DV — ASBDL manages display timing.
+            // Use set_audio_pts instead of seek_to to avoid the frozen state.
+            impl_->clock.set_audio_pts(timestamp_us);
             // Release first-frame gate immediately — ASBDL handles display timing
             impl_->waiting_for_first_frame.store(false);
         } else {
@@ -784,7 +791,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
         .is_dv_output = impl_->is_dv_output,
 #ifdef __APPLE__
         .dv_packets_submitted = impl_->dv_output ? impl_->dv_output->packets_submitted_count() : 0,
-        .dv_video_pts_us = impl_->dv_output ? impl_->dv_output->last_pts_us() : 0,
+        .dv_video_pts_us = impl_->dv_output ? impl_->dv_output->current_display_time_us() : 0,
 #endif
     };
     return gather_playback_stats(ctx);
@@ -916,18 +923,19 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
             PY_LOG_WARN(TAG, "DV output submit failed: %s", err.message.c_str());
         }
 
-        // Periodically re-sync ASBDL timebase with player clock (~every 5s)
-        // to prevent drift between the video display layer and audio output.
-        int64_t now_us = clock.now_us();
-        if (now_us - last_dv_sync_us > 5000000) {
-            dv_output->set_time(now_us);
-            last_dv_sync_us = now_us;
-        }
-
         // Release first-frame gate after first successful packet submission
         if (first_packet && err.ok()) {
             first_packet = false;
+
+            // Align ASBDL timebase to the first packet's PTS and start it.
+            // This is deferred from play() to avoid the timebase running ahead
+            // while waiting for the display layer and first packet.
+            dv_output->set_time(pkt.pts_us());
+            dv_output->set_rate(playback_speed.load());
+            last_dv_sync_us = pkt.pts_us();
+
             waiting_for_first_frame.store(false, std::memory_order_release);
+            clock.unfreeze();
 
             // Check ASBDL renderer status after a brief delay to detect
             // silent failures (e.g., Profile 5 not supported by ASBDL).
@@ -937,6 +945,14 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
                 dv_fallback_needed.store(true, std::memory_order_release);
                 break;
             }
+        }
+
+        // Periodically re-sync ASBDL timebase with player clock (~every 500ms)
+        // to prevent drift between the video display layer and audio output.
+        int64_t now_us = clock.now_us();
+        if (now_us - last_dv_sync_us > 500000) {
+            dv_output->set_time(now_us);
+            last_dv_sync_us = now_us;
         }
     }
 

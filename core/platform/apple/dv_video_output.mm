@@ -320,6 +320,14 @@ int64_t DVVideoOutput::last_pts_us() const {
     return impl_->last_pts_us.load(std::memory_order_relaxed);
 }
 
+int64_t DVVideoOutput::current_display_time_us() const {
+    if (impl_->timebase) {
+        CMTime t = CMTimebaseGetTime(impl_->timebase);
+        return static_cast<int64_t>(CMTimeGetSeconds(t) * 1e6);
+    }
+    return 0;
+}
+
 void DVVideoOutput::close() {
     @autoreleasepool {
         if (impl_->opened) {
