@@ -26,20 +26,6 @@ vertex VertexOut vertexFullscreen(uint vertexID [[vertex_id]]) {
     return out;
 }
 
-// ---- Bayer 8x8 dithering matrix ----
-// Threshold values normalized to [-0.5, 0.5] range for ordered dithering.
-// Eliminates banding in smooth gradients at sub-LSB cost.
-constant float bayerMatrix8x8[64] = {
-     0.0/64.0 - 0.5, 32.0/64.0 - 0.5,  8.0/64.0 - 0.5, 40.0/64.0 - 0.5,  2.0/64.0 - 0.5, 34.0/64.0 - 0.5, 10.0/64.0 - 0.5, 42.0/64.0 - 0.5,
-    48.0/64.0 - 0.5, 16.0/64.0 - 0.5, 56.0/64.0 - 0.5, 24.0/64.0 - 0.5, 50.0/64.0 - 0.5, 18.0/64.0 - 0.5, 58.0/64.0 - 0.5, 26.0/64.0 - 0.5,
-    12.0/64.0 - 0.5, 44.0/64.0 - 0.5,  4.0/64.0 - 0.5, 36.0/64.0 - 0.5, 14.0/64.0 - 0.5, 46.0/64.0 - 0.5,  6.0/64.0 - 0.5, 38.0/64.0 - 0.5,
-    60.0/64.0 - 0.5, 28.0/64.0 - 0.5, 52.0/64.0 - 0.5, 20.0/64.0 - 0.5, 62.0/64.0 - 0.5, 30.0/64.0 - 0.5, 54.0/64.0 - 0.5, 22.0/64.0 - 0.5,
-     3.0/64.0 - 0.5, 35.0/64.0 - 0.5, 11.0/64.0 - 0.5, 43.0/64.0 - 0.5,  1.0/64.0 - 0.5, 33.0/64.0 - 0.5,  9.0/64.0 - 0.5, 41.0/64.0 - 0.5,
-    51.0/64.0 - 0.5, 19.0/64.0 - 0.5, 59.0/64.0 - 0.5, 27.0/64.0 - 0.5, 49.0/64.0 - 0.5, 17.0/64.0 - 0.5, 57.0/64.0 - 0.5, 25.0/64.0 - 0.5,
-    15.0/64.0 - 0.5, 47.0/64.0 - 0.5,  7.0/64.0 - 0.5, 39.0/64.0 - 0.5, 13.0/64.0 - 0.5, 45.0/64.0 - 0.5,  5.0/64.0 - 0.5, 37.0/64.0 - 0.5,
-    63.0/64.0 - 0.5, 31.0/64.0 - 0.5, 55.0/64.0 - 0.5, 23.0/64.0 - 0.5, 61.0/64.0 - 0.5, 29.0/64.0 - 0.5, 53.0/64.0 - 0.5, 21.0/64.0 - 0.5
-};
-
 // ---- Color space matrices ----
 
 // BT.709 YCbCr to RGB (video range)
@@ -318,6 +304,12 @@ struct VideoUniforms {
 
     // DV reshaping present flag (LUT data passed as separate texture)
     int doviHasReshaping;
+
+    // Source bit depth (8 or 10)
+    int bitDepth;
+
+    // Mastering display minimum luminance (cd/m2, from MDCV SEI)
+    float minLuminance;
 };
 
 // Crop/zoom uniforms (passed as buffer(1))
@@ -456,6 +448,7 @@ fragment float4 fragmentBiplanar(
     VertexOut in [[stage_in]],
     texture2d<float> textureY [[texture(0)]],
     texture2d<float> textureUV [[texture(1)]],
+    texture2d<float> blueNoiseTex [[texture(2)]],
     constant VideoUniforms& uniforms [[buffer(0)]],
     constant CropUniforms& cropUniforms [[buffer(1)]],
     constant ColorFilterUniforms& colorFilters [[buffer(2)]],
@@ -574,7 +567,8 @@ fragment float4 fragmentBiplanar(
         if (uniforms.doviHasL1 != 0) {
             float srcMinPQ = uniforms.doviL1MinPQ;
             float srcMaxPQ = uniforms.doviL1MaxPQ;
-            float dstMinPQ = linearToPQ(0.005);
+            float displayBlack = uniforms.minLuminance > 0.0 ? uniforms.minLuminance : 0.005;
+            float dstMinPQ = linearToPQ(displayBlack);
             float dstMaxPQ = linearToPQ(max(peak * sdrWhite, 1.0));
 
             if (srcMaxPQ > dstMaxPQ) {
@@ -595,7 +589,7 @@ fragment float4 fragmentBiplanar(
             rgb = rgb / sdrWhite;
             rgb = clamp(rgb, 0.0, peak);
         } else {
-            float contentPeak = max(uniforms.maxLuminance, 1000.0);
+            float contentPeak = max(uniforms.maxLuminance, 1500.0);
             float srcMaxPQ = linearToPQ(contentPeak);
             float dstMaxPQ = linearToPQ(max(peak * sdrWhite, 1.0));
 
@@ -639,10 +633,9 @@ fragment float4 fragmentBiplanar(
         }
 
         // Step 7b: Soft HDR highlight rolloff — gently compress values above
-        // SDR white (1.0 EDR) toward the display peak. Apple's system compositor
-        // applies a similar curve, preventing HDR content from appearing too bright
-        // compared to the SDR reference level.
-        {
+        // SDR white (1.0 EDR) toward the display peak. Skipped when L2 trim
+        // is present, since the colorist's SOP/saturation is authoritative.
+        if (uniforms.doviHasL2 == 0) {
             float headroom = max(peak - 1.0, 0.001);
             for (int i = 0; i < 3; i++) {
                 if (rgb[i] > 1.0) {
@@ -733,7 +726,7 @@ fragment float4 fragmentBiplanar(
         } else {
             // Static HDR10: BT.2390 EETF
             float3 linear = pqEOTF(rgb);
-            float maxLum = max(uniforms.maxLuminance, 1000.0);
+            float maxLum = max(uniforms.maxLuminance, 1500.0);
 
             // Convert luminance to PQ domain for BT.2390 EETF
             float srcMaxPQ = linearToPQ(maxLum);
@@ -763,7 +756,7 @@ fragment float4 fragmentBiplanar(
         // HLG: same clamp needed
         rgb = clamp(rgb, 0.0, 1.0);
         float3 linear = hlgEOTF(rgb);
-        float maxLum = max(uniforms.maxLuminance, 1000.0);
+        float maxLum = max(uniforms.maxLuminance, 1500.0);
         rgb = hdrToneMap(linear, sdrWhite, maxLum, uniforms.edrHeadroom);
     } else {
         // SDR: YCbCr-to-RGB produces gamma-encoded values. Convert to linear
@@ -780,10 +773,12 @@ fragment float4 fragmentBiplanar(
     if (uniforms.colorSpace == 1) {
         // BT.2020 -> Display P3 primary rotation (3x3 chromatic adaptation)
         // Derived from BT.2020 and Display P3 primary coordinates via Bradford transform
+        // Row-major BT.2020→P3 matrix, stored as columns for Metal's float3x3.
+        // Column j = (row0[j], row1[j], row2[j])
         const float3x3 bt2020ToP3 = float3x3(
-            float3( 1.3434, -0.2820, -0.0462),
-            float3(-0.0653,  1.0758,  0.0084),
-            float3(-0.0029, -0.0193,  1.0372));
+            float3( 1.3434, -0.0653, -0.0029),   // column 0
+            float3(-0.2820,  1.0758, -0.0193),    // column 1
+            float3(-0.0462,  0.0084,  1.0372));   // column 2
         rgb = bt2020ToP3 * rgb;
 
         // Soft-clip: desaturate out-of-gamut values toward luminance instead of hard clipping
@@ -823,7 +818,8 @@ fragment float4 fragmentBiplanar(
         float s3 = textureY.sample(texSampler, origUV - dir2).r;
 
         // Only deband if all neighbors are very close (quantization band, not real edge)
-        float threshold = 0.004; // ~1 step in 8-bit (1/255)
+        // Scale threshold to source bit depth: 1/255 for 8-bit, 1/1023 for 10-bit
+        float threshold = 1.0 / float((1 << uniforms.bitDepth) - 1);
         float d0 = abs(s0 - center);
         float d1 = abs(s1 - center);
         float d2 = abs(s2 - center);
@@ -880,14 +876,17 @@ fragment float4 fragmentBiplanar(
         rgb = clamp(rgb, 0.0, maxVal);
     }
 
-    // Ordered dithering (Bayer 8x8): eliminates banding in smooth gradients.
+    // Blue noise dithering: eliminates banding in smooth gradients.
     // Applied as the final step so it operates on the actual output values.
-    // Magnitude is one 8-bit LSB (1/255), invisible but breaks quantization bands.
+    // Blue noise has no visible spatial pattern, unlike Bayer ordered dithering.
     {
         uint fc = colorFilters.frameCounter;
-        int2 offset = int2(fc % 8, (fc * 3) % 8);
-        int2 pos = (int2(in.position.xy) + offset) % 8;
-        float dither = bayerMatrix8x8[pos.y * 8 + pos.x];
+        float2 noiseSize = float2(blueNoiseTex.get_width(), blueNoiseTex.get_height());
+        // Temporal animation: shift sampling coordinates each frame using coprime offsets
+        float2 noiseCoord = fmod(in.position.xy + float2(fc * 7, fc * 11), noiseSize) / noiseSize;
+        constexpr sampler noiseSampler(mag_filter::nearest, min_filter::nearest,
+                                       address::repeat);
+        float dither = blueNoiseTex.sample(noiseSampler, noiseCoord).r - 0.5;
         // Scale dither magnitude: 1 LSB for SDR, scaled for HDR EDR range
         float magnitude = (uniforms.transferFunc > 0)
             ? 1.0 / (max(uniforms.edrHeadroom, 1.0) * 255.0)

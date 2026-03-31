@@ -204,6 +204,7 @@ struct PlayerEngine::Impl {
 #endif
     bool is_dv_output = false;
     std::atomic<bool> dv_fallback_needed{false};
+    int64_t last_dv_sync_us = 0; // periodic ASBDL timebase re-sync
 
     void dv_video_decode_loop();
 };
@@ -915,6 +916,14 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
         Error err = dv_output->submit_packet(pkt);
         if (err) {
             PY_LOG_WARN(TAG, "DV output submit failed: %s", err.message.c_str());
+        }
+
+        // Periodically re-sync ASBDL timebase with player clock (~every 5s)
+        // to prevent drift between the video display layer and audio output.
+        int64_t now_us = clock.now_us();
+        if (now_us - last_dv_sync_us > 5000000) {
+            dv_output->set_time(now_us);
+            last_dv_sync_us = now_us;
         }
 
         // Release first-frame gate after first successful packet submission

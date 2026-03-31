@@ -285,6 +285,14 @@ bool        py_player_frame_dovi_l1(void* frame, uint16_t* min_pq, uint16_t* max
 bool        py_player_frame_dovi_l2(void* frame, uint16_t* slope, uint16_t* offset,
                                      uint16_t* power, uint16_t* chroma_weight,
                                      uint16_t* saturation_gain, int16_t* ms_weight);
+// L5 active area metadata (per-frame letterbox offsets)
+bool        py_player_frame_dovi_l5(void* frame, uint16_t* left, uint16_t* right,
+                                     uint16_t* top, uint16_t* bottom);
+// L6 RPU-level static HDR10 metadata (overrides stream-level SEI)
+bool        py_player_frame_dovi_l6(void* frame, uint16_t* max_lum, uint16_t* min_lum,
+                                     uint16_t* max_cll, uint16_t* max_fall);
+// Mastering display minimum luminance (0.0001 cd/m2 units, from MDCV SEI)
+uint32_t    py_player_frame_get_min_luminance(void* frame);
 // Pre-computed reshaping LUT (1024 float entries for the given component 0=Y, 1=Cb, 2=Cr)
 bool        py_player_frame_dovi_has_reshaping(void* frame);
 bool        py_player_frame_dovi_reshape_lut(void* frame, int component, float* lut1024);

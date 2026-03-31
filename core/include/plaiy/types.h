@@ -139,6 +139,20 @@ struct DoviColorMetadata {
     uint16_t l2_trim_saturation_gain = 2048;
     int16_t l2_ms_weight = 0;
 
+    // L5 active area metadata (per-frame letterbox offsets from RPU)
+    bool has_l5 = false;
+    uint16_t l5_left_offset = 0;
+    uint16_t l5_right_offset = 0;
+    uint16_t l5_top_offset = 0;
+    uint16_t l5_bottom_offset = 0;
+
+    // L6 static HDR10 metadata (RPU-level, overrides stream SEI)
+    bool has_l6 = false;
+    uint16_t l6_max_luminance = 0;    // cd/m2
+    uint16_t l6_min_luminance = 0;    // 0.0001 cd/m2
+    uint16_t l6_max_cll = 0;          // cd/m2
+    uint16_t l6_max_fall = 0;         // cd/m2
+
     // Pre-computed reshaping LUTs (1024 entries per component: Y, Cb, Cr).
     // Evaluated on the CPU from polynomial/MMR reshaping curves in the RPU.
     bool has_reshaping = false;

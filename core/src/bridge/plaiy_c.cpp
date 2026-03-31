@@ -560,6 +560,35 @@ bool py_player_frame_dovi_l2(void* frame, uint16_t* slope, uint16_t* offset,
     return true;
 }
 
+bool py_player_frame_dovi_l5(void* frame, uint16_t* left, uint16_t* right,
+                              uint16_t* top, uint16_t* bottom) {
+    if (!frame || !left || !right || !top || !bottom) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_l5) return false;
+    *left = vf->dovi_color.l5_left_offset;
+    *right = vf->dovi_color.l5_right_offset;
+    *top = vf->dovi_color.l5_top_offset;
+    *bottom = vf->dovi_color.l5_bottom_offset;
+    return true;
+}
+
+bool py_player_frame_dovi_l6(void* frame, uint16_t* max_lum, uint16_t* min_lum,
+                              uint16_t* max_cll, uint16_t* max_fall) {
+    if (!frame || !max_lum || !min_lum || !max_cll || !max_fall) return false;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_l6) return false;
+    *max_lum = vf->dovi_color.l6_max_luminance;
+    *min_lum = vf->dovi_color.l6_min_luminance;
+    *max_cll = vf->dovi_color.l6_max_cll;
+    *max_fall = vf->dovi_color.l6_max_fall;
+    return true;
+}
+
+uint32_t py_player_frame_get_min_luminance(void* frame) {
+    if (!frame) return 0;
+    return static_cast<py::VideoFrame*>(frame)->hdr_metadata.min_luminance;
+}
+
 bool py_player_frame_dovi_has_reshaping(void* frame) {
     if (!frame) return false;
     return static_cast<py::VideoFrame*>(frame)->dovi_color.has_reshaping;

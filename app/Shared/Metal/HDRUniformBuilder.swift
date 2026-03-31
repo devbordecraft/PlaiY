@@ -118,6 +118,25 @@ struct HDRUniformBuilder {
             uniforms.maxLuminance = max(uniforms.maxLuminance, Float(maxCLL))
         }
 
+        // Mastering display minimum luminance (for tone mapping black point)
+        let minLum = PlayerBridge.frameMinLuminance(framePtr)
+        if minLum > 0 {
+            uniforms.minLuminance = Float(minLum) / 10000.0 // convert from 0.0001 cd/m2
+        }
+
+        // L6 RPU-level MaxCLL/MaxFALL override (more accurate than stream-level SEI)
+        if let l6 = PlayerBridge.frameDoviL6(framePtr) {
+            if l6.maxCLL > 0 {
+                uniforms.maxLuminance = max(uniforms.maxLuminance, Float(l6.maxCLL))
+            }
+            if l6.maxFALL > 0 {
+                uniforms.maxFALL = max(uniforms.maxFALL, Float(l6.maxFALL))
+            }
+            if l6.minLum > 0 {
+                uniforms.minLuminance = Float(l6.minLum) / 10000.0
+            }
+        }
+
         uniforms.edrHeadroom = max(edrHeadroom, 1.0)
 
         // MaxFALL for scene-adaptive static HDR10

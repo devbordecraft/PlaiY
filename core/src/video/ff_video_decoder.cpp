@@ -408,6 +408,26 @@ bool FFVideoDecoder::fill_frame(const AVFrame* av_frame, VideoFrame& out) {
                 out.dovi_color.l2_ms_weight = l2_block->l2.ms_weight;
             }
 
+            // L5 metadata: active area offsets (letterbox hints from colorist)
+            const AVDOVIDmData* l5_block = av_dovi_find_level(dovi, 5);
+            if (l5_block) {
+                out.dovi_color.has_l5 = true;
+                out.dovi_color.l5_left_offset = l5_block->l5.left_offset;
+                out.dovi_color.l5_right_offset = l5_block->l5.right_offset;
+                out.dovi_color.l5_top_offset = l5_block->l5.top_offset;
+                out.dovi_color.l5_bottom_offset = l5_block->l5.bottom_offset;
+            }
+
+            // L6 metadata: RPU-level MaxCLL/MaxFALL (overrides stream-level SEI)
+            const AVDOVIDmData* l6_block = av_dovi_find_level(dovi, 6);
+            if (l6_block) {
+                out.dovi_color.has_l6 = true;
+                out.dovi_color.l6_max_luminance = l6_block->l6.max_luminance;
+                out.dovi_color.l6_min_luminance = l6_block->l6.min_luminance;
+                out.dovi_color.l6_max_cll = l6_block->l6.max_cll;
+                out.dovi_color.l6_max_fall = l6_block->l6.max_fall;
+            }
+
             // Reshaping curves: evaluate into 1024-entry LUTs per component
             float coef_scale = 1.0f / static_cast<float>(1 << header->coef_log2_denom);
             bool any_reshaping = false;

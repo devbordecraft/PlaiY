@@ -55,6 +55,12 @@ struct VideoUniforms {
 
     // DV reshaping present flag (LUT data passed as separate texture)
     var doviHasReshaping: Int32 = 0
+
+    // Source bit depth (8 or 10)
+    var bitDepth: Int32 = 8
+
+    // Mastering display minimum luminance (cd/m2, from MDCV SEI)
+    var minLuminance: Float = 0.0
 }
 
 struct CropUniforms {
@@ -99,6 +105,9 @@ class MetalViewCoordinator {
     // DV reshape LUT buffer (3 components x 1024 entries x 4 bytes = 12KB)
     private var reshapeLUTBuffer: MTLBuffer?
 
+    // Blue noise texture for dithering (64x64, single-channel)
+    private var blueNoiseTexture: MTLTexture?
+
     // Display link rate management — drop to 4fps when paused to save power
     private weak var mtkView: MTKView?
     private var wasPlaying = true
@@ -120,6 +129,7 @@ class MetalViewCoordinator {
 
         self.mtkView = mtkView
         setupPipeline(mtkView: mtkView)
+        blueNoiseTexture = Self.createBlueNoiseTexture(device: device)
 
         #if os(macOS)
         updateEDRHeadroom(window: mtkView.window)
@@ -175,6 +185,44 @@ class MetalViewCoordinator {
         } catch {
             PYLog.error("Failed to create render pipeline: \(error)", tag: "Metal")
         }
+    }
+
+    /// Create a 64×64 blue noise texture for dithering using a rank-1 lattice sequence.
+    /// This produces a low-discrepancy pattern that looks like grain rather than a grid.
+    private static func createBlueNoiseTexture(device: MTLDevice) -> MTLTexture? {
+        let size = 64
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .r8Unorm, width: size, height: size, mipmapped: false)
+        desc.usage = .shaderRead
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+
+        // Generate blue noise via void-and-cluster inspired rank ordering.
+        // Use the R2 low-discrepancy sequence (generalized golden ratio in 2D)
+        // to scatter sample points, then rank-order by insertion index.
+        let n = size * size
+        var values = [UInt8](repeating: 0, count: n)
+        let g = 1.32471795724  // plastic constant (tribonacci)
+        let a1 = 1.0 / g
+        let a2 = 1.0 / (g * g)
+        // Generate sequence positions and rank by spatial coverage
+        var sequence = [(Int, Int)](repeating: (0, 0), count: n)
+        for i in 0..<n {
+            let x = Int((Double(i) * a1).truncatingRemainder(dividingBy: 1.0) * Double(size)) % size
+            let y = Int((Double(i) * a2).truncatingRemainder(dividingBy: 1.0) * Double(size)) % size
+            sequence[i] = (x, y)
+        }
+        // Rank maps sequence index → pixel value (0..255)
+        for i in 0..<n {
+            let (x, y) = sequence[i]
+            values[y * size + x] = UInt8(clamping: i * 256 / n)
+        }
+
+        texture.replace(
+            region: MTLRegionMake2D(0, 0, size, size),
+            mipmapLevel: 0,
+            withBytes: values,
+            bytesPerRow: size)
+        return texture
     }
 
     func drawableSizeWillChange(size: CGSize) {
@@ -303,6 +351,7 @@ class MetalViewCoordinator {
         // Build HDR uniforms from frame metadata
         var uniforms = HDRUniformBuilder.buildVideoUniforms(
             framePtr: framePtr, edrHeadroom: cachedEDRHeadroom)
+        uniforms.bitDepth = is10bit ? 10 : 8
 
         // Upload DV reshaping LUT to GPU buffer
         var reshapeLUTData: [Float]?
@@ -394,6 +443,9 @@ class MetalViewCoordinator {
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentTexture(yTex, index: 0)
         encoder.setFragmentTexture(uvTex, index: 1)
+        if let blueNoise = blueNoiseTexture {
+            encoder.setFragmentTexture(blueNoise, index: 2)
+        }
         var colorFilterUniforms = ColorFilterUniformBuilder.build(playerBridge: playerBridge, frameCounter: frameCounter)
 
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VideoUniforms>.size, index: 0)

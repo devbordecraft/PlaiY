@@ -402,6 +402,28 @@ final class PlayerBridge: @unchecked Sendable {
         return (slope, offset, power, chromaWeight, saturationGain, msWeight)
     }
 
+    static func frameDoviL5(_ frame: UnsafeMutableRawPointer) -> (left: UInt16, right: UInt16, top: UInt16, bottom: UInt16)? {
+        var left: UInt16 = 0
+        var right: UInt16 = 0
+        var top: UInt16 = 0
+        var bottom: UInt16 = 0
+        guard py_player_frame_dovi_l5(frame, &left, &right, &top, &bottom) else { return nil }
+        return (left, right, top, bottom)
+    }
+
+    static func frameDoviL6(_ frame: UnsafeMutableRawPointer) -> (maxLum: UInt16, minLum: UInt16, maxCLL: UInt16, maxFALL: UInt16)? {
+        var maxLum: UInt16 = 0
+        var minLum: UInt16 = 0
+        var maxCLL: UInt16 = 0
+        var maxFALL: UInt16 = 0
+        guard py_player_frame_dovi_l6(frame, &maxLum, &minLum, &maxCLL, &maxFALL) else { return nil }
+        return (maxLum, minLum, maxCLL, maxFALL)
+    }
+
+    @inline(always) static func frameMinLuminance(_ frame: UnsafeMutableRawPointer) -> UInt32 {
+        py_player_frame_get_min_luminance(frame)
+    }
+
     @inline(always) static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_dovi_has_reshaping(frame)
     }
