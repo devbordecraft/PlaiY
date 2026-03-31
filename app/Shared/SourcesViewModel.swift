@@ -78,22 +78,17 @@ class SourcesViewModel: ObservableObject {
         isConnecting = true
         error = nil
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let password = KeychainHelper.password(for: sourceId) ?? ""
-            let success = self.bridge.connect(sourceId: sourceId, password: password)
+        let password = KeychainHelper.password(for: sourceId) ?? ""
+        let success = bridge.connect(sourceId: sourceId, password: password)
 
-            DispatchQueue.main.async {
-                self.isConnecting = false
-                if success {
-                    self.currentSourceId = sourceId
-                    self.navigationPath = []
-                    self.navigationDisplayNames = []
-                    self.browse(sourceId: sourceId, relativePath: "")
-                } else {
-                    self.error = "Connection failed — check address and credentials"
-                }
-            }
+        isConnecting = false
+        if success {
+            currentSourceId = sourceId
+            navigationPath = []
+            navigationDisplayNames = []
+            browse(sourceId: sourceId, relativePath: "")
+        } else {
+            error = "Connection failed — check address and credentials"
         }
     }
 
@@ -117,17 +112,11 @@ class SourcesViewModel: ObservableObject {
         isLoading = true
         error = nil
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            let entries = self.bridge.listDirectory(sourceId: sourceId, relativePath: relativePath)
-
-            DispatchQueue.main.async {
-                self.isLoading = false
-                self.currentEntries = entries
-                if entries.isEmpty && !relativePath.isEmpty {
-                    // Folder might be empty or an error occurred
-                }
-            }
+        let entries = bridge.listDirectory(sourceId: sourceId, relativePath: relativePath)
+        isLoading = false
+        currentEntries = entries
+        if entries.isEmpty && !relativePath.isEmpty {
+            // Folder might be empty or an error occurred
         }
     }
 

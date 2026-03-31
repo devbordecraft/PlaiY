@@ -12,6 +12,7 @@ add_executable(plaiy_tests
     test_source_manager.cpp
     test_plex_media_source.cpp
     test_audio_filter_chain.cpp
+    test_filesystem_error_handling.cpp
 )
 
 target_link_libraries(plaiy_tests PRIVATE

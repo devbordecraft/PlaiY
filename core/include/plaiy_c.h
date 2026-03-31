@@ -299,22 +299,24 @@ bool        py_player_frame_dovi_reshape_lut(void* frame, int component, float* 
 
 // ---- Subtitle ----
 typedef struct {
-    // For text subtitles
-    const char* text;       // NULL for bitmap subs
-
-    // For bitmap subtitles
     const uint8_t* rgba_data;
     int width;
     int height;
     int x;
     int y;
+} PYSubtitleRegion;
+
+typedef struct {
+    // For text subtitles
+    const char* text;       // NULL for bitmap subs
+
+    // For bitmap subtitles
+    const PYSubtitleRegion* regions;
+    int region_count;
 
     // Timing
     int64_t start_us;
     int64_t end_us;
-
-    // Number of bitmap regions (for ASS)
-    int region_count;
 } PYSubtitleFrame;
 
 // Ownership: caller must call py_subtitle_free() on the returned frame.

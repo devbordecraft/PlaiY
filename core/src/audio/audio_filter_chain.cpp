@@ -133,6 +133,27 @@ void AudioFilterChain::send_frame(AVFrame* frame) {
     }
 }
 
+void AudioFilterChain::send_eof() {
+    if (!open_) return;
+
+    active_pre_filter_ = nullptr;
+    for (auto& f : pre_resample_) {
+        if (f->enabled()) active_pre_filter_ = f.get();
+    }
+
+    if (active_pre_filter_) {
+        for (auto& f : pre_resample_) {
+            if (f->enabled()) {
+                f->send_frame(nullptr);
+                break;
+            }
+        }
+    }
+
+    has_pending_direct_ = false;
+    pending_direct_frame_ = nullptr;
+}
+
 bool AudioFilterChain::drain(std::vector<float>& out_samples, int& out_num_samples) {
     if (!open_) return false;
 

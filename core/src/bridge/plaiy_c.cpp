@@ -639,15 +639,24 @@ PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us) {
         memcpy(text_copy, sf.text.c_str(), sf.text.size() + 1);
         out->text = text_copy;
     } else if (!sf.regions.empty()) {
-        // Use the first region for simplicity
-        const auto& r = sf.regions[0];
-        uint8_t* data_copy = new uint8_t[r.rgba_data.size()];
-        memcpy(data_copy, r.rgba_data.data(), r.rgba_data.size());
-        out->rgba_data = data_copy;
-        out->width = r.width;
-        out->height = r.height;
-        out->x = r.x;
-        out->y = r.y;
+        auto* regions = new PYSubtitleRegion[sf.regions.size()];
+        memset(regions, 0, sizeof(PYSubtitleRegion) * sf.regions.size());
+
+        for (size_t i = 0; i < sf.regions.size(); ++i) {
+            const auto& r = sf.regions[i];
+            auto& out_region = regions[i];
+            if (!r.rgba_data.empty()) {
+                uint8_t* data_copy = new uint8_t[r.rgba_data.size()];
+                memcpy(data_copy, r.rgba_data.data(), r.rgba_data.size());
+                out_region.rgba_data = data_copy;
+            }
+            out_region.width = r.width;
+            out_region.height = r.height;
+            out_region.x = r.x;
+            out_region.y = r.y;
+        }
+
+        out->regions = regions;
         out->region_count = static_cast<int>(sf.regions.size());
     }
 
@@ -657,7 +666,12 @@ PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us) {
 void py_subtitle_free(PYSubtitleFrame* sf) {
     if (!sf) return;
     delete[] sf->text;
-    delete[] sf->rgba_data;
+    if (sf->regions) {
+        for (int i = 0; i < sf->region_count; ++i) {
+            delete[] sf->regions[i].rgba_data;
+        }
+    }
+    delete[] sf->regions;
     delete sf;
 }
 

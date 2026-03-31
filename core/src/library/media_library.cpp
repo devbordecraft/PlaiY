@@ -26,16 +26,32 @@ MediaLibrary::MediaLibrary() : impl_(std::make_unique<Impl>()) {}
 MediaLibrary::~MediaLibrary() = default;
 
 Error MediaLibrary::add_folder(const std::string& path) {
-    if (!fs::exists(path) || !fs::is_directory(path)) {
+    std::error_code ec;
+    bool exists = fs::exists(path, ec);
+    if (ec || !exists || !fs::is_directory(path, ec)) {
         return {ErrorCode::FileNotFound, "Directory not found: " + path};
     }
 
     impl_->folders.push_back(path);
 
     int added = 0;
-    for (const auto& entry : fs::recursive_directory_iterator(path,
-             fs::directory_options::skip_permission_denied)) {
-        if (!entry.is_regular_file()) continue;
+    fs::recursive_directory_iterator it(path, fs::directory_options::skip_permission_denied, ec);
+    fs::recursive_directory_iterator end;
+    if (ec) {
+        return {ErrorCode::FileNotFound, "Directory not found: " + path};
+    }
+
+    for (; it != end; it.increment(ec)) {
+        if (ec) {
+            ec.clear();
+            continue;
+        }
+
+        const auto& entry = *it;
+        if (!entry.is_regular_file(ec)) {
+            ec.clear();
+            continue;
+        }
 
         std::string ext = entry.path().extension().string();
         for (auto& c : ext) c = static_cast<char>(tolower(c));

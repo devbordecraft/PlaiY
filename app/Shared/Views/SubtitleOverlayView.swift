@@ -4,22 +4,25 @@ struct SubtitleOverlayView: View {
     @EnvironmentObject var settings: AppSettings
     let subtitle: SubtitleData?
     var isHDRContent: Bool = false
+    var videoWidth: Int = 0
+    var videoHeight: Int = 0
+    var videoSARNum: Int = 1
+    var videoSARDen: Int = 1
+    var displaySettings: VideoDisplaySettings = .default
 
-    // Cache last decoded bitmap to avoid re-creating NSImage/UIImage every frame
-    @MainActor private static var cachedDataHash: Int = 0
+    // Cache decoded bitmap regions to avoid re-creating platform images every frame.
     #if os(macOS)
-    @MainActor private static var cachedImage: NSImage?
+    @MainActor private static var cachedImages: [Int: NSImage] = [:]
     #else
-    @MainActor private static var cachedImage: UIImage?
+    @MainActor private static var cachedImages: [Int: UIImage] = [:]
     #endif
 
     var body: some View {
-        VStack {
-            Spacer()
-
-            if let subtitle = subtitle {
-                switch subtitle {
-                case .text(let text):
+        GeometryReader { geometry in
+            switch subtitle {
+            case .some(.text(let text)):
+                VStack {
+                    Spacer()
                     Text(text)
                         .font(settings.subtitleFont)
                         .fontWeight(.medium)
@@ -33,37 +36,53 @@ struct SubtitleOverlayView: View {
                                 .fill(settings.subtitleBackgroundColor)
                         )
                         .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.bottom, 60)
 
-                case .bitmap(let data, let width, let height, _, _):
-                    if let image = cachedBitmapImage(data: data, width: width, height: height) {
-                        #if os(macOS)
-                        Image(nsImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 600)
-                        #else
-                        Image(uiImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 600)
-                        #endif
+            case .some(.bitmap(let regions)):
+                let videoRect = subtitleViewport(in: geometry.size)
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(regions.enumerated()), id: \.offset) { _, region in
+                        if let image = cachedBitmapImage(
+                            data: region.data,
+                            width: region.width,
+                            height: region.height
+                        ) {
+                            let frame = subtitleRegionFrame(region, in: videoRect)
+                            bitmapImageView(image)
+                                .frame(width: frame.width, height: frame.height)
+                                .position(x: frame.midX, y: frame.midY)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            case nil:
+                EmptyView()
             }
         }
-        .padding(.bottom, 60)
     }
 
     #if os(macOS)
+    @MainActor
     private func cachedBitmapImage(data: Data, width: Int, height: Int) -> NSImage? {
-        let hash = data.hashValue
-        if hash == Self.cachedDataHash, let cached = Self.cachedImage {
+        let hash = data.hashValue ^ (width << 4) ^ height
+        if let cached = Self.cachedImages[hash] {
             return cached
         }
         let image = bitmapImage(data: data, width: width, height: height)
-        Self.cachedDataHash = hash
-        Self.cachedImage = image
+        if let image {
+            Self.cachedImages[hash] = image
+        }
         return image
+    }
+
+    @ViewBuilder
+    private func bitmapImageView(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .interpolation(.none)
     }
 
     private func bitmapImage(data: Data, width: Int, height: Int) -> NSImage? {
@@ -92,15 +111,24 @@ struct SubtitleOverlayView: View {
         return image
     }
     #else
+    @MainActor
     private func cachedBitmapImage(data: Data, width: Int, height: Int) -> UIImage? {
-        let hash = data.hashValue
-        if hash == Self.cachedDataHash, let cached = Self.cachedImage {
+        let hash = data.hashValue ^ (width << 4) ^ height
+        if let cached = Self.cachedImages[hash] {
             return cached
         }
         let image = bitmapImage(data: data, width: width, height: height)
-        Self.cachedDataHash = hash
-        Self.cachedImage = image
+        if let image {
+            Self.cachedImages[hash] = image
+        }
         return image
+    }
+
+    @ViewBuilder
+    private func bitmapImageView(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .interpolation(.none)
     }
 
     private func bitmapImage(data: Data, width: Int, height: Int) -> UIImage? {
@@ -119,4 +147,78 @@ struct SubtitleOverlayView: View {
         return UIImage(cgImage: cgImage)
     }
     #endif
+
+    private func subtitleViewport(in size: CGSize) -> CGRect {
+        guard videoWidth > 0, videoHeight > 0, size.width > 0, size.height > 0 else {
+            return CGRect(origin: .zero, size: size)
+        }
+
+        let nativeDAR = (Double(videoWidth) * Double(max(videoSARNum, 1))) /
+                        (Double(videoHeight) * Double(max(videoSARDen, 1)))
+
+        var effectiveDAR: Double
+        if let forced = displaySettings.aspectRatioMode.forcedDAR {
+            effectiveDAR = forced
+        } else {
+            effectiveDAR = nativeDAR
+            if displaySettings.crop.isActive {
+                effectiveDAR *= Double(displaySettings.crop.texScaleX) /
+                                Double(displaySettings.crop.texScaleY)
+            }
+        }
+
+        let viewW = Double(size.width)
+        let viewH = Double(size.height)
+        let viewAR = viewW / viewH
+        var vpW = viewW
+        var vpH = viewH
+
+        switch displaySettings.aspectRatioMode {
+        case .stretch:
+            break
+        case .fill:
+            if effectiveDAR > viewAR {
+                vpW = viewH * effectiveDAR
+                vpH = viewH
+            } else if effectiveDAR < viewAR {
+                vpH = viewW / effectiveDAR
+                vpW = viewW
+            }
+        default:
+            if effectiveDAR > viewAR {
+                vpH = vpW / effectiveDAR
+            } else if effectiveDAR < viewAR {
+                vpW = vpH * effectiveDAR
+            }
+        }
+
+        let zoom = max(1.0, displaySettings.zoom)
+        vpW *= zoom
+        vpH *= zoom
+
+        var vpX = (viewW - vpW) / 2.0
+        var vpY = (viewH - vpH) / 2.0
+        let maxPanX = max(0, (vpW - viewW) / 2.0)
+        let maxPanY = max(0, (vpH - viewH) / 2.0)
+        vpX += displaySettings.panX * maxPanX
+        vpY += displaySettings.panY * maxPanY
+
+        return CGRect(x: vpX, y: vpY, width: vpW, height: vpH)
+    }
+
+    private func subtitleRegionFrame(_ region: SubtitleBitmapRegion, in videoRect: CGRect) -> CGRect {
+        guard videoWidth > 0, videoHeight > 0 else {
+            return CGRect(x: region.x, y: region.y, width: region.width, height: region.height)
+        }
+
+        let scaleX = videoRect.width / CGFloat(videoWidth)
+        let scaleY = videoRect.height / CGFloat(videoHeight)
+
+        return CGRect(
+            x: videoRect.minX + CGFloat(region.x) * scaleX,
+            y: videoRect.minY + CGFloat(region.y) * scaleY,
+            width: CGFloat(region.width) * scaleX,
+            height: CGFloat(region.height) * scaleY
+        )
+    }
 }

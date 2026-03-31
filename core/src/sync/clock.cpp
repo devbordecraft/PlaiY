@@ -111,10 +111,11 @@ void Clock::set_paused(bool paused) {
 void Clock::set_rate(double rate) {
     std::lock_guard lock(write_mutex_);
     begin_write();
-    // Snap current time before changing rate
     auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - state_.last_update).count();
-    state_.audio_pts_us += static_cast<int64_t>(static_cast<double>(elapsed) * state_.rate);
+    if (!state_.paused && !state_.frozen) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(now - state_.last_update).count();
+        state_.audio_pts_us += static_cast<int64_t>(static_cast<double>(elapsed) * state_.rate);
+    }
     state_.last_update = now;
     state_.rate = rate;
     end_write();

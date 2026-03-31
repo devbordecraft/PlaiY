@@ -137,6 +137,11 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertEqual(mock.lastSetSpeed, 2.0)
     }
 
+    func testSetSpatialMode() {
+        vm.setSpatialMode(2)
+        XCTAssertEqual(mock.lastSetSpatialMode, 2)
+    }
+
     func testCycleSpeedUp() {
         vm.playbackSpeed = 1.0
         vm.cycleSpeedUp()

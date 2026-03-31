@@ -39,7 +39,13 @@ void SeekThumbnailGenerator::start(const std::string& video_path,
     last_index_ = -1;
 
     // Create cache directory
-    std::filesystem::create_directories(cache_dir);
+    std::error_code ec;
+    std::filesystem::create_directories(cache_dir, ec);
+    if (ec) {
+        PY_LOG_WARN(TAG, "Failed to create thumbnail cache dir %s: %s",
+                    cache_dir.c_str(), ec.message().c_str());
+        return;
+    }
 
     worker_ = std::thread(&SeekThumbnailGenerator::generate_loop, this,
                            video_path, cache_dir, interval_seconds);

@@ -27,6 +27,10 @@ final class PlaybackTransport {
     var currentSubtitle: SubtitleData?
     var passthroughActive: Bool = false
     var spatialActive: Bool = false
+    var videoWidth: Int = 0
+    var videoHeight: Int = 0
+    var videoSARNum: Int = 1
+    var videoSARDen: Int = 1
     nonisolated(unsafe) var isHDRContent: Bool = false
     var playbackStats: PYPlaybackStats?
 
@@ -195,6 +199,20 @@ class PlayerViewModel: ObservableObject {
         subtitleTracks = parsed.subtitle
         activeAudioStream = Int(bridge.activeAudioStream)
         activeSubtitleStream = Int(bridge.activeSubtitleStream)
+        if let data = json.data(using: .utf8),
+           let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let tracks = root["tracks"] as? [[String: Any]],
+           let videoTrack = tracks.first(where: { ($0["type"] as? Int ?? 0) == 1 }) {
+            transport.videoWidth = videoTrack["width"] as? Int ?? 0
+            transport.videoHeight = videoTrack["height"] as? Int ?? 0
+            transport.videoSARNum = max(1, videoTrack["sar_num"] as? Int ?? 1)
+            transport.videoSARDen = max(1, videoTrack["sar_den"] as? Int ?? 1)
+        } else {
+            transport.videoWidth = 0
+            transport.videoHeight = 0
+            transport.videoSARNum = 1
+            transport.videoSARDen = 1
+        }
 
         if !settings.preferredAudioLanguage.isEmpty {
             if let match = audioTracks.first(where: { $0.language == settings.preferredAudioLanguage }) {
@@ -225,7 +243,9 @@ class PlayerViewModel: ObservableObject {
         bridge.startSeekThumbnails(interval: interval)
 
         NowPlayingManager.shared.setup(
-            onPlayPause: { [weak self] in self?.togglePlayPause() },
+            onPlay: { [weak self] in self?.play() },
+            onPause: { [weak self] in self?.pause() },
+            onTogglePlayPause: { [weak self] in self?.togglePlayPause() },
             onNextTrack: onNextTrack,
             onPreviousTrack: onPreviousTrack
         )
@@ -315,6 +335,10 @@ class PlayerViewModel: ObservableObject {
         transport.currentPosition = 0
         playbackSpeed = 1.0
         transport.seekPreviewImage = nil
+        transport.videoWidth = 0
+        transport.videoHeight = 0
+        transport.videoSARNum = 1
+        transport.videoSARDen = 1
         transport.displaySettings = .default
         transport.onCropDetected = nil
         aspectRatioMode = .auto

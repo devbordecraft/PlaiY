@@ -20,7 +20,9 @@ LocalMediaSource::LocalMediaSource(SourceConfig config)
     : config_(std::move(config)) {}
 
 Error LocalMediaSource::connect() {
-    if (!fs::exists(config_.base_uri) || !fs::is_directory(config_.base_uri)) {
+    std::error_code ec;
+    bool exists = fs::exists(config_.base_uri, ec);
+    if (ec || !exists || !fs::is_directory(config_.base_uri, ec)) {
         return {ErrorCode::FileNotFound, "Directory not found: " + config_.base_uri};
     }
     PY_LOG_INFO(TAG, "Connected: %s (%s)", config_.display_name.c_str(), config_.base_uri.c_str());
@@ -32,7 +34,8 @@ void LocalMediaSource::disconnect() {
 }
 
 bool LocalMediaSource::is_connected() const {
-    return fs::exists(config_.base_uri) && fs::is_directory(config_.base_uri);
+    std::error_code ec;
+    return fs::exists(config_.base_uri, ec) && !ec && fs::is_directory(config_.base_uri, ec);
 }
 
 Error LocalMediaSource::list_directory(const std::string& relative_path,
@@ -44,11 +47,12 @@ Error LocalMediaSource::list_directory(const std::string& relative_path,
         full_path += "/" + relative_path;
     }
 
-    if (!fs::exists(full_path) || !fs::is_directory(full_path)) {
+    std::error_code ec;
+    bool exists = fs::exists(full_path, ec);
+    if (ec || !exists || !fs::is_directory(full_path, ec)) {
         return {ErrorCode::FileNotFound, "Directory not found: " + full_path};
     }
 
-    std::error_code ec;
     for (const auto& entry : fs::directory_iterator(full_path,
              fs::directory_options::skip_permission_denied, ec)) {
         if (ec) continue;

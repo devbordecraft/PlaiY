@@ -191,6 +191,9 @@ void AudioPipeline::restart(const TrackInfo& track,
     passthrough_ring_read_ = 0;
     passthrough_ring_write_ = 0;
     passthrough_ring_size_ = 0;
+    passthrough_ring_capacity_ = 0;
+    passthrough_bytes_per_second_ = 0;
+    passthrough_pts_for_ring_ = 0;
 
     // 5. Re-open in the new mode
     setup(track, audio_output, audio_decoder,
@@ -213,6 +216,24 @@ void AudioPipeline::restart(const TrackInfo& track,
 
     PY_LOG_INFO(TAG, "Audio pipeline restarted in %s mode",
                 audio_output_mode_ == AudioOutputMode::Passthrough ? "passthrough" : "PCM");
+}
+
+bool AudioPipeline::wait_for_drain() {
+    std::unique_lock lock(shared_.audio_ring_flush_mutex);
+    shared_.audio_ring_not_full.wait(lock, [&] {
+        bool drained = false;
+        if (audio_output_mode_ == AudioOutputMode::Passthrough) {
+            drained = (passthrough_ring_size_ == 0);
+        } else {
+            drained = (shared_.audio_ring.available_read() == 0);
+        }
+        return drained ||
+               !shared_.running.load(std::memory_order_relaxed) ||
+               shared_.audio_restart_requested.load(std::memory_order_relaxed);
+    });
+
+    return shared_.running.load(std::memory_order_relaxed) &&
+           !shared_.audio_restart_requested.load(std::memory_order_relaxed);
 }
 
 int AudioPipeline::pcm_pull(float* buffer, int frames, int channels) {
@@ -263,10 +284,10 @@ int AudioPipeline::bitstream_pull(uint8_t* buffer, int bytes) {
     return static_cast<int>(to_read);
 }
 
-void AudioPipeline::passthrough_write_loop() {
+bool AudioPipeline::passthrough_write_loop() {
     PY_LOG_INFO(TAG, "Audio passthrough loop started");
 
-    if (!audio_output_ptr_) return;
+    if (!audio_output_ptr_) return false;
 
     std::vector<uint8_t> mat_buf;
 
@@ -275,6 +296,14 @@ void AudioPipeline::passthrough_write_loop() {
         if (!shared_.audio_packet_queue.pop(pkt)) break;
 
         if (pkt.is_flush) {
+            if (pkt.is_eof) {
+                PY_LOG_INFO(TAG, "Audio passthrough EOF: waiting for buffered audio to drain");
+                bool drained = wait_for_drain();
+                PY_LOG_INFO(TAG, "Audio passthrough EOF drain %s",
+                            drained ? "completed" : "cancelled");
+                return drained;
+            }
+
             {
                 std::lock_guard lock(shared_.audio_ring_flush_mutex);
                 passthrough_ring_read_ = 0;
@@ -341,6 +370,7 @@ void AudioPipeline::passthrough_write_loop() {
     }
 
     PY_LOG_INFO(TAG, "Audio passthrough loop ended");
+    return false;
 }
 
 void AudioPipeline::flush_ring(int64_t pts_us) {

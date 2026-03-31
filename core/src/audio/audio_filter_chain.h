@@ -37,6 +37,9 @@ public:
     // Call drain() afterwards to pull all output chunks.
     void send_frame(AVFrame* frame);
 
+    // Signal end-of-stream to pre-resample filters so buffered tail data can drain.
+    void send_eof();
+
     // Pull one resampled + post-filtered output chunk.
     // Returns true if a chunk was produced (out_samples/out_num_samples filled).
     // Returns false when no more output is available (call send_frame with next input).

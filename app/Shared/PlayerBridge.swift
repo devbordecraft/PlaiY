@@ -479,25 +479,43 @@ var seekThumbnailProgress: Int32 {
         let pointed = sf.pointee
         if let text = pointed.text {
             return SubtitleData.text(String(cString: text))
-        } else if let rgba = pointed.rgba_data {
-            let size = Int(pointed.width) * Int(pointed.height) * 4
-            let data = Data(bytes: rgba, count: size)
-            return SubtitleData.bitmap(
-                data: data,
-                width: Int(pointed.width),
-                height: Int(pointed.height),
-                x: Int(pointed.x),
-                y: Int(pointed.y)
-            )
+        } else if let regions = pointed.regions, pointed.region_count > 0 {
+            let count = Int(pointed.region_count)
+            let buffer = UnsafeBufferPointer(start: regions, count: count)
+            let decoded = buffer.compactMap { regionPtr -> SubtitleBitmapRegion? in
+                let region = regionPtr
+                guard let rgba = region.rgba_data,
+                      region.width > 0,
+                      region.height > 0 else { return nil }
+                let size = Int(region.width) * Int(region.height) * 4
+                return SubtitleBitmapRegion(
+                    data: Data(bytes: rgba, count: size),
+                    width: Int(region.width),
+                    height: Int(region.height),
+                    x: Int(region.x),
+                    y: Int(region.y)
+                )
+            }
+            if !decoded.isEmpty {
+                return SubtitleData.bitmap(regions: decoded)
+            }
         }
         return nil
     }
 
 }
 
+struct SubtitleBitmapRegion: Sendable {
+    let data: Data
+    let width: Int
+    let height: Int
+    let x: Int
+    let y: Int
+}
+
 enum SubtitleData {
     case text(String)
-    case bitmap(data: Data, width: Int, height: Int, x: Int, y: Int)
+    case bitmap(regions: [SubtitleBitmapRegion])
 }
 
 /// Library bridge

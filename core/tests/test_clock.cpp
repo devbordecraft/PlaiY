@@ -76,6 +76,31 @@ TEST_CASE("Clock set_rate") {
     REQUIRE(clock.rate() == 0.5);
 }
 
+TEST_CASE("Clock set_rate while paused does not advance time") {
+    Clock clock;
+    clock.set_audio_pts(500'000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    clock.set_rate(2.0);
+
+    REQUIRE(clock.audio_pts() == 500'000);
+    REQUIRE(clock.now_us() == 500'000);
+    REQUIRE(clock.rate() == 2.0);
+}
+
+TEST_CASE("Clock set_rate while frozen does not advance time") {
+    Clock clock;
+    clock.set_paused(false);
+    clock.seek_to(1'250'000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+
+    clock.set_rate(0.5);
+
+    REQUIRE(clock.audio_pts() == 1'250'000);
+    REQUIRE(clock.now_us() == 1'250'000);
+    REQUIRE(clock.rate() == 0.5);
+}
+
 TEST_CASE("Clock reset") {
     Clock clock;
     clock.set_paused(false);

@@ -36,6 +36,7 @@ extern "C" {
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -112,6 +113,7 @@ struct PlayerEngine::Impl {
     // Spatial audio
     int spatial_audio_mode = 0;  // 0=Auto, 1=Off, 2=Force
     bool head_tracking_enabled = false;
+    DeviceChangeCallback device_change_callback;
 
     // Playback speed
     std::atomic<double> playback_speed{1.0};
@@ -145,7 +147,7 @@ struct PlayerEngine::Impl {
 
     // Track indices
     int active_video_stream = -1;
-    int active_audio_stream = -1;
+    std::atomic<int> active_audio_stream{-1};
     std::atomic<int> active_subtitle_stream{-1};
 
     // For seek
@@ -181,7 +183,8 @@ struct PlayerEngine::Impl {
     AVCodecContext* audio_codec_ctx = nullptr;
 
     void set_state(PlaybackState new_state) {
-        state.store(new_state);
+        PlaybackState old_state = state.exchange(new_state);
+        if (old_state == new_state) return;
         if (state_callback) state_callback(new_state);
     }
 
@@ -194,6 +197,7 @@ struct PlayerEngine::Impl {
     void video_decode_loop();
     void audio_decode_loop();
     void stop_threads();
+    void apply_audio_output_runtime_state();
 
     // For audio pipeline restart (live toggle / track change)
     std::atomic<bool> audio_restart_requested{false};
@@ -242,8 +246,8 @@ Error PlayerEngine::open_file(const std::string& path) {
 
     impl_->media_info = impl_->demuxer->media_info();
     impl_->active_video_stream = impl_->media_info.best_video_index;
-    impl_->active_audio_stream = impl_->media_info.best_audio_index;
-    impl_->active_subtitle_stream = impl_->media_info.best_subtitle_index;
+    impl_->active_audio_stream.store(impl_->media_info.best_audio_index, std::memory_order_release);
+    impl_->active_subtitle_stream.store(impl_->media_info.best_subtitle_index, std::memory_order_release);
 
     // Open video decoder (or DV output for Dolby Vision Profile 5/8/10)
     if (impl_->active_video_stream >= 0) {
@@ -281,8 +285,9 @@ Error PlayerEngine::open_file(const std::string& path) {
     }
 
     // Open audio decoder + resampler + output
-    if (impl_->active_audio_stream >= 0) {
-        setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)]);
+    int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
+    if (active_audio_stream >= 0) {
+        setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)]);
     }
 
     // Open subtitle track
@@ -461,7 +466,7 @@ const MediaInfo& PlayerEngine::media_info() const {
 }
 
 void PlayerEngine::select_audio_track(int stream_index) {
-    if (stream_index == impl_->active_audio_stream) return;
+    if (stream_index == impl_->active_audio_stream.load(std::memory_order_acquire)) return;
 
     // Validate it's a valid audio track
     if (stream_index >= 0 &&
@@ -486,7 +491,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
         }
     }
 
-    impl_->active_audio_stream = stream_index;
+    impl_->active_audio_stream.store(stream_index, std::memory_order_release);
 
     if (needs_restart) {
         restart_audio_pipeline();
@@ -541,7 +546,7 @@ int PlayerEngine::subtitle_track_count() const {
 }
 
 int PlayerEngine::active_audio_stream() const {
-    return impl_->active_audio_stream;
+    return impl_->active_audio_stream.load(std::memory_order_acquire);
 }
 
 int PlayerEngine::active_subtitle_stream() const {
@@ -554,12 +559,14 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
                                   impl_->spatial_audio_mode,
                                   impl_->head_tracking_enabled,
                                   impl_->muted, impl_->volume);
+    impl_->apply_audio_output_runtime_state();
 }
 
 void PlayerEngine::restart_audio_pipeline() {
-    if (impl_->active_audio_stream < 0) return;
+    int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
+    if (active_audio_stream < 0) return;
 
-    const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_audio_stream)];
+    const auto& track = impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)];
     impl_->audio_pipeline->restart(track, impl_->audio_output,
                                     impl_->audio_decoder,
                                     impl_->audio_decode_thread,
@@ -567,6 +574,7 @@ void PlayerEngine::restart_audio_pipeline() {
                                     impl_->spatial_audio_mode,
                                     impl_->head_tracking_enabled,
                                     impl_->muted, impl_->volume);
+    impl_->apply_audio_output_runtime_state();
 }
 
 void PlayerEngine::set_audio_passthrough(bool enabled) {
@@ -608,8 +616,9 @@ PlayerEngine::PassthroughCapability PlayerEngine::query_passthrough_support() co
 }
 
 void PlayerEngine::set_device_change_callback(DeviceChangeCallback cb) {
+    impl_->device_change_callback = std::move(cb);
     if (impl_->audio_output) {
-        impl_->audio_output->set_device_change_callback(std::move(cb));
+        impl_->audio_output->set_device_change_callback(impl_->device_change_callback);
     }
 }
 
@@ -680,7 +689,16 @@ double PlayerEngine::playback_speed() const {
 }
 
 void PlayerEngine::set_spatial_audio_mode(int mode) {
-    impl_->spatial_audio_mode = std::clamp(mode, 0, 2);
+    int clamped = std::clamp(mode, 0, 2);
+    if (impl_->spatial_audio_mode == clamped) return;
+
+    impl_->spatial_audio_mode = clamped;
+
+    auto s = impl_->state.load();
+    if ((s == PlaybackState::Playing || s == PlaybackState::Paused) &&
+        impl_->active_audio_stream.load(std::memory_order_acquire) >= 0) {
+        restart_audio_pipeline();
+    }
 }
 
 int PlayerEngine::spatial_audio_mode() const {
@@ -772,7 +790,7 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     StatsContext ctx {
         .media_info = impl_->media_info,
         .active_video_stream = impl_->active_video_stream,
-        .active_audio_stream = impl_->active_audio_stream,
+        .active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire),
         .audio_output = impl_->audio_output.get(),
         .audio_output_mode = impl_->audio_pipeline->output_mode(),
         .presented_frame_mutex = impl_->presented_frame_mutex,
@@ -818,6 +836,17 @@ void PlayerEngine::set_error_callback(ErrorCallback cb) {
     impl_->error_callback = std::move(cb);
 }
 
+void PlayerEngine::Impl::apply_audio_output_runtime_state() {
+    if (!audio_output) return;
+
+    audio_output->set_device_change_callback(device_change_callback);
+    audio_output->set_muted(muted);
+    audio_output->set_volume(volume);
+    if (audio_output->is_spatial()) {
+        audio_output->set_head_tracking_enabled(head_tracking_enabled);
+    }
+}
+
 // ---- Thread implementations ----
 
 void PlayerEngine::Impl::demux_loop() {
@@ -841,8 +870,9 @@ void PlayerEngine::Impl::demux_loop() {
                 flush_pkt.stream_index = active_video_stream;
                 video_packet_queue.push(flush_pkt);
             }
-            if (active_audio_stream >= 0) {
-                flush_pkt.stream_index = active_audio_stream;
+            int active_audio = active_audio_stream.load(std::memory_order_acquire);
+            if (active_audio >= 0) {
+                flush_pkt.stream_index = active_audio;
                 audio_packet_queue.push(flush_pkt);
             }
 
@@ -860,7 +890,7 @@ void PlayerEngine::Impl::demux_loop() {
             eof_pkt.is_flush = true;
             eof_pkt.is_eof = true;
             if (active_video_stream >= 0) video_packet_queue.push(eof_pkt);
-            if (active_audio_stream >= 0) audio_packet_queue.push(eof_pkt);
+            if (active_audio_stream.load(std::memory_order_acquire) >= 0) audio_packet_queue.push(eof_pkt);
             break;
         }
         if (err) {
@@ -871,7 +901,7 @@ void PlayerEngine::Impl::demux_loop() {
         // Route packet to the correct queue
         if (pkt.stream_index == active_video_stream) {
             if (!video_packet_queue.push(std::move(pkt))) break;
-        } else if (pkt.stream_index == active_audio_stream) {
+        } else if (pkt.stream_index == active_audio_stream.load(std::memory_order_acquire)) {
             if (!audio_packet_queue.push(std::move(pkt))) break;
         } else if (pkt.stream_index == active_subtitle_stream.load(std::memory_order_acquire)) {
             subtitle_manager->feed_packet(pkt);
@@ -905,6 +935,9 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
             first_packet = true;
             if (pkt.is_eof) {
                 PY_LOG_INFO(TAG, "DV output: end of file");
+                if (active_audio_stream.load(std::memory_order_acquire) < 0 || !audio_output) {
+                    set_state(PlaybackState::Stopped);
+                }
                 break;
             }
             continue;
@@ -1115,7 +1148,9 @@ void PlayerEngine::Impl::video_decode_loop() {
                 video_decoder->drain();
                 drain_frames();
                 PY_LOG_INFO(TAG, "Video EOF: final frames drained");
-                set_state(PlaybackState::Stopped);
+                if (active_audio_stream.load(std::memory_order_acquire) < 0 || !audio_output) {
+                    set_state(PlaybackState::Stopped);
+                }
                 break;
             }
             // Seek: discard stale frames and start fresh
@@ -1148,13 +1183,21 @@ void PlayerEngine::Impl::audio_decode_loop() {
     PY_LOG_INFO(TAG, "Audio decode thread started");
 
     if (audio_pipeline->output_mode() == AudioOutputMode::Passthrough) {
-        audio_pipeline->passthrough_write_loop();
+        bool drained = audio_pipeline->passthrough_write_loop();
+        if (drained && running.load(std::memory_order_relaxed) &&
+            !audio_restart_requested.load(std::memory_order_relaxed)) {
+            set_state(PlaybackState::Stopped);
+        }
+        PY_LOG_INFO(TAG, "Audio decode thread ended");
         return;
     }
 
     if (!audio_decoder || !audio_output) return;
 
-    AVCodecContext* ctx = open_audio_codec(media_info.tracks[static_cast<size_t>(active_audio_stream)]);
+    int initial_audio_stream = active_audio_stream.load(std::memory_order_acquire);
+    if (initial_audio_stream < 0) return;
+
+    AVCodecContext* ctx = open_audio_codec(media_info.tracks[static_cast<size_t>(initial_audio_stream)]);
     if (!ctx) return;
 
     // Audio filter chain: tempo (pre-resample) → resampler → EQ → compressor → dialogue boost
@@ -1197,6 +1240,95 @@ void PlayerEngine::Impl::audio_decode_loop() {
     bool timebase_initialized = false;
     bool skip_to_target = false;
     std::vector<float> resample_buf; // reused across frames
+    int64_t last_enqueued_pts_us = audio_pts_for_ring.load(std::memory_order_acquire);
+
+    auto write_chunk = [&](const float* data, int num_samples, int channels, int64_t start_pts_us) -> bool {
+        if (num_samples <= 0) return true;
+        if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) {
+            return false;
+        }
+
+        size_t to_write = static_cast<size_t>(num_samples) * static_cast<size_t>(channels);
+        {
+            std::unique_lock lock(audio_ring_flush_mutex);
+            audio_ring_not_full.wait(lock, [&] {
+                return audio_ring.available_write() >= to_write ||
+                       !running.load(std::memory_order_relaxed) ||
+                       audio_restart_requested.load(std::memory_order_relaxed);
+            });
+        }
+        if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) {
+            return false;
+        }
+
+        audio_ring.write(data, to_write);
+
+        int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
+        int64_t end_pts_us = start_pts_us + chunk_duration_us;
+        audio_pts_for_ring.store(end_pts_us, std::memory_order_release);
+        last_enqueued_pts_us = end_pts_us;
+        return true;
+    };
+
+    auto drain_filter_output = [&](int64_t start_pts_us) -> bool {
+        int num_samples = 0;
+        int64_t chunk_pts_us = start_pts_us;
+        while (filter_chain.drain(resample_buf, num_samples)) {
+            if (!write_chunk(resample_buf.data(), num_samples, out_channels, chunk_pts_us)) {
+                return false;
+            }
+            int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
+            chunk_pts_us += chunk_duration_us;
+        }
+        return true;
+    };
+
+    auto drain_decoder_frames = [&]() -> bool {
+        while (running.load(std::memory_order_relaxed)) {
+            int ret = avcodec_receive_frame(ctx, av_frame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+            if (ret < 0) break;
+
+            if (!chain_initialized) {
+                Error err = filter_chain.open(ctx, out_rate, out_channels);
+                if (err) {
+                    PY_LOG_ERROR(TAG, "Filter chain init failed: %s", err.message.c_str());
+                    chain_fatal = true;
+                    av_frame_unref(av_frame);
+                    return false;
+                }
+                chain_initialized = true;
+                resample_buf.reserve(static_cast<size_t>(out_rate) * static_cast<size_t>(out_channels) / 10);
+                double spd = playback_speed.load();
+                if (std::abs(spd - 1.0) > 0.001) {
+                    tempo->set_tempo(spd);
+                    tempo->set_enabled(true);
+                }
+            }
+
+            int64_t pts_us = last_enqueued_pts_us;
+            if (av_frame->pts != AV_NOPTS_VALUE && ctx->pkt_timebase.den > 0) {
+                pts_us = av_rescale_q(av_frame->pts, ctx->pkt_timebase, {1, 1000000});
+            }
+
+            if (skip_to_target) {
+                if (pts_us < seek_target_us.load(std::memory_order_relaxed)) {
+                    av_frame_unref(av_frame);
+                    continue;
+                }
+                skip_to_target = false;
+            }
+
+            filter_chain.send_frame(av_frame);
+            if (!drain_filter_output(pts_us)) {
+                av_frame_unref(av_frame);
+                return false;
+            }
+
+            av_frame_unref(av_frame);
+        }
+        return true;
+    };
 
     while (running.load(std::memory_order_relaxed)) {
         Packet pkt;
@@ -1214,6 +1346,29 @@ void PlayerEngine::Impl::audio_decode_loop() {
         sync_filter_state();
 
         if (pkt.is_flush) {
+            if (pkt.is_eof) {
+                PY_LOG_INFO(TAG, "Audio EOF: draining decoder and buffered output");
+
+                int send_ret = avcodec_send_packet(ctx, nullptr);
+                if (send_ret < 0 && send_ret != AVERROR_EOF && send_ret != AVERROR(EAGAIN)) {
+                    PY_LOG_WARN(TAG, "Audio EOF send_packet failed: %d", send_ret);
+                }
+
+                if (!drain_decoder_frames()) break;
+
+                if (chain_initialized) {
+                    filter_chain.send_eof();
+                    if (!drain_filter_output(last_enqueued_pts_us)) break;
+                }
+
+                if (audio_pipeline->wait_for_drain() &&
+                    running.load(std::memory_order_relaxed) &&
+                    !audio_restart_requested.load(std::memory_order_relaxed)) {
+                    set_state(PlaybackState::Stopped);
+                }
+                break;
+            }
+
             {
                 std::lock_guard lock(audio_ring_flush_mutex);
                 audio_ring.reset();
@@ -1222,6 +1377,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
             if (audio_track_changed.load(std::memory_order_relaxed)) {
                 audio_track_changed.store(false);
+                last_enqueued_pts_us = clock.now_us();
 
                 int new_stream;
                 {
@@ -1265,8 +1421,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
                             return audio_pipeline->pcm_pull(buf, frames, ch);
                         });
                     audio_output->set_pts_callback([](int64_t) {});
-                    audio_output->set_muted(muted);
-                    audio_output->set_volume(volume);
+                    apply_audio_output_runtime_state();
                     audio_output->start();
                     PY_LOG_INFO(TAG, "Audio output reconfigured: %d Hz, %d ch", out_rate, out_channels);
                 }
@@ -1276,6 +1431,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
             } else {
                 avcodec_flush_buffers(ctx);
                 skip_to_target = true;
+                last_enqueued_pts_us = seek_target_us.load(std::memory_order_relaxed);
             }
             continue;
         }
@@ -1295,73 +1451,7 @@ void PlayerEngine::Impl::audio_decode_loop() {
         int send_ret = avcodec_send_packet(ctx, av_pkt);
         if (send_ret < 0 && send_ret != AVERROR(EAGAIN)) continue;
 
-        // Drain all available decoded frames
-        while (running.load(std::memory_order_relaxed)) {
-            int ret = avcodec_receive_frame(ctx, av_frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
-            if (ret < 0) break;
-
-            // Lazy init filter chain (needs actual codec format from first decoded frame)
-            if (!chain_initialized) {
-                Error err = filter_chain.open(ctx, out_rate, out_channels);
-                if (err) {
-                    PY_LOG_ERROR(TAG, "Filter chain init failed: %s", err.message.c_str());
-                    chain_fatal = true;
-                    break;
-                }
-                chain_initialized = true;
-                resample_buf.reserve(static_cast<size_t>(out_rate) * static_cast<size_t>(out_channels) / 10); // 100ms
-                // Init tempo if speed != 1.0
-                double spd = playback_speed.load();
-                if (std::abs(spd - 1.0) > 0.001) {
-                    tempo->set_tempo(spd);
-                    tempo->set_enabled(true);
-                }
-            }
-
-            // Calculate PTS for this audio chunk
-            int64_t pts_us = 0;
-            if (av_frame->pts != AV_NOPTS_VALUE && ctx->pkt_timebase.den > 0) {
-                pts_us = av_rescale_q(av_frame->pts, ctx->pkt_timebase, {1, 1000000});
-            }
-
-            // After seek, skip audio before the target so the clock
-            // unfreezes at the right position instead of jumping backward.
-            if (skip_to_target) {
-                if (pts_us < seek_target_us.load(std::memory_order_relaxed)) {
-                    av_frame_unref(av_frame);
-                    continue;
-                }
-                skip_to_target = false;
-            }
-
-            // Push frame through the filter chain and drain all output chunks.
-            // Pre-resample filters (tempo) may produce multiple output frames per input.
-            filter_chain.send_frame(av_frame);
-
-            int num_samples = 0;
-            while (filter_chain.drain(resample_buf, num_samples)) {
-                if (num_samples <= 0) break;
-                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) break;
-
-                size_t to_write = static_cast<size_t>(num_samples) * static_cast<size_t>(out_channels);
-                {
-                    std::unique_lock lock(audio_ring_flush_mutex);
-                    audio_ring_not_full.wait(lock, [&] {
-                        return audio_ring.available_write() >= to_write ||
-                               !running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed);
-                    });
-                }
-                if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) break;
-
-                audio_ring.write(resample_buf.data(), to_write);
-
-                int64_t chunk_duration_us = static_cast<int64_t>(num_samples) * 1000000LL / out_rate;
-                audio_pts_for_ring.store(pts_us + chunk_duration_us, std::memory_order_release);
-            }
-
-            av_frame_unref(av_frame);
-        }
+        if (!drain_decoder_frames()) break;
 
         if (chain_fatal) break;
 

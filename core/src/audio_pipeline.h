@@ -64,7 +64,12 @@ public:
     int bitstream_pull(uint8_t* buffer, int bytes);
 
     // Thread entry for passthrough mode (called from audio decode thread).
-    void passthrough_write_loop();
+    // Returns true when end-of-stream drained normally.
+    bool passthrough_write_loop();
+
+    // Wait for the active output ring to drain. Returns false if playback stops
+    // or the pipeline restarts before the ring empties.
+    bool wait_for_drain();
 
     // Flush ring buffers during seek or speed change.
     void flush_ring(int64_t pts_us);

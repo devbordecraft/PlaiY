@@ -47,7 +47,12 @@ struct PlayerView: View {
             TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
                 let _ = viewModel.tick()
                 SubtitleOverlayView(subtitle: viewModel.transport.currentSubtitle,
-                                    isHDRContent: viewModel.transport.isHDRContent)
+                                    isHDRContent: viewModel.transport.isHDRContent,
+                                    videoWidth: viewModel.transport.videoWidth,
+                                    videoHeight: viewModel.transport.videoHeight,
+                                    videoSARNum: viewModel.transport.videoSARNum,
+                                    videoSARDen: viewModel.transport.videoSARDen,
+                                    displaySettings: viewModel.transport.displaySettings)
             }
             .allowsHitTesting(false)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -4,7 +4,9 @@ import MediaPlayer
 class NowPlayingManager {
     static let shared = NowPlayingManager()
 
-    private var playPauseHandler: (() -> Void)?
+    private var playHandler: (() -> Void)?
+    private var pauseHandler: (() -> Void)?
+    private var togglePlayPauseHandler: (() -> Void)?
     private var nextTrackHandler: (() -> Void)?
     private var previousTrackHandler: (() -> Void)?
     private var playTarget: Any?
@@ -13,10 +15,14 @@ class NowPlayingManager {
     private var nextTarget: Any?
     private var prevTarget: Any?
 
-    func setup(onPlayPause: @escaping () -> Void,
+    func setup(onPlay: @escaping () -> Void,
+               onPause: @escaping () -> Void,
+               onTogglePlayPause: @escaping () -> Void,
                onNextTrack: (() -> Void)? = nil,
                onPreviousTrack: (() -> Void)? = nil) {
-        playPauseHandler = onPlayPause
+        playHandler = onPlay
+        pauseHandler = onPause
+        togglePlayPauseHandler = onTogglePlayPause
         nextTrackHandler = onNextTrack
         previousTrackHandler = onPreviousTrack
 
@@ -31,37 +37,57 @@ class NowPlayingManager {
 
         center.playCommand.isEnabled = true
         playTarget = center.playCommand.addTarget { [weak self] _ in
-            self?.playPauseHandler?()
-            return .success
+            self?.handlePlayCommand() ?? .commandFailed
         }
 
         center.pauseCommand.isEnabled = true
         pauseTarget = center.pauseCommand.addTarget { [weak self] _ in
-            self?.playPauseHandler?()
-            return .success
+            self?.handlePauseCommand() ?? .commandFailed
         }
 
         center.togglePlayPauseCommand.isEnabled = true
         toggleTarget = center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.playPauseHandler?()
-            return .success
+            self?.handleTogglePlayPauseCommand() ?? .commandFailed
         }
 
         center.nextTrackCommand.isEnabled = (onNextTrack != nil)
-        if let onNextTrack {
-            nextTarget = center.nextTrackCommand.addTarget { _ in
-                onNextTrack()
-                return .success
+        if onNextTrack != nil {
+            nextTarget = center.nextTrackCommand.addTarget { [weak self] _ in
+                return self?.handleNextTrackCommand() ?? .commandFailed
             }
         }
 
         center.previousTrackCommand.isEnabled = (onPreviousTrack != nil)
-        if let onPreviousTrack {
-            prevTarget = center.previousTrackCommand.addTarget { _ in
-                onPreviousTrack()
-                return .success
+        if onPreviousTrack != nil {
+            prevTarget = center.previousTrackCommand.addTarget { [weak self] _ in
+                return self?.handlePreviousTrackCommand() ?? .commandFailed
             }
         }
+    }
+
+    func handlePlayCommand() -> MPRemoteCommandHandlerStatus {
+        playHandler?()
+        return .success
+    }
+
+    func handlePauseCommand() -> MPRemoteCommandHandlerStatus {
+        pauseHandler?()
+        return .success
+    }
+
+    func handleTogglePlayPauseCommand() -> MPRemoteCommandHandlerStatus {
+        togglePlayPauseHandler?()
+        return .success
+    }
+
+    func handleNextTrackCommand() -> MPRemoteCommandHandlerStatus {
+        nextTrackHandler?()
+        return .success
+    }
+
+    func handlePreviousTrackCommand() -> MPRemoteCommandHandlerStatus {
+        previousTrackHandler?()
+        return .success
     }
 
     func updateNowPlaying(title: String, position: TimeInterval,
@@ -90,7 +116,9 @@ class NowPlayingManager {
         center.nextTrackCommand.isEnabled = false
         center.previousTrackCommand.isEnabled = false
 
-        playPauseHandler = nil
+        playHandler = nil
+        pauseHandler = nil
+        togglePlayPauseHandler = nil
         nextTrackHandler = nil
         previousTrackHandler = nil
 
