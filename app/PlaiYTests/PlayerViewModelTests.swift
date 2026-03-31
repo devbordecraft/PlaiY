@@ -222,6 +222,54 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertTrue(vm.subtitleTracks.isEmpty)
     }
 
+    func testTimelineLabelsUseLivePlaybackWhenInactive() {
+        vm.transport.duration = 10_000_000
+        vm.transport.currentPosition = 2_000_000
+
+        XCTAssertEqual(vm.timelineElapsedText(), "0:02")
+        XCTAssertEqual(vm.timelineRemainingText(), "-0:08")
+    }
+
+    func testTimelineLabelsUseHoverPositionWhilePreviewing() {
+        vm.transport.duration = 10_000_000
+        vm.transport.currentPosition = 2_000_000
+
+        vm.timelineHoverChanged(true)
+        vm.timelineHoverMoved(fraction: 0.7)
+
+        XCTAssertEqual(vm.timelineElapsedText(), "0:07")
+        XCTAssertEqual(vm.timelineRemainingText(), "-0:03")
+    }
+
+    func testTimelineHoverEndReturnsLabelsToLivePlaybackImmediately() {
+        vm.transport.duration = 10_000_000
+        vm.transport.currentPosition = 2_000_000
+
+        vm.timelineHoverChanged(true)
+        vm.timelineHoverMoved(fraction: 0.7)
+        vm.timelineHoverChanged(false)
+
+        XCTAssertEqual(vm.timelineElapsedText(), "0:02")
+        XCTAssertEqual(vm.timelineRemainingText(), "-0:08")
+    }
+
+    func testTimelineDragEndCommitsSeekAndClearsPreviewState() {
+        vm.transport.duration = 10_000_000
+        vm.transport.currentPosition = 2_000_000
+        vm.transport.seekPreviewImage = Self.makeTestImage()
+
+        vm.timelineDragStarted()
+        vm.timelineDragChanged(fraction: 0.8)
+        vm.timelineDragEnded()
+
+        XCTAssertEqual(mock.lastSeekTarget, 8_000_000)
+        XCTAssertEqual(vm.transport.currentPosition, 8_000_000)
+        XCTAssertFalse(vm.transport.isDraggingTimeline)
+        XCTAssertNil(vm.transport.seekPreviewImage)
+        XCTAssertEqual(vm.timelineElapsedText(), "0:08")
+        XCTAssertEqual(vm.timelineRemainingText(), "-0:02")
+    }
+
     func testTimelineHoverEndCancelsPendingThumbnail() async {
         mock.seekThumbnailHandler = { _ in
             Thread.sleep(forTimeInterval: 0.075)

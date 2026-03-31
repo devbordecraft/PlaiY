@@ -118,19 +118,7 @@ struct PlayerView: View {
                     showDebugOverlay: viewModel.showDebugOverlay,
                     queueItemCount: playQueue.items.count,
                     onBack: onBack,
-                    onToggleFullScreen: { toggleFullScreen() },
                     onToggleDebug: { viewModel.showDebugOverlay.toggle() },
-                    onToggleSettings: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                            showSettings.toggle()
-                            if showSettings { showQueue = false }
-                        }
-                        if showSettings {
-                            hideControlsTask?.cancel()
-                        } else {
-                            scheduleHideControls()
-                        }
-                    },
                     onToggleQueue: {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                             showQueue.toggle()
@@ -160,12 +148,19 @@ struct PlayerView: View {
                     onToggleMute: { viewModel.toggleMute() },
                     onSetVolume: { viewModel.setVolume($0) },
                     onSetSpeed: { viewModel.setPlaybackSpeed($0) },
+                    showSettings: showSettings,
+                    onPreviousTrack: onPreviousTrack,
+                    onNextTrack: onNextTrack,
+                    onToggleSettings: { toggleSettingsPanel() },
+                    onToggleFullScreen: fullScreenAction(),
                     onTimelineHoverChanged: { viewModel.timelineHoverChanged($0) },
                     onTimelineHoverMoved: { viewModel.timelineHoverMoved(fraction: $0) },
                     onTimelineDragStarted: { viewModel.timelineDragStarted() },
                     onTimelineDragChanged: { viewModel.timelineDragChanged(fraction: $0) },
                     onTimelineDragEnded: { viewModel.timelineDragEnded() },
-                    onTimeText: { viewModel.timeText(for: $0) }
+                    onPreviewText: { viewModel.timeText(for: $0) },
+                    onElapsedText: { viewModel.timelineElapsedText() },
+                    onRemainingText: { viewModel.timelineRemainingText() }
                 )
                 #if !os(tvOS)
                 .onHover { hovering in
@@ -451,6 +446,26 @@ struct PlayerView: View {
         }
     }
 
+    private func toggleSettingsPanel() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+            showSettings.toggle()
+            if showSettings { showQueue = false }
+        }
+        if showSettings {
+            hideControlsTask?.cancel()
+        } else {
+            scheduleHideControls()
+        }
+    }
+
+    private func fullScreenAction() -> (() -> Void)? {
+        #if os(macOS)
+        return { toggleFullScreen() }
+        #else
+        return nil
+        #endif
+    }
+
     private func scheduleHideControls() {
         hideControlsTask?.cancel()
         guard !showSettings else { return }
@@ -521,9 +536,7 @@ private struct TopBarView: View {
     let showDebugOverlay: Bool
     let queueItemCount: Int
     let onBack: () -> Void
-    let onToggleFullScreen: () -> Void
     let onToggleDebug: () -> Void
-    let onToggleSettings: () -> Void
     let onToggleQueue: () -> Void
 
     var body: some View {
@@ -543,16 +556,6 @@ private struct TopBarView: View {
 
                 Spacer()
 
-                #if os(macOS)
-                Button(action: onToggleFullScreen) {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                }
-                .buttonStyle(PlayerButtonStyle())
-                .foregroundStyle(.white)
-                #endif
-
                 if queueItemCount > 1 {
                     Button(action: onToggleQueue) {
                         Image(systemName: "list.bullet")
@@ -570,14 +573,6 @@ private struct TopBarView: View {
                 }
                 .buttonStyle(PlayerButtonStyle())
                 .foregroundStyle(showDebugOverlay ? .green : .white)
-
-                Button(action: onToggleSettings) {
-                    Image(systemName: "gearshape")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                }
-                .buttonStyle(PlayerButtonStyle())
-                .foregroundStyle(.white)
             }
             .padding()
         }
@@ -601,53 +596,123 @@ private struct BottomControlsView: View {
     let onToggleMute: () -> Void
     let onSetVolume: (Float) -> Void
     let onSetSpeed: (Double) -> Void
+    let showSettings: Bool
+    let onPreviousTrack: (() -> Void)?
+    let onNextTrack: (() -> Void)?
+    let onToggleSettings: () -> Void
+    let onToggleFullScreen: (() -> Void)?
     let onTimelineHoverChanged: (Bool) -> Void
     let onTimelineHoverMoved: (Double) -> Void
     let onTimelineDragStarted: () -> Void
     let onTimelineDragChanged: (Double) -> Void
     let onTimelineDragEnded: () -> Void
-    let onTimeText: (Double) -> String
+    let onPreviewText: (Double) -> String
+    let onElapsedText: () -> String
+    let onRemainingText: () -> String
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(spacing: 12) {
-                // Timeline: its own TimelineView for 120Hz Canvas updates
-                TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
-                    TimelineSectionView(
+        HStack {
+            Spacer(minLength: 0)
+            GlassEffectContainer {
+                VStack(spacing: 16) {
+                    PlaybackButtonsView(
+                        isPlaying: viewModel.isPlaying,
+                        isMuted: viewModel.isMuted,
+                        volume: viewModel.volume,
+                        playbackSpeed: viewModel.playbackSpeed,
+                        passthroughActive: viewModel.transport.passthroughActive,
+                        bridge: viewModel.playerBridge,
                         transport: viewModel.transport,
-                        onHoverChanged: onTimelineHoverChanged,
-                        onHoverMoved: onTimelineHoverMoved,
-                        onDragStarted: onTimelineDragStarted,
-                        onDragChanged: onTimelineDragChanged,
-                        onDragEnded: onTimelineDragEnded,
-                        onTimeText: onTimeText
+                        showSettings: showSettings,
+                        onPreviousTrack: onPreviousTrack,
+                        onNextTrack: onNextTrack,
+                        onSeekRelative: onSeekRelative,
+                        onTogglePlayPause: onTogglePlayPause,
+                        onToggleMute: onToggleMute,
+                        onSetVolume: onSetVolume,
+                        onSetSpeed: onSetSpeed,
+                        onToggleSettings: onToggleSettings,
+                        onToggleFullScreen: onToggleFullScreen
                     )
-                }
 
-                // Buttons: static, NOT in TimelineView
-                PlaybackButtonsView(
-                    isPlaying: viewModel.isPlaying,
-                    isMuted: viewModel.isMuted,
-                    volume: viewModel.volume,
-                    playbackSpeed: viewModel.playbackSpeed,
-                    passthroughActive: viewModel.transport.passthroughActive,
-                    bridge: viewModel.playerBridge,
-                    transport: viewModel.transport,
-                    onSeekRelative: onSeekRelative,
-                    onTogglePlayPause: onTogglePlayPause,
-                    onToggleMute: onToggleMute,
-                    onSetVolume: onSetVolume,
-                    onSetSpeed: onSetSpeed
+                    TimelineView(.animation(minimumInterval: nil, paused: !viewModel.isPlaying)) { _ in
+                        TimelineSectionView(
+                            transport: viewModel.transport,
+                            onHoverChanged: onTimelineHoverChanged,
+                            onHoverMoved: onTimelineHoverMoved,
+                            onDragStarted: onTimelineDragStarted,
+                            onDragChanged: onTimelineDragChanged,
+                            onDragEnded: onTimelineDragEnded,
+                            onPreviewText: onPreviewText,
+                            onElapsedText: onElapsedText,
+                            onRemainingText: onRemainingText
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 18)
+                .frame(maxWidth: 860)
+                .background {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(Color(red: 0.06, green: 0.07, blue: 0.09).opacity(0.9))
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.12),
+                                    .white.opacity(0.03),
+                                    .black.opacity(0.18)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.32, green: 0.34, blue: 0.38).opacity(0.18),
+                                    .clear,
+                                    .black.opacity(0.2)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(.white.opacity(0.12), lineWidth: 1)
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.22),
+                                    .white.opacity(0.04),
+                                    .clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: .black.opacity(0.4), radius: 28, y: 16)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 20)
+            Spacer(minLength: 0)
         }
-        .background(
-            LinearGradient(colors: [.clear, .black.opacity(0.7)],
-                           startPoint: .top, endPoint: .bottom)
-        )
-        .contentShape(Rectangle())
+        .background {
+            Ellipse()
+                .fill(.black.opacity(0.26))
+                .frame(width: 1200, height: 250)
+                .blur(radius: 80)
+                .offset(y: 54)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 28)
     }
 }
 
@@ -685,7 +750,29 @@ struct PlayerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(8)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .background {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.08, green: 0.09, blue: 0.11).opacity(configuration.isPressed ? 0.96 : 0.88))
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.12),
+                                    .white.opacity(0.03),
+                                    .black.opacity(0.14)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            }
+            .overlay(
+                Circle()
+                    .stroke(.white.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
             .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
             .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
     }
@@ -695,7 +782,29 @@ struct LargePlayerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(12)
-            .glassEffect(.regular.interactive(), in: .circle)
+            .background {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.08, green: 0.09, blue: 0.11).opacity(configuration.isPressed ? 0.98 : 0.9))
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.14),
+                                    .white.opacity(0.04),
+                                    .black.opacity(0.16)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+            }
+            .overlay(
+                Circle()
+                    .stroke(.white.opacity(0.11), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.24), radius: 10, y: 5)
             .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
             .animation(.spring(response: 0.15, dampingFraction: 0.7), value: configuration.isPressed)
     }

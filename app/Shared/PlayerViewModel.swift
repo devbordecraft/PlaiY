@@ -503,10 +503,10 @@ class PlayerViewModel: ObservableObject {
         if hovering {
             transport.isHoveringTimeline = true
         } else {
+            transport.isHoveringTimeline = false
             cancelPendingThumbnailRequest()
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
-                self.transport.isHoveringTimeline = false
                 self.transport.seekPreviewImage = nil
             }
             hoverEndWork = work
@@ -562,6 +562,24 @@ class PlayerViewModel: ObservableObject {
                 self.transport.seekPreviewImage = image
             }
         }
+    }
+
+    func activeTimelinePositionUs() -> Int64 {
+        guard transport.duration > 0 else { return 0 }
+        if transport.isHoveringTimeline || transport.isDraggingTimeline {
+            let clampedFraction = max(0, min(1, transport.hoverFraction))
+            return max(0, min(transport.duration, Int64(clampedFraction * Double(transport.duration))))
+        }
+        return max(0, min(transport.duration, transport.currentPosition))
+    }
+
+    func timelineElapsedText() -> String {
+        transport.formatTime(activeTimelinePositionUs())
+    }
+
+    func timelineRemainingText() -> String {
+        let remainingUs = max(0, transport.duration - activeTimelinePositionUs())
+        return "-\(transport.formatTime(remainingUs))"
     }
 
     func timeText(for fraction: Double) -> String {
