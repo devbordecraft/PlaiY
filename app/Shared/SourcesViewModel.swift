@@ -1,5 +1,63 @@
 import Foundation
 
+protocol SourceConfigStore {
+    func load() -> String?
+    func save(_ json: String)
+}
+
+struct UserDefaultsSourceConfigStore: SourceConfigStore {
+    private let defaults: UserDefaults
+    private let key: String
+
+    private static func defaultDefaults() -> UserDefaults {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return UserDefaults(suiteName: "com.plaiy.tests.sources") ?? .standard
+        }
+        return .standard
+    }
+
+    init(defaults: UserDefaults = defaultDefaults(), key: String = "savedSourceConfigs") {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    func load() -> String? {
+        defaults.string(forKey: key)
+    }
+
+    func save(_ json: String) {
+        defaults.set(json, forKey: key)
+    }
+}
+
+protocol SourceCredentialStore {
+    @discardableResult
+    func save(password: String, for sourceId: String) -> Bool
+    func password(for sourceId: String) -> String?
+    func delete(for sourceId: String)
+}
+
+struct KeychainCredentialStore: SourceCredentialStore {
+    private let service: String?
+
+    init(service: String? = nil) {
+        self.service = service
+    }
+
+    @discardableResult
+    func save(password: String, for sourceId: String) -> Bool {
+        KeychainHelper.save(password: password, for: sourceId, service: service)
+    }
+
+    func password(for sourceId: String) -> String? {
+        KeychainHelper.password(for: sourceId, service: service)
+    }
+
+    func delete(for sourceId: String) {
+        KeychainHelper.delete(for: sourceId, service: service)
+    }
+}
+
 @MainActor
 class SourcesViewModel: ObservableObject {
     @Published var sources: [SourceConfig] = []
@@ -11,24 +69,34 @@ class SourcesViewModel: ObservableObject {
     @Published var isConnecting = false
     @Published var error: String?
 
-    let bridge = SourceManagerBridge()
+    let bridge: SourceManagerBridge
+    private let configStore: any SourceConfigStore
+    private let credentialStore: any SourceCredentialStore
 
-    private static let configsKey = "savedSourceConfigs"
+    init(
+        bridge: SourceManagerBridge = SourceManagerBridge(),
+        configStore: any SourceConfigStore = UserDefaultsSourceConfigStore(),
+        credentialStore: any SourceCredentialStore = KeychainCredentialStore()
+    ) {
+        self.bridge = bridge
+        self.configStore = configStore
+        self.credentialStore = credentialStore
+    }
 
     // MARK: - Lifecycle
 
     func loadSavedSources() {
-        guard let jsonStr = UserDefaults.standard.string(forKey: Self.configsKey),
-              !jsonStr.isEmpty else { return }
+        guard let jsonStr = configStore.load(), !jsonStr.isEmpty else { return }
 
         if bridge.loadConfigsJSON(jsonStr) {
             refreshSourceList()
+        } else {
+            error = "Failed to load saved sources"
         }
     }
 
     private func saveSources() {
-        let json = bridge.allConfigsJSON()
-        UserDefaults.standard.set(json, forKey: Self.configsKey)
+        configStore.save(bridge.allConfigsJSON())
     }
 
     private func refreshSourceList() {
@@ -37,30 +105,41 @@ class SourcesViewModel: ObservableObject {
         sources = (try? JSONDecoder().decode([SourceConfig].self, from: data)) ?? []
     }
 
+    private func message(_ err: BridgeOperationError, fallback: String) -> String {
+        err.message.isEmpty ? fallback : err.message
+    }
+
     // MARK: - Source CRUD
 
-    func addSource(_ config: SourceConfig, password: String) {
-        guard bridge.addSource(config) else {
-            error = "Failed to add source"
-            return
+    @discardableResult
+    func addSource(_ config: SourceConfig, password: String) -> Bool {
+        switch bridge.addSource(config) {
+        case .success:
+            break
+        case .failure(let err):
+            error = message(err, fallback: "Failed to add source")
+            return false
         }
+
         if !password.isEmpty {
-            _ = KeychainHelper.save(password: password, for: config.id)
+            _ = credentialStore.save(password: password, for: config.id)
         }
         refreshSourceList()
         saveSources()
+        return true
     }
 
     func addSourceAndConnect(_ config: SourceConfig, password: String) {
         let sourceId = config.id
-        addSource(config, password: password)
-        connect(sourceId: sourceId)
+        if addSource(config, password: password) {
+            connect(sourceId: sourceId)
+        }
     }
 
     func removeSource(id: String) {
         bridge.disconnect(sourceId: id)
         bridge.removeSource(id: id)
-        KeychainHelper.delete(for: id)
+        credentialStore.delete(for: id)
         refreshSourceList()
         saveSources()
 
@@ -78,17 +157,18 @@ class SourcesViewModel: ObservableObject {
         isConnecting = true
         error = nil
 
-        let password = KeychainHelper.password(for: sourceId) ?? ""
-        let success = bridge.connect(sourceId: sourceId, password: password)
+        let password = credentialStore.password(for: sourceId) ?? ""
+        let result = bridge.connect(sourceId: sourceId, password: password)
 
         isConnecting = false
-        if success {
+        switch result {
+        case .success:
             currentSourceId = sourceId
             navigationPath = []
             navigationDisplayNames = []
             browse(sourceId: sourceId, relativePath: "")
-        } else {
-            error = "Connection failed — check address and credentials"
+        case .failure(let err):
+            error = message(err, fallback: "Connection failed — check address and credentials")
         }
     }
 
@@ -115,8 +195,12 @@ class SourcesViewModel: ObservableObject {
         let entries = bridge.listDirectory(sourceId: sourceId, relativePath: relativePath)
         isLoading = false
         currentEntries = entries
-        if entries.isEmpty && !relativePath.isEmpty {
-            // Folder might be empty or an error occurred
+
+        if entries.isEmpty {
+            let bridgeError = bridge.lastError()
+            if !bridgeError.isEmpty {
+                error = bridgeError
+            }
         }
     }
 

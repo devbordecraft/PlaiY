@@ -5,7 +5,7 @@ import CoreGraphics
 /// PlayerViewModel depends on this protocol instead of the concrete class.
 protocol PlayerBridgeProtocol: AnyObject, Sendable {
     // Lifecycle
-    func open(path: String) -> Bool
+    func open(path: String) -> Result<Void, BridgeOperationError>
     func play()
     func pause()
     func seek(to microseconds: Int64)

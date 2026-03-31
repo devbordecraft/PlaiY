@@ -339,15 +339,24 @@ struct AddSourceView: View {
         )
 
         let tempId = config.id
-        guard sourcesVM.bridge.addSource(config) else {
+        switch sourcesVM.bridge.addSource(config) {
+        case .success:
+            break
+        case .failure(let err):
             isTesting = false
-            testResult = "Failed to create source"
+            testResult = err.message.isEmpty ? "Failed to create source" : err.message
             return
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let success = sourcesVM.bridge.connect(sourceId: tempId, password: password)
-            let connected = success && sourcesVM.bridge.isConnected(sourceId: tempId)
+            let connectResult = sourcesVM.bridge.connect(sourceId: tempId, password: password)
+            let connected = (try? connectResult.get()) != nil && sourcesVM.bridge.isConnected(sourceId: tempId)
+            let failureMessage: String
+            if case .failure(let err) = connectResult {
+                failureMessage = err.message
+            } else {
+                failureMessage = ""
+            }
 
             if connected {
                 sourcesVM.bridge.disconnect(sourceId: tempId)
@@ -356,7 +365,11 @@ struct AddSourceView: View {
 
             DispatchQueue.main.async {
                 isTesting = false
-                testResult = connected ? "Success" : "Connection failed"
+                if connected {
+                    testResult = "Success"
+                } else {
+                    testResult = failureMessage.isEmpty ? "Connection failed" : failureMessage
+                }
             }
         }
     }

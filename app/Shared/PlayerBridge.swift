@@ -23,6 +23,11 @@ final class PlayerBridge: @unchecked Sendable {
     private var deviceCallbackContext: UnsafeMutableRawPointer?
     private var stateCallbackContext: UnsafeMutableRawPointer?
 
+    private static func stringFromCString(_ ptr: UnsafePointer<CChar>?) -> String {
+        guard let ptr else { return "" }
+        return String(cString: ptr)
+    }
+
     init() {
         handle = py_player_create()
     }
@@ -37,9 +42,20 @@ final class PlayerBridge: @unchecked Sendable {
         py_player_destroy(handle)
     }
 
-    func open(path: String) -> Bool {
-        let result = py_player_open(handle, path)
-        return result == Int32(PY_OK.rawValue)
+    func open(path: String) -> Result<Void, BridgeOperationError> {
+        let code = py_player_open(handle, path)
+        if code == Int32(PY_OK.rawValue) {
+            return .success(())
+        }
+
+        let message = Self.stringFromCString(py_player_get_last_error(handle))
+        return .failure(
+            BridgeOperationError(
+                operation: "open",
+                code: code,
+                message: message
+            )
+        )
     }
 
     var isDolbyVision: Bool {

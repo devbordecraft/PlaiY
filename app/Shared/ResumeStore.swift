@@ -7,16 +7,18 @@ enum ResumeStore {
     private static let maxFraction: Double = 0.95
 
     #if os(tvOS)
-    private nonisolated(unsafe) static let defaults = UserDefaults(suiteName: "group.com.plaiy.app.tv") ?? .standard
+    private nonisolated(unsafe) static let storeDefaults = UserDefaults(suiteName: "group.com.plaiy.app.tv") ?? .standard
     #else
-    private nonisolated(unsafe) static let defaults = UserDefaults.standard
+    private nonisolated(unsafe) static let storeDefaults = UserDefaults.standard
     #endif
 
-    static func save(path: String, positionUs: Int64, durationUs: Int64, title: String? = nil) {
+    static func save(path: String, positionUs: Int64, durationUs: Int64,
+                     title: String? = nil,
+                     defaults: UserDefaults = storeDefaults) {
         guard durationUs > 0 else { return }
         let fraction = Double(positionUs) / Double(durationUs)
         guard positionUs > minPositionUs && fraction < maxFraction else {
-            clear(path: path)
+            clear(path: path, defaults: defaults)
             return
         }
         var dict = defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
@@ -30,12 +32,12 @@ enum ResumeStore {
         }
     }
 
-    static func position(for path: String) -> Int64? {
+    static func position(for path: String, defaults: UserDefaults = storeDefaults) -> Int64? {
         let dict = defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
         return dict[path]
     }
 
-    static func clear(path: String) {
+    static func clear(path: String, defaults: UserDefaults = storeDefaults) {
         var dict = defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
         dict.removeValue(forKey: path)
         defaults.set(dict, forKey: key)
@@ -46,7 +48,7 @@ enum ResumeStore {
     }
 
     /// All saved resume items for Top Shelf display.
-    static func allResumeItems() -> [(path: String, positionUs: Int64, title: String)] {
+    static func allResumeItems(defaults: UserDefaults = storeDefaults) -> [(path: String, positionUs: Int64, title: String)] {
         let dict = defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
         let titles = defaults.dictionary(forKey: titlesKey) as? [String: String] ?? [:]
         return dict.map { (path, positionUs) in

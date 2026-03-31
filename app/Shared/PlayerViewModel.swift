@@ -158,8 +158,12 @@ class PlayerViewModel: ObservableObject {
         bridge.setHeadTracking(settings.headTrackingEnabled)
         headTrackingEnabled = settings.headTrackingEnabled
 
-        guard bridge.open(path: path) else {
-            openError = "Could not open: \(URL(fileURLWithPath: path).lastPathComponent)"
+        switch bridge.open(path: path) {
+        case .success:
+            break
+        case .failure(let err):
+            let fallback = "Could not open: \(URL(fileURLWithPath: path).lastPathComponent)"
+            openError = err.message.isEmpty ? fallback : err.message
             mediaTitle = ""
             audioTracks = []
             subtitleTracks = []

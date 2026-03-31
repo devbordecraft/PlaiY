@@ -102,7 +102,6 @@ targets:
           - /usr/local/include
         LIBRARY_SEARCH_PATHS:
           - $(PROJECT_DIR)/../build/apple-debug/core
-          - $(PROJECT_DIR)/../build/apple-release/core
           - /opt/homebrew/lib
           - /usr/local/lib
         OTHER_LDFLAGS: *ldflags
@@ -134,7 +133,6 @@ targets:
           - $(PROJECT_DIR)/../deps/ios/include
         LIBRARY_SEARCH_PATHS:
           - $(PROJECT_DIR)/../build/ios-Debug/core
-          - $(PROJECT_DIR)/../build/ios-Release/core
           - $(PROJECT_DIR)/../deps/ios/lib
         OTHER_LDFLAGS: *ldflags
         CODE_SIGN_IDENTITY: "Apple Development"
@@ -185,7 +183,6 @@ targets:
           - $(PROJECT_DIR)/../deps/tvos/include
         LIBRARY_SEARCH_PATHS:
           - $(PROJECT_DIR)/../build/tvos-Debug/core
-          - $(PROJECT_DIR)/../build/tvos-Release/core
           - $(PROJECT_DIR)/../deps/tvos/lib
         OTHER_LDFLAGS: *ldflags_tvos
         CODE_SIGN_IDENTITY: "Apple Development"

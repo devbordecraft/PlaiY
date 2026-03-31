@@ -148,7 +148,7 @@ struct SubtitleOverlayView: View {
     }
     #endif
 
-    private func subtitleViewport(in size: CGSize) -> CGRect {
+    func subtitleViewport(in size: CGSize) -> CGRect {
         guard videoWidth > 0, videoHeight > 0, size.width > 0, size.height > 0 else {
             return CGRect(origin: .zero, size: size)
         }
@@ -206,7 +206,7 @@ struct SubtitleOverlayView: View {
         return CGRect(x: vpX, y: vpY, width: vpW, height: vpH)
     }
 
-    private func subtitleRegionFrame(_ region: SubtitleBitmapRegion, in videoRect: CGRect) -> CGRect {
+    func subtitleRegionFrame(_ region: SubtitleBitmapRegion, in videoRect: CGRect) -> CGRect {
         guard videoWidth > 0, videoHeight > 0 else {
             return CGRect(x: region.x, y: region.y, width: region.width, height: region.height)
         }

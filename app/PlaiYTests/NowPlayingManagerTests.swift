@@ -66,4 +66,32 @@ final class NowPlayingManagerTests: XCTestCase {
         XCTAssertEqual(pauseCount, 0)
         XCTAssertEqual(toggleCount, 1)
     }
+
+    func testCommandsFailWhenHandlersAreCleared() {
+        manager.setup(
+            onPlay: {},
+            onPause: {},
+            onTogglePlayPause: {},
+            onNextTrack: {},
+            onPreviousTrack: {}
+        )
+        manager.clearNowPlaying()
+
+        XCTAssertEqual(manager.handlePlayCommand(), .commandFailed)
+        XCTAssertEqual(manager.handlePauseCommand(), .commandFailed)
+        XCTAssertEqual(manager.handleTogglePlayPauseCommand(), .commandFailed)
+        XCTAssertEqual(manager.handleNextTrackCommand(), .commandFailed)
+        XCTAssertEqual(manager.handlePreviousTrackCommand(), .commandFailed)
+    }
+
+    func testNextPreviousCommandsReflectOptionalHandlers() {
+        manager.setup(
+            onPlay: {},
+            onPause: {},
+            onTogglePlayPause: {}
+        )
+
+        XCTAssertEqual(manager.handleNextTrackCommand(), .commandFailed)
+        XCTAssertEqual(manager.handlePreviousTrackCommand(), .commandFailed)
+    }
 }

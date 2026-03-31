@@ -123,37 +123,41 @@ final class SourceConfigTests: XCTestCase {
     // MARK: - KeychainHelper
 
     func testKeychainSaveAndRetrieve() {
+        let service = "com.plaiy.tests.\(UUID().uuidString)"
         let testId = "test-keychain-\(UUID().uuidString)"
-        defer { KeychainHelper.delete(for: testId) }
+        defer { KeychainHelper.delete(for: testId, service: service) }
 
-        let saved = KeychainHelper.save(password: "mypassword", for: testId)
+        let saved = KeychainHelper.save(password: "mypassword", for: testId, service: service)
         XCTAssertTrue(saved)
 
-        let retrieved = KeychainHelper.password(for: testId)
+        let retrieved = KeychainHelper.password(for: testId, service: service)
         XCTAssertEqual(retrieved, "mypassword")
     }
 
     func testKeychainOverwrite() {
+        let service = "com.plaiy.tests.\(UUID().uuidString)"
         let testId = "test-overwrite-\(UUID().uuidString)"
-        defer { KeychainHelper.delete(for: testId) }
+        defer { KeychainHelper.delete(for: testId, service: service) }
 
-        _ = KeychainHelper.save(password: "first", for: testId)
-        _ = KeychainHelper.save(password: "second", for: testId)
+        _ = KeychainHelper.save(password: "first", for: testId, service: service)
+        _ = KeychainHelper.save(password: "second", for: testId, service: service)
 
-        XCTAssertEqual(KeychainHelper.password(for: testId), "second")
+        XCTAssertEqual(KeychainHelper.password(for: testId, service: service), "second")
     }
 
     func testKeychainDelete() {
+        let service = "com.plaiy.tests.\(UUID().uuidString)"
         let testId = "test-delete-\(UUID().uuidString)"
 
-        _ = KeychainHelper.save(password: "temp", for: testId)
-        XCTAssertNotNil(KeychainHelper.password(for: testId))
+        _ = KeychainHelper.save(password: "temp", for: testId, service: service)
+        XCTAssertNotNil(KeychainHelper.password(for: testId, service: service))
 
-        KeychainHelper.delete(for: testId)
-        XCTAssertNil(KeychainHelper.password(for: testId))
+        KeychainHelper.delete(for: testId, service: service)
+        XCTAssertNil(KeychainHelper.password(for: testId, service: service))
     }
 
     func testKeychainNonexistentReturnsNil() {
-        XCTAssertNil(KeychainHelper.password(for: "nonexistent-\(UUID().uuidString)"))
+        let service = "com.plaiy.tests.\(UUID().uuidString)"
+        XCTAssertNil(KeychainHelper.password(for: "nonexistent-\(UUID().uuidString)", service: service))
     }
 }

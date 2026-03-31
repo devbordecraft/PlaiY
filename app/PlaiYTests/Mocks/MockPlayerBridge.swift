@@ -5,7 +5,7 @@ import CoreGraphics
 final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     // MARK: - Stub return values
 
-    var openResult = true
+    var openResult: Result<Void, BridgeOperationError> = .success(())
     var stubState: Int32 = 0
     var stubPosition: Int64 = 0
     var stubDuration: Int64 = 10_000_000 // 10 seconds
@@ -45,7 +45,7 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
 
     // MARK: - PlayerBridgeProtocol
 
-    func open(path: String) -> Bool { openResult }
+    func open(path: String) -> Result<Void, BridgeOperationError> { openResult }
     func play() { playCalled = true }
     func pause() { pauseCalled = true }
     func seek(to microseconds: Int64) { lastSeekTarget = microseconds }

@@ -4,6 +4,7 @@
 #include "http/http_client.h"
 #include <queue>
 #include <string>
+#include <vector>
 
 using namespace py;
 
@@ -22,6 +23,7 @@ public:
 
     HttpResponse request(const HttpRequest& req) override {
         last_request = req;
+        requests.push_back(req);
         request_count++;
         if (responses_.empty()) return {500, "", "No mock response queued"};
         auto r = std::move(responses_.front());
@@ -30,6 +32,7 @@ public:
     }
 
     HttpRequest last_request;
+    std::vector<HttpRequest> requests;
     int request_count = 0;
 
 private:
@@ -132,6 +135,38 @@ static const char* EPISODES_JSON = R"({
                 "type": "episode",
                 "index": 2,
                 "Media": [{"Part": [{"id": 602, "size": 536870912}]}]
+            }
+        ]
+    }
+})";
+
+static const char* SEASONS_UNSORTED_JSON = R"({
+    "MediaContainer": {
+        "size": 2,
+        "Metadata": [
+            {"ratingKey": "310", "title": "Season 10", "type": "season", "index": 10},
+            {"ratingKey": "302", "title": "Season 2", "type": "season", "index": 2}
+        ]
+    }
+})";
+
+static const char* EPISODES_UNSORTED_JSON = R"({
+    "MediaContainer": {
+        "size": 2,
+        "Metadata": [
+            {
+                "ratingKey": "410",
+                "title": "Tenth Episode",
+                "type": "episode",
+                "index": 10,
+                "Media": [{"Part": [{"id": 610, "size": 300}]}]
+            },
+            {
+                "ratingKey": "402",
+                "title": "Second Episode",
+                "type": "episode",
+                "index": 2,
+                "Media": [{"Part": [{"id": 602, "size": 200}]}]
             }
         ]
     }
@@ -244,6 +279,27 @@ TEST_CASE("PlexMediaSource plex.tv login exchanges credentials for token") {
     // (last_request is /identity, but first was plex.tv)
     // Verify the identity request used the obtained token
     REQUIRE(f.mock->last_request.url.find("X-Plex-Token=plex-tv-token-xyz") != std::string::npos);
+}
+
+TEST_CASE("PlexMediaSource plex.tv login encodes form fields") {
+    TestFixture f("http://192.168.1.50:32400", "p@ss w+rd&=", "user+name@example.com");
+    f.mock->enqueue(200, PLEX_TV_AUTH_JSON);
+    f.mock->enqueue(200, IDENTITY_JSON);
+
+    Error err = f.source->connect();
+    REQUIRE(err.ok());
+    REQUIRE(f.mock->requests.size() >= 1);
+    REQUIRE(f.mock->requests[0].body.find("user[login]=user%2Bname%40example.com") != std::string::npos);
+    REQUIRE(f.mock->requests[0].body.find("user[password]=p%40ss+w%2Brd%26%3D") != std::string::npos);
+}
+
+TEST_CASE("PlexMediaSource connect encodes token query parameter") {
+    TestFixture f("http://192.168.1.50:32400", "tok+/%?=&");
+    f.mock->enqueue(200, IDENTITY_JSON);
+
+    Error err = f.source->connect();
+    REQUIRE(err.ok());
+    REQUIRE(f.mock->last_request.url.find("X-Plex-Token=tok%2B%2F%25%3F%3D%26") != std::string::npos);
 }
 
 TEST_CASE("PlexMediaSource plex.tv login with wrong credentials") {
@@ -362,6 +418,21 @@ TEST_CASE("PlexMediaSource list_directory TV show lists seasons") {
     REQUIRE(entries[1].is_directory);
 }
 
+TEST_CASE("PlexMediaSource list_directory seasons sorted numerically") {
+    TestFixture f;
+    f.mock->enqueue(200, IDENTITY_JSON);
+    REQUIRE(f.source->connect().ok());
+
+    f.mock->enqueue(200, SEASONS_UNSORTED_JSON);
+    std::vector<SourceEntry> entries;
+    Error err = f.source->list_directory("section:2/meta:201", entries);
+    REQUIRE(err.ok());
+
+    REQUIRE(entries.size() == 2);
+    REQUIRE(entries[0].name == "Season 2");
+    REQUIRE(entries[1].name == "Season 10");
+}
+
 TEST_CASE("PlexMediaSource list_directory season lists episodes") {
     TestFixture f;
     f.mock->enqueue(200, IDENTITY_JSON);
@@ -381,6 +452,23 @@ TEST_CASE("PlexMediaSource list_directory season lists episodes") {
     REQUIRE(entries[1].name == "E2 - Second Episode");
     REQUIRE(entries[1].uri == "part:602");
     REQUIRE_FALSE(entries[1].is_directory);
+}
+
+TEST_CASE("PlexMediaSource list_directory episodes sorted numerically") {
+    TestFixture f;
+    f.mock->enqueue(200, IDENTITY_JSON);
+    REQUIRE(f.source->connect().ok());
+
+    f.mock->enqueue(200, EPISODES_UNSORTED_JSON);
+    std::vector<SourceEntry> entries;
+    Error err = f.source->list_directory("section:2/meta:201/meta:301", entries);
+    REQUIRE(err.ok());
+
+    REQUIRE(entries.size() == 2);
+    REQUIRE(entries[0].name == "E2 - Second Episode");
+    REQUIRE(entries[0].uri == "part:602");
+    REQUIRE(entries[1].name == "E10 - Tenth Episode");
+    REQUIRE(entries[1].uri == "part:610");
 }
 
 TEST_CASE("PlexMediaSource list_directory empty section") {
@@ -434,6 +522,19 @@ TEST_CASE("PlexMediaSource playable_path for directory returns empty") {
 
     std::string path = f.source->playable_path(entry);
     REQUIRE(path.empty());
+}
+
+TEST_CASE("PlexMediaSource playable_path encodes auth token") {
+    TestFixture f("http://192.168.1.50:32400", "tok+/%?=&");
+    f.mock->enqueue(200, IDENTITY_JSON);
+    REQUIRE(f.source->connect().ok());
+
+    SourceEntry entry;
+    entry.uri = "part:501";
+    entry.is_directory = false;
+
+    std::string path = f.source->playable_path(entry);
+    REQUIRE(path.find("X-Plex-Token=tok%2B%2F%25%3F%3D%26") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------

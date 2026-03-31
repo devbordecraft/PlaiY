@@ -4,10 +4,42 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <functional>
+#include <cctype>
 
 static constexpr const char* TAG = "PlexSource";
 
 using json = nlohmann::json;
+
+namespace {
+
+bool is_unreserved(unsigned char c) {
+    return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~';
+}
+
+std::string percent_encode(const std::string& input, bool space_as_plus = false) {
+    static constexpr char kHex[] = "0123456789ABCDEF";
+    std::string out;
+    out.reserve(input.size() * 3);
+
+    for (char ch : input) {
+        unsigned char c = static_cast<unsigned char>(ch);
+        if (is_unreserved(c)) {
+            out.push_back(ch);
+            continue;
+        }
+        if (space_as_plus && c == ' ') {
+            out.push_back('+');
+            continue;
+        }
+        out.push_back('%');
+        out.push_back(kHex[(c >> 4) & 0x0F]);
+        out.push_back(kHex[c & 0x0F]);
+    }
+
+    return out;
+}
+
+} // namespace
 
 namespace py {
 
@@ -85,8 +117,8 @@ Error PlexMediaSource::authenticate_plex_tv() {
     req.method = "POST";
     req.headers = plex_headers();
     req.headers["Content-Type"] = "application/x-www-form-urlencoded";
-    req.body = "user[login]=" + config_.username +
-               "&user[password]=" + config_.password;
+    req.body = "user[login]=" + percent_encode(config_.username, true) +
+               "&user[password]=" + percent_encode(config_.password, true);
     req.timeout_seconds = 15;
 
     HttpResponse resp = http_->request(req);
@@ -144,7 +176,7 @@ std::string PlexMediaSource::api_url(const std::string& path) const {
     // Append token as query parameter
     if (!auth_token_.empty()) {
         url += (url.find('?') != std::string::npos) ? "&" : "?";
-        url += "X-Plex-Token=" + auth_token_;
+        url += "X-Plex-Token=" + percent_encode(auth_token_);
     }
     return url;
 }
@@ -330,9 +362,17 @@ Error PlexMediaSource::list_section_items(const std::string& section_id,
 Error PlexMediaSource::list_children(const std::string& rating_key,
                                      const std::string& parent_path,
                                      std::vector<SourceEntry>& entries) {
+    struct SortableSourceEntry {
+        SourceEntry entry;
+        bool has_index = false;
+        int index = 0;
+    };
+
     std::string body;
     Error err = fetch_json("/library/metadata/" + rating_key + "/children", body);
     if (err) return err;
+
+    std::vector<SortableSourceEntry> sortable_entries;
 
     try {
         auto j = json::parse(body);
@@ -355,7 +395,11 @@ Error PlexMediaSource::list_children(const std::string& rating_key,
                 se.uri = parent_path + "/meta:" + child_key;
                 se.is_directory = true;
                 se.size = 0;
-                entries.push_back(std::move(se));
+                sortable_entries.push_back({
+                    .entry = std::move(se),
+                    .has_index = true,
+                    .index = season_index,
+                });
 
             } else if (item_type == "episode") {
                 // Episodes: directly playable
@@ -382,7 +426,11 @@ Error PlexMediaSource::list_children(const std::string& rating_key,
                 se.uri = part_id.empty() ? ("meta:" + child_key) : ("part:" + part_id);
                 se.is_directory = part_id.empty();
                 se.size = file_size;
-                entries.push_back(std::move(se));
+                sortable_entries.push_back({
+                    .entry = std::move(se),
+                    .has_index = true,
+                    .index = episode_index,
+                });
             }
         }
     } catch (const json::exception& e) {
@@ -390,13 +438,25 @@ Error PlexMediaSource::list_children(const std::string& rating_key,
                 std::string("Failed to parse children: ") + e.what()};
     }
 
-    // Sort: directories (seasons) first, then by name (episode order)
-    std::sort(entries.begin(), entries.end(),
-              [](const SourceEntry& a, const SourceEntry& b) {
-                  if (a.is_directory != b.is_directory)
-                      return a.is_directory > b.is_directory;
-                  return a.name < b.name;
+    // Sort: directories (seasons) first, then numeric index, then name.
+    std::sort(sortable_entries.begin(), sortable_entries.end(),
+              [](const SortableSourceEntry& a, const SortableSourceEntry& b) {
+                  if (a.entry.is_directory != b.entry.is_directory) {
+                      return a.entry.is_directory > b.entry.is_directory;
+                  }
+                  if (a.has_index != b.has_index) {
+                      return a.has_index > b.has_index;
+                  }
+                  if (a.has_index && b.has_index && a.index != b.index) {
+                      return a.index < b.index;
+                  }
+                  return a.entry.name < b.entry.name;
               });
+
+    entries.reserve(sortable_entries.size());
+    for (auto& sortable : sortable_entries) {
+        entries.push_back(std::move(sortable.entry));
+    }
 
     PY_LOG_DEBUG(TAG, "Children of %s: %zu items", rating_key.c_str(),
                  entries.size());
@@ -415,7 +475,7 @@ std::string PlexMediaSource::playable_path(const SourceEntry& entry) const {
 
     std::string part_id = entry.uri.substr(5);
     return config_.base_uri + "/library/parts/" + part_id +
-           "/file?X-Plex-Token=" + auth_token_;
+           "/file?X-Plex-Token=" + percent_encode(auth_token_);
 }
 
 } // namespace py

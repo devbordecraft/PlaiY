@@ -4,12 +4,14 @@ A high-quality video player built with a C++20 core and SwiftUI frontend. Design
 
 ## Features
 
-- **Hardware-accelerated decoding** via VideoToolbox (H.264, H.265, VP9, AV1) with automatic FFmpeg software fallback
-- **HDR rendering** with Metal EDR pipeline: HDR10 (PQ), HLG, with Dolby Vision detection
-- **Subtitle support**: SRT (text), ASS/SSA (styled via libass), PGS (Blu-ray bitmap)
-- **Audio playback** via CoreAudio with high-quality resampling
-- **Media library** with automatic folder scanning and metadata extraction
-- **All common formats**: MKV, MP4, AVI, TS, M2TS, WebM with H.264, H.265, VP9, AV1 video and all major audio codecs
+- **Video decoding**: VideoToolbox hardware decode (H.264, H.265, VP9, AV1) with FFmpeg software fallback
+- **HDR rendering**: Metal EDR pipeline with HDR10, HDR10+, HLG, and Dolby Vision tone mapping
+- **Audio output modes**: PCM stereo, passthrough bitstream (AC3/E-AC3/DTS/DTS-HD MA/TrueHD), and spatial audio (HRTF + head tracking)
+- **Audio processing**: 10-band EQ, compressor, dialogue boost, variable speed (0.25x to 4x)
+- **Subtitle support**: SRT, ASS/SSA via libass, PGS bitmap subtitles
+- **Video processing**: deinterlacing (yadif/bwdif), brightness/contrast/saturation/sharpness, auto-crop, zoom/pan, aspect ratio overrides
+- **Sources**: local files, SMB browsing, Plex browsing/auth, plus media library scanning and seek thumbnails
+- **Platforms**: macOS, iOS, tvOS targets (Apple platform toolchains)
 
 ## Screenshots
 
@@ -17,8 +19,8 @@ A high-quality video player built with a C++20 core and SwiftUI frontend. Design
 
 ## Requirements
 
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon or Intel Mac
+- macOS 26+ for app builds
+- Xcode with macOS/iOS/tvOS 26 SDKs
 - Homebrew
 
 ## Quick start
@@ -34,10 +36,10 @@ brew install cmake ffmpeg libass nlohmann-json xcodegen
 ```bash
 git clone <repo-url> plaiy
 cd plaiy
-./scripts/run.sh
+make run
 ```
 
-This builds the C++ core, generates the Xcode project, compiles the app, and launches it.
+This builds the C++ core, regenerates the Xcode project, compiles the app, and launches it.
 
 ### 3. Use the app
 
@@ -123,14 +125,14 @@ HDR10 (SMPTE ST 2084 PQ), HLG (ARIB STD-B67), Dolby Vision (detection)
 
 ## Roadmap
 
-- [ ] Audio bitstream passthrough (Dolby Atmos, TrueHD, DTS:X to AVR)
-- [ ] Spatial audio rendering (Apple Spatial Audio)
-- [ ] tvOS target with focus engine support
-- [ ] HDR10+ dynamic metadata
-- [ ] Dolby Vision tone mapping
-- [ ] Network sources (SMB/NFS, HTTP streaming)
-- [ ] TMDb/OMDb poster art and metadata
 - [ ] Chapter navigation
+- [ ] NFS and HTTP streaming sources
+- [ ] Playlist / play queue improvements
+- [ ] Subtitle timing adjustment
+- [ ] TMDb/OMDb poster art and metadata
+- [ ] Picture-in-Picture
+- [ ] Frame capture / screenshot
+- [ ] Watch history and smart resume (CloudKit sync)
 - [ ] Linux target (Vulkan + PulseAudio/PipeWire)
 - [ ] Windows target (D3D12 + WASAPI)
 

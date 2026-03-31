@@ -66,27 +66,32 @@ class NowPlayingManager {
     }
 
     func handlePlayCommand() -> MPRemoteCommandHandlerStatus {
-        playHandler?()
+        guard let playHandler else { return .commandFailed }
+        playHandler()
         return .success
     }
 
     func handlePauseCommand() -> MPRemoteCommandHandlerStatus {
-        pauseHandler?()
+        guard let pauseHandler else { return .commandFailed }
+        pauseHandler()
         return .success
     }
 
     func handleTogglePlayPauseCommand() -> MPRemoteCommandHandlerStatus {
-        togglePlayPauseHandler?()
+        guard let togglePlayPauseHandler else { return .commandFailed }
+        togglePlayPauseHandler()
         return .success
     }
 
     func handleNextTrackCommand() -> MPRemoteCommandHandlerStatus {
-        nextTrackHandler?()
+        guard let nextTrackHandler else { return .commandFailed }
+        nextTrackHandler()
         return .success
     }
 
     func handlePreviousTrackCommand() -> MPRemoteCommandHandlerStatus {
-        previousTrackHandler?()
+        guard let previousTrackHandler else { return .commandFailed }
+        previousTrackHandler()
         return .success
     }
 

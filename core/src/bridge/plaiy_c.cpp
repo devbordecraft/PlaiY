@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <mutex>
+#include <exception>
 
 using json = nlohmann::json;
 
@@ -15,7 +16,7 @@ using json = nlohmann::json;
 
 static int map_error(py::ErrorCode code) {
     switch (code) {
-    case py::ErrorCode::OK:               return PY_OK;
+    case py::ErrorCode::OK:                return PY_OK;
     case py::ErrorCode::InvalidArgument:   return PY_ERROR_INVALID_ARG;
     case py::ErrorCode::FileNotFound:      return PY_ERROR_FILE_NOT_FOUND;
     case py::ErrorCode::UnsupportedFormat:
@@ -27,6 +28,19 @@ static int map_error(py::ErrorCode code) {
     case py::ErrorCode::SubtitleError:     return PY_ERROR_SUBTITLE;
     case py::ErrorCode::NetworkError:      return PY_ERROR_NETWORK;
     default:                               return PY_ERROR_UNKNOWN;
+    }
+}
+
+static const char* fallback_error_text(int py_error) {
+    switch (py_error) {
+    case PY_ERROR_INVALID_ARG: return "Invalid argument";
+    case PY_ERROR_FILE_NOT_FOUND: return "File not found";
+    case PY_ERROR_UNSUPPORTED: return "Unsupported media format";
+    case PY_ERROR_DECODER: return "Decoder error";
+    case PY_ERROR_AUDIO: return "Audio output error";
+    case PY_ERROR_SUBTITLE: return "Subtitle error";
+    case PY_ERROR_NETWORK: return "Network error";
+    default: return "Unknown error";
     }
 }
 
@@ -114,12 +128,26 @@ void py_player_set_deinterlace_mode(PYPlayer* p, int mode) { if (p) p->engine.se
 int py_player_get_deinterlace_mode(PYPlayer* p) { return p ? p->engine.deinterlace_mode() : 0; }
 
 int py_player_open(PYPlayer* p, const char* path) {
-    if (!p || !path) return PY_ERROR_INVALID_ARG;
+    if (!p) return PY_ERROR_INVALID_ARG;
+    if (!path) {
+        p->last_error_msg = "Path is required";
+        return PY_ERROR_INVALID_ARG;
+    }
 
     py::Error err = p->engine.open_file(path);
-    if (err) return map_error(err.code);
+    if (err) {
+        int code = map_error(err.code);
+        p->last_error_msg = err.message.empty() ? fallback_error_text(code) : err.message;
+        return code;
+    }
     p->video_path = path;
+    p->last_error_msg.clear();
     return PY_OK;
+}
+
+const char* py_player_get_last_error(PYPlayer* p) {
+    if (!p) return "";
+    return p->last_error_msg.c_str();
 }
 
 void py_player_play(PYPlayer* p)  { if (p) p->engine.play(); }
@@ -868,7 +896,19 @@ struct PYSourceManager {
     std::string cached_config_json;
     std::string cached_listing_json;
     std::string cached_playable_path;
+    std::string last_error_msg;
 };
+
+static int source_fail(PYSourceManager* sm, int code, std::string msg) {
+    if (sm) {
+        sm->last_error_msg = msg.empty() ? fallback_error_text(code) : std::move(msg);
+    }
+    return code;
+}
+
+static void source_clear_error(PYSourceManager* sm) {
+    if (sm) sm->last_error_msg.clear();
+}
 
 PYSourceManager* py_source_manager_create(void) {
     return new PYSourceManager();
@@ -878,8 +918,16 @@ void py_source_manager_destroy(PYSourceManager* sm) {
     delete sm;
 }
 
+const char* py_source_get_last_error(PYSourceManager* sm) {
+    if (!sm) return "";
+    return sm->last_error_msg.c_str();
+}
+
 int py_source_add(PYSourceManager* sm, const char* config_json) {
-    if (!sm || !config_json) return PY_ERROR_INVALID_ARG;
+    if (!sm) return PY_ERROR_INVALID_ARG;
+    if (!config_json) {
+        return source_fail(sm, PY_ERROR_INVALID_ARG, "Source config JSON is required");
+    }
 
     try {
         auto j = json::parse(config_json);
@@ -897,16 +945,27 @@ int py_source_add(PYSourceManager* sm, const char* config_json) {
         else cfg.type = py::MediaSourceType::Local;
 
         py::Error err = sm->manager.add_source(cfg);
-        if (err) return PY_ERROR_INVALID_ARG;
+        if (err) {
+            int code = map_error(err.code);
+            return source_fail(sm, code, err.message);
+        }
+        source_clear_error(sm);
         return PY_OK;
+    } catch (const json::exception& e) {
+        return source_fail(sm, PY_ERROR_INVALID_ARG,
+                           std::string("Invalid source config JSON: ") + e.what());
+    } catch (const std::exception& e) {
+        return source_fail(sm, PY_ERROR_UNKNOWN, e.what());
     } catch (...) {
-        return PY_ERROR_INVALID_ARG;
+        return source_fail(sm, PY_ERROR_UNKNOWN, "Failed to add source");
     }
 }
 
 int py_source_remove(PYSourceManager* sm, const char* source_id) {
-    if (!sm || !source_id) return PY_ERROR_INVALID_ARG;
+    if (!sm) return PY_ERROR_INVALID_ARG;
+    if (!source_id) return source_fail(sm, PY_ERROR_INVALID_ARG, "Source ID is required");
     sm->manager.remove_source(source_id);
+    source_clear_error(sm);
     return PY_OK;
 }
 
@@ -947,16 +1006,26 @@ const char* py_source_all_configs_json(PYSourceManager* sm) {
 }
 
 int py_source_load_configs_json(PYSourceManager* sm, const char* json_str) {
-    if (!sm || !json_str) return PY_ERROR_INVALID_ARG;
+    if (!sm) return PY_ERROR_INVALID_ARG;
+    if (!json_str) return source_fail(sm, PY_ERROR_INVALID_ARG, "Source config JSON is required");
     py::Error err = sm->manager.load_configs_json(json_str);
-    return err ? PY_ERROR_INVALID_ARG : PY_OK;
+    if (err) {
+        int code = map_error(err.code);
+        return source_fail(sm, code, err.message);
+    }
+    source_clear_error(sm);
+    return PY_OK;
 }
 
 int py_source_connect(PYSourceManager* sm, const char* source_id, const char* password) {
-    if (!sm || !source_id) return PY_ERROR_INVALID_ARG;
+    if (!sm) return PY_ERROR_INVALID_ARG;
+    if (!source_id) return source_fail(sm, PY_ERROR_INVALID_ARG, "Source ID is required");
 
     auto* src = sm->manager.source_by_id(source_id);
-    if (!src) return PY_ERROR_INVALID_ARG;
+    if (!src) {
+        return source_fail(sm, PY_ERROR_INVALID_ARG,
+                           std::string("Source not found: ") + source_id);
+    }
 
     // Inject password into config (it's not serialized)
     auto& cfg = const_cast<py::SourceConfig&>(src->config());
@@ -964,9 +1033,10 @@ int py_source_connect(PYSourceManager* sm, const char* source_id, const char* pa
 
     py::Error err = src->connect();
     if (err) {
-        if (err.code == py::ErrorCode::NetworkError) return PY_ERROR_NETWORK;
-        return PY_ERROR_UNKNOWN;
+        int code = map_error(err.code);
+        return source_fail(sm, code, err.message);
     }
+    source_clear_error(sm);
     return PY_OK;
 }
 
@@ -974,6 +1044,7 @@ void py_source_disconnect(PYSourceManager* sm, const char* source_id) {
     if (!sm || !source_id) return;
     auto* src = sm->manager.source_by_id(source_id);
     if (src) src->disconnect();
+    source_clear_error(sm);
 }
 
 bool py_source_is_connected(PYSourceManager* sm, const char* source_id) {
@@ -985,14 +1056,24 @@ bool py_source_is_connected(PYSourceManager* sm, const char* source_id) {
 const char* py_source_list_directory(PYSourceManager* sm,
                                       const char* source_id,
                                       const char* relative_path) {
-    if (!sm || !source_id) return "[]";
+    if (!sm) return "[]";
+    if (!source_id) {
+        source_fail(sm, PY_ERROR_INVALID_ARG, "Source ID is required");
+        return "[]";
+    }
 
     auto* src = sm->manager.source_by_id(source_id);
-    if (!src) return "[]";
+    if (!src) {
+        source_fail(sm, PY_ERROR_INVALID_ARG, std::string("Source not found: ") + source_id);
+        return "[]";
+    }
 
     std::vector<py::SourceEntry> entries;
     py::Error err = src->list_directory(relative_path ? relative_path : "", entries);
-    if (err) return "[]";
+    if (err) {
+        source_fail(sm, map_error(err.code), err.message);
+        return "[]";
+    }
 
     json arr = json::array();
     for (const auto& e : entries) {
@@ -1005,19 +1086,28 @@ const char* py_source_list_directory(PYSourceManager* sm,
     }
 
     sm->cached_listing_json = arr.dump();
+    source_clear_error(sm);
     return sm->cached_listing_json.c_str();
 }
 
 const char* py_source_playable_path(PYSourceManager* sm,
                                      const char* source_id,
                                      const char* entry_uri) {
-    if (!sm || !source_id || !entry_uri) return "";
+    if (!sm) return "";
+    if (!source_id || !entry_uri) {
+        source_fail(sm, PY_ERROR_INVALID_ARG, "Source ID and entry URI are required");
+        return "";
+    }
 
     auto* src = sm->manager.source_by_id(source_id);
-    if (!src) return "";
+    if (!src) {
+        source_fail(sm, PY_ERROR_INVALID_ARG, std::string("Source not found: ") + source_id);
+        return "";
+    }
 
     py::SourceEntry entry;
     entry.uri = entry_uri;
     sm->cached_playable_path = src->playable_path(entry);
+    source_clear_error(sm);
     return sm->cached_playable_path.c_str();
 }

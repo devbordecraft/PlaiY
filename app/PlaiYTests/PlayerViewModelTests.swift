@@ -138,6 +138,18 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertEqual(mock.lastSetSpeed, 2.0)
     }
 
+    func testSetPlaybackSpeedWhilePausedKeepsPlaybackPaused() {
+        vm.isPlaying = false
+        vm.transport.isPlaying = false
+
+        vm.setPlaybackSpeed(1.5)
+
+        XCTAssertEqual(vm.playbackSpeed, 1.5)
+        XCTAssertEqual(mock.lastSetSpeed, 1.5)
+        XCTAssertFalse(vm.isPlaying)
+        XCTAssertFalse(vm.transport.isPlaying)
+    }
+
     func testSetSpatialMode() {
         vm.setSpatialMode(2)
         XCTAssertEqual(mock.lastSetSpatialMode, 2)
@@ -190,6 +202,24 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertTrue(mock.cancelSeekThumbnailsCalled)
         XCTAssertFalse(vm.isPlaying)
         XCTAssertEqual(vm.playbackSpeed, 1.0)
+    }
+
+    func testOpenFailureSurfacesBridgeMessage() {
+        mock.openResult = .failure(
+            BridgeOperationError(
+                operation: "open",
+                code: Int32(PY_ERROR_DECODER.rawValue),
+                message: "Failed to open media stream"
+            )
+        )
+        let settings = AppSettings()
+
+        vm.open(path: "/tmp/test-video.mkv", settings: settings)
+
+        XCTAssertEqual(vm.openError, "Failed to open media stream")
+        XCTAssertEqual(vm.mediaTitle, "")
+        XCTAssertTrue(vm.audioTracks.isEmpty)
+        XCTAssertTrue(vm.subtitleTracks.isEmpty)
     }
 
     func testTimelineHoverEndCancelsPendingThumbnail() async {

@@ -15,6 +15,7 @@
 		0ACB26120C08CB1E33BEAC17 /* PlaiY-TopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BA9D0A1052DB444F1C8BF7C1 /* PlaiY-TopShelf.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		0C3D60D006CA9BF312FABE67 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */; };
 		0CFC59962D9359DCC71B3BF3 /* SourceConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CF842F44554B1DF331B0B0A /* SourceConfigTests.swift */; };
+		0F35619712890B18CB711EB7 /* BridgeOperationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5863A54B33E2752758593992 /* BridgeOperationError.swift */; };
 		0FA38F7B165065229AD65C81 /* PlayerControlsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */; };
 		130DF834DB1D23DD6557CB86 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
 		148058555405E6A20F1D1F0B /* VideoDisplaySettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9BE4E8C995773F215FF4005 /* VideoDisplaySettingsTests.swift */; };
@@ -29,7 +30,9 @@
 		2544ED48649D0ABF8557C1ED /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		259C643A39AC08496B6E0EA9 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
 		2659FDCF431087D04FCCF0CA /* TVRemoteGestureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29A335C3917691C5337C950D /* TVRemoteGestureView.swift */; };
+		274C9363D2892DCB6170DC9C /* SourcesViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0170D34BB8AAAA0BA210AA07 /* SourcesViewModelTests.swift */; };
 		29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
+		2C1D184356DF905F1CD63FF9 /* VideoDisplaySettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E78ED27B0DDAFEFFCCAC95D /* VideoDisplaySettingsStoreTests.swift */; };
 		2E922B88EEA385E8405ABC8A /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
 		2EBDA5CD7499D2E726552E88 /* DebugOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC06E3F8ACDABB7AF49F7863 /* DebugOverlayView.swift */; };
 		2F567FCDAF195E59BA9B65A5 /* PYLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCE734B22E27E48EA38CB20 /* PYLog.swift */; };
@@ -63,6 +66,7 @@
 		70A3F4E1453F784F07CD2C4B /* SourceManagerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */; };
 		70BCED2474D69E9F95F0B3BE /* DVDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */; };
 		7374E061F0327985920B97D0 /* HDRUniformBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */; };
+		770B14FBC2A705285F0A69AE /* BridgeOperationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5863A54B33E2752758593992 /* BridgeOperationError.swift */; };
 		77AC86D17BCB012CE832A480 /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
 		797727605E3C329324F413F6 /* PlexAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08DADFD7E921DE10F509F231 /* PlexAuth.swift */; };
 		7A786734D0C73E16CEFFCCA9 /* PlayQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CA34F71165C7D7DE074BB3B /* PlayQueue.swift */; };
@@ -117,6 +121,7 @@
 		D53D3576A70DFE015CD9AEFE /* ResumeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */; };
 		D671D26EA26130C6F1731B12 /* PlayQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA82CDE08702A80B59C30143 /* PlayQueueView.swift */; };
 		D71BD686F1B98796D06CAF15 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F793BF28CF63B6D50E101247 /* PlayerView.swift */; };
+		D7EB4B84AF52954D67AF33AB /* SubtitleOverlayViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D6EE1B6F52AA87AB93EB6CF /* SubtitleOverlayViewTests.swift */; };
 		D7FE81C235F565B33C070DFD /* VideoDisplaySettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */; };
 		D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
 		DA0D8A2403F3721D42215A0F /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2959BC28D55EDB4E02F90CCA /* LibraryView.swift */; };
@@ -131,6 +136,7 @@
 		E44CA4BFDA6391B6D7D4B141 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3607CF6035239073AEE20781 /* PlayerViewModel.swift */; };
 		E9B76898F9E4F308CE9B4EAC /* PlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19D4B941118178244122189A /* PlayerBridge.swift */; };
 		EB58D4C0600EBAB7FCE96C36 /* DVDebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */; };
+		ECB580B637913CFAE2AB44A1 /* BridgeOperationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5863A54B33E2752758593992 /* BridgeOperationError.swift */; };
 		ECC24E6BD1F21ED34821C882 /* PlayerBridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */; };
 		EED5907059EC6A940EE22B75 /* LayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */; };
 		EED67EEEA8D0B1C26A136FE7 /* PlaiYApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */; };
@@ -180,6 +186,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0170D34BB8AAAA0BA210AA07 /* SourcesViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourcesViewModelTests.swift; sourceTree = "<group>"; };
 		0491CFAF5AAA1F080603DF02 /* VideoDisplaySettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettingsStore.swift; sourceTree = "<group>"; };
 		07ECE5CCFFC41640E2CF544F /* PlaiYApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaiYApp.swift; sourceTree = "<group>"; };
 		08DADFD7E921DE10F509F231 /* PlexAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexAuth.swift; sourceTree = "<group>"; };
@@ -204,6 +211,7 @@
 		3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConfig.swift; sourceTree = "<group>"; };
 		4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVDisplayLayerView.swift; sourceTree = "<group>"; };
 		5206B0B7315CCF3BBB96D988 /* TopShelf.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TopShelf.entitlements; sourceTree = "<group>"; };
+		5863A54B33E2752758593992 /* BridgeOperationError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeOperationError.swift; sourceTree = "<group>"; };
 		59010C96CF40DF2EBDC4FE49 /* HDRUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDRUniformBuilder.swift; sourceTree = "<group>"; };
 		5A26B40CBF9DA66622BB57D1 /* PlaiY.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PlaiY.entitlements; sourceTree = "<group>"; };
 		5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlackBarDetector.swift; sourceTree = "<group>"; };
@@ -214,6 +222,7 @@
 		60F626B76FBF5D265A3DACA0 /* MediaItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItemView.swift; sourceTree = "<group>"; };
 		6969ACD6B001ECEDE1F998F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVDebugLogger.swift; sourceTree = "<group>"; };
+		7D6EE1B6F52AA87AB93EB6CF /* SubtitleOverlayViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayViewTests.swift; sourceTree = "<group>"; };
 		7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryItemTests.swift; sourceTree = "<group>"; };
 		89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorFilterUniformBuilder.swift; sourceTree = "<group>"; };
 		8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingManager.swift; sourceTree = "<group>"; };
@@ -221,6 +230,7 @@
 		8CF842F44554B1DF331B0B0A /* SourceConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceConfigTests.swift; sourceTree = "<group>"; };
 		91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		971EC8EFBE85780DCE86168B /* PlayerControlsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsView.swift; sourceTree = "<group>"; };
+		9E78ED27B0DDAFEFFCCAC95D /* VideoDisplaySettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDisplaySettingsStoreTests.swift; sourceTree = "<group>"; };
 		A077A165BC093BAC4F219D3A /* PlatformTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformTypes.swift; sourceTree = "<group>"; };
 		A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackInfo.swift; sourceTree = "<group>"; };
 		A3D7002606B6C0F0F4FEA950 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -254,6 +264,7 @@
 			children = (
 				91DB9D0E9DBE07DE22489D88 /* AppSettings.swift */,
 				5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */,
+				5863A54B33E2752758593992 /* BridgeOperationError.swift */,
 				2B7985FD2B159C59D7CA921B /* KeychainHelper.swift */,
 				CC90CD882649EA51FBA43146 /* LayoutMetrics.swift */,
 				F520418D5A5877AC7C8BAAC5 /* LibraryViewModel.swift */,
@@ -301,8 +312,11 @@
 				601FB575A66BFC1D0AE911DA /* PlayQueueTests.swift */,
 				8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */,
 				8CF842F44554B1DF331B0B0A /* SourceConfigTests.swift */,
+				0170D34BB8AAAA0BA210AA07 /* SourcesViewModelTests.swift */,
+				7D6EE1B6F52AA87AB93EB6CF /* SubtitleOverlayViewTests.swift */,
 				28BE4FCAB1AAD2A1C89CADFA /* TimeFormattingTests.swift */,
 				EDAEF68423AF3437F2668253 /* TrackInfoTests.swift */,
+				9E78ED27B0DDAFEFFCCAC95D /* VideoDisplaySettingsStoreTests.swift */,
 				D9BE4E8C995773F215FF4005 /* VideoDisplaySettingsTests.swift */,
 				D4AD21CAD6B508E50FB59823 /* Mocks */,
 			);
@@ -547,8 +561,11 @@
 				C44C5C2D53EAC787D175C3F6 /* PlayerViewModelTests.swift in Sources */,
 				D53D3576A70DFE015CD9AEFE /* ResumeStoreTests.swift in Sources */,
 				0CFC59962D9359DCC71B3BF3 /* SourceConfigTests.swift in Sources */,
+				274C9363D2892DCB6170DC9C /* SourcesViewModelTests.swift in Sources */,
+				D7EB4B84AF52954D67AF33AB /* SubtitleOverlayViewTests.swift in Sources */,
 				54D1E3E387F33E41688AB4C7 /* TimeFormattingTests.swift in Sources */,
 				39BFDCC45CF8E7927B8DC47A /* TrackInfoTests.swift in Sources */,
+				2C1D184356DF905F1CD63FF9 /* VideoDisplaySettingsStoreTests.swift in Sources */,
 				148058555405E6A20F1D1F0B /* VideoDisplaySettingsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -560,6 +577,7 @@
 				6D3F5534C4ED24B830A3CE2C /* AddSourceView.swift in Sources */,
 				91A28C441EF1293D30284BCF /* AppSettings.swift in Sources */,
 				29C4C220ECEC550712340047 /* BlackBarDetector.swift in Sources */,
+				ECB580B637913CFAE2AB44A1 /* BridgeOperationError.swift in Sources */,
 				DA9CC834A6CC252610EE836E /* ColorFilterUniformBuilder.swift in Sources */,
 				AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */,
 				70BCED2474D69E9F95F0B3BE /* DVDebugLogger.swift in Sources */,
@@ -609,6 +627,7 @@
 				D3CBBF538ABD3981BAD4D021 /* AddSourceView.swift in Sources */,
 				83545C0D32833ACFE12379B3 /* AppSettings.swift in Sources */,
 				D9D3507CCD933BF26773571F /* BlackBarDetector.swift in Sources */,
+				0F35619712890B18CB711EB7 /* BridgeOperationError.swift in Sources */,
 				86A787552A6258882D056F1B /* ColorFilterUniformBuilder.swift in Sources */,
 				F01A043AA28464DA5BAA4723 /* ContentView.swift in Sources */,
 				EB58D4C0600EBAB7FCE96C36 /* DVDebugLogger.swift in Sources */,
@@ -658,6 +677,7 @@
 				89621421365ED1BE4620A938 /* AddSourceView.swift in Sources */,
 				9EB5E9D576649846E397DD7A /* AppSettings.swift in Sources */,
 				53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */,
+				770B14FBC2A705285F0A69AE /* BridgeOperationError.swift in Sources */,
 				09F0DC01D5E2432514A48C48 /* ColorFilterUniformBuilder.swift in Sources */,
 				24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */,
 				91389711205D5253EB73D56C /* DVDebugLogger.swift in Sources */,
@@ -745,7 +765,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/apple-debug/core",
-					"$(PROJECT_DIR)/../build/apple-release/core",
 					/opt/homebrew/lib,
 					/usr/local/lib,
 				);
@@ -889,7 +908,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/tvos-Debug/core",
-					"$(PROJECT_DIR)/../build/tvos-Release/core",
 					"$(PROJECT_DIR)/../deps/tvos/lib",
 				);
 				OTHER_LDFLAGS = (
@@ -950,7 +968,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/ios-Debug/core",
-					"$(PROJECT_DIR)/../build/ios-Release/core",
 					"$(PROJECT_DIR)/../deps/ios/lib",
 				);
 				OTHER_LDFLAGS = (
@@ -1077,7 +1094,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/apple-debug/core",
-					"$(PROJECT_DIR)/../build/apple-release/core",
 					/opt/homebrew/lib,
 					/usr/local/lib,
 				);
@@ -1139,7 +1155,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/tvos-Debug/core",
-					"$(PROJECT_DIR)/../build/tvos-Release/core",
 					"$(PROJECT_DIR)/../deps/tvos/lib",
 				);
 				OTHER_LDFLAGS = (
@@ -1246,7 +1261,6 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(PROJECT_DIR)/../build/ios-Debug/core",
-					"$(PROJECT_DIR)/../build/ios-Release/core",
 					"$(PROJECT_DIR)/../deps/ios/lib",
 				);
 				OTHER_LDFLAGS = (

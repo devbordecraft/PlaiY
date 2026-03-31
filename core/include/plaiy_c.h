@@ -58,6 +58,9 @@ PYPlayer*   py_player_create(void);
 void        py_player_destroy(PYPlayer* p);
 
 int         py_player_open(PYPlayer* p, const char* path);
+// Ownership: returned string is owned by the player and valid until the next
+// bridge call on the same handle or py_player_destroy().
+const char* py_player_get_last_error(PYPlayer* p);
 void        py_player_play(PYPlayer* p);
 void        py_player_pause(PYPlayer* p);
 void        py_player_seek(PYPlayer* p, int64_t timestamp_us);
@@ -374,6 +377,9 @@ typedef struct PYSourceManager PYSourceManager;
 
 PYSourceManager* py_source_manager_create(void);
 void             py_source_manager_destroy(PYSourceManager* sm);
+// Ownership: returned string is owned by the source manager and valid until
+// the next bridge call on the same handle or py_source_manager_destroy().
+const char*      py_source_get_last_error(PYSourceManager* sm);
 
 // Add a source from JSON config: {"source_id","display_name","type","base_uri","username"}
 int              py_source_add(PYSourceManager* sm, const char* config_json);
