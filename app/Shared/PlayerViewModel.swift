@@ -3,6 +3,218 @@ import Combine
 import CoreGraphics
 import QuartzCore
 
+private enum PlexTimelineState: String {
+    case stopped
+    case paused
+    case playing
+}
+
+private struct PlexMetadataSnapshot: Sendable {
+    let viewOffsetMs: Int64
+    let viewCount: Int
+    let introMarker: PlexMarker?
+}
+
+private actor PlexSyncSession {
+    private let context: PlexPlaybackContext
+    private let token: String
+    private let clientIdentifier: String
+    private let sessionIdentifier = UUID().uuidString
+    private let session: URLSession
+
+    init?(context: PlexPlaybackContext) {
+        guard let token = KeychainHelper.password(for: context.sourceId),
+              !token.isEmpty else {
+            return nil
+        }
+
+        self.context = context
+        self.token = token
+        self.clientIdentifier = Self.sharedClientIdentifier()
+
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        self.session = URLSession(configuration: config)
+    }
+
+    func refreshMetadata() async -> PlexMetadataSnapshot? {
+        guard let json = try? await requestJSON(
+            path: context.key,
+            method: "GET",
+            queryItems: []
+        ) else {
+            return nil
+        }
+
+        guard let mediaContainer = json["MediaContainer"] as? [String: Any],
+              let metadata = mediaContainer["Metadata"] as? [[String: Any]],
+              let item = metadata.first else {
+            return nil
+        }
+
+        let viewOffsetMs = Self.int64Value(item["viewOffset"])
+        let viewCount = Self.intValue(item["viewCount"])
+        let introMarker = parseMarkers(item: item, mediaContainer: mediaContainer)
+            .first(where: { $0.type.caseInsensitiveCompare("intro") == .orderedSame })
+
+        return PlexMetadataSnapshot(
+            viewOffsetMs: viewOffsetMs,
+            viewCount: viewCount,
+            introMarker: introMarker
+        )
+    }
+
+    func reportTimeline(state: PlexTimelineState,
+                        positionUs: Int64,
+                        durationUs: Int64,
+                        continuing: Bool = false) async -> Bool {
+        let queryItems = [
+            URLQueryItem(name: "key", value: context.key),
+            URLQueryItem(name: "ratingKey", value: context.ratingKey),
+            URLQueryItem(name: "state", value: state.rawValue),
+            URLQueryItem(name: "time", value: String(max(0, positionUs / 1_000))),
+            URLQueryItem(name: "duration", value: String(max(0, durationUs / 1_000))),
+            URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier),
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
+            URLQueryItem(name: "continuing", value: continuing ? "1" : "0")
+        ]
+
+        return (try? await send(path: "/:/timeline", method: "POST", queryItems: queryItems)) ?? false
+    }
+
+    func scrobble() async -> Bool {
+        let queryItems = [
+            URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
+            URLQueryItem(name: "key", value: context.ratingKey)
+        ]
+
+        return (try? await send(path: "/:/scrobble", method: "PUT", queryItems: queryItems)) ?? false
+    }
+
+    private func send(path: String,
+                      method: String,
+                      queryItems: [URLQueryItem]) async throws -> Bool {
+        let request = try makeRequest(path: path, method: method, queryItems: queryItems)
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { return false }
+        return (200 ... 299).contains(http.statusCode)
+    }
+
+    private func requestJSON(path: String,
+                             method: String,
+                             queryItems: [URLQueryItem]) async throws -> [String: Any] {
+        let request = try makeRequest(path: path, method: method, queryItems: queryItems)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              (200 ... 299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw URLError(.cannotParseResponse)
+        }
+        return json
+    }
+
+    private func makeRequest(path: String,
+                             method: String,
+                             queryItems: [URLQueryItem]) throws -> URLRequest {
+        guard var components = URLComponents(string: context.serverBaseURL + path) else {
+            throw URLError(.badURL)
+        }
+
+        var mergedQueryItems = components.queryItems ?? []
+        mergedQueryItems.append(contentsOf: queryItems)
+        components.queryItems = mergedQueryItems
+
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(token, forHTTPHeaderField: "X-Plex-Token")
+        request.setValue(clientIdentifier, forHTTPHeaderField: "X-Plex-Client-Identifier")
+        request.setValue("PlaiY", forHTTPHeaderField: "X-Plex-Product")
+        request.setValue("1.0", forHTTPHeaderField: "X-Plex-Version")
+        request.setValue(Self.platformName, forHTTPHeaderField: "X-Plex-Platform")
+        request.setValue(sessionIdentifier, forHTTPHeaderField: "X-Plex-Session-Identifier")
+        return request
+    }
+
+    private func parseMarkers(item: [String: Any],
+                              mediaContainer: [String: Any]) -> [PlexMarker] {
+        let markerArrays: [[Any]] = [
+            item["Marker"] as? [Any],
+            item["Markers"] as? [Any],
+            mediaContainer["Marker"] as? [Any],
+            mediaContainer["Markers"] as? [Any]
+        ].compactMap { $0 }
+
+        for markerArray in markerArrays {
+            let markers = markerArray.compactMap(Self.parseMarker)
+            if !markers.isEmpty {
+                return markers
+            }
+        }
+        return []
+    }
+
+    private static func parseMarker(_ value: Any) -> PlexMarker? {
+        guard let marker = value as? [String: Any] else { return nil }
+
+        let id = stringValue(marker["id"])
+        let type = stringValue(marker["type"])
+        let start = int64Value(marker["startTimeOffset"], fallback: int64Value(marker["start"]))
+        let end = int64Value(marker["endTimeOffset"], fallback: int64Value(marker["end"]))
+
+        guard !id.isEmpty, !type.isEmpty, end > start else { return nil }
+        return PlexMarker(id: id, type: type, startTimeOffsetMs: start, endTimeOffsetMs: end)
+    }
+
+    private static func intValue(_ value: Any?) -> Int {
+        if let intValue = value as? Int { return intValue }
+        if let stringValue = value as? String, let intValue = Int(stringValue) { return intValue }
+        return 0
+    }
+
+    private static func int64Value(_ value: Any?, fallback: Int64 = 0) -> Int64 {
+        if let intValue = value as? Int64 { return intValue }
+        if let intValue = value as? Int { return Int64(intValue) }
+        if let stringValue = value as? String, let intValue = Int64(stringValue) { return intValue }
+        return fallback
+    }
+
+    private static func stringValue(_ value: Any?) -> String {
+        if let stringValue = value as? String { return stringValue }
+        if let intValue = value as? Int { return String(intValue) }
+        if let intValue = value as? Int64 { return String(intValue) }
+        return ""
+    }
+
+    private static func sharedClientIdentifier() -> String {
+        let key = "plexClientIdentifier"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+
+        let generated = UUID().uuidString
+        UserDefaults.standard.set(generated, forKey: key)
+        return generated
+    }
+
+    private static var platformName: String {
+        #if os(macOS)
+        "macOS"
+        #elseif os(tvOS)
+        "tvOS"
+        #else
+        "iOS"
+        #endif
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PlaybackTransport: high-frequency state that must NOT trigger SwiftUI
 // objectWillChange. Views that need these values poll via their own timers.
@@ -131,10 +343,12 @@ class PlayerViewModel: ObservableObject {
     @Published var cropActive: Bool = false
     @Published var openError: String?
     @Published var isDolbyVision = false
+    @Published var showSkipIntro = false
 
     // NOT @Published — ContentView reads this in one-shot closures (onBack, playbackEnded),
     // not in body. Avoiding @Published prevents once-per-second PlayerView rebuilds.
     var currentPosition: Int64 = 0
+    var currentPlaybackItem: PlaybackItem?
     var duration: Int64 {
         get { transport.duration }
         set { transport.duration = newValue }
@@ -143,6 +357,7 @@ class PlayerViewModel: ObservableObject {
     // Throttles for expensive per-frame operations
     private var lastNowPlayingUpdate: CFTimeInterval = 0
     private var lastSubtitleUpdate: CFTimeInterval = 0
+    private var lastPlexTimelineUpdate: CFTimeInterval = 0
 
     // Thumbnail async loading
     private let thumbQueue = DispatchQueue(label: "com.plaiy.seekthumb", qos: .userInitiated)
@@ -153,6 +368,14 @@ class PlayerViewModel: ObservableObject {
 
     private var pendingSeekFraction: Double?
     private var hoverEndWork: DispatchWorkItem?
+    private var plexSync: PlexSyncSession?
+    private var plexSyncHealthy = false
+    private var plexIntroMarker: PlexMarker?
+
+    var shouldPersistLocalResumeFallback: Bool {
+        guard currentPlaybackItem?.isPlex == true else { return true }
+        return !plexSyncHealthy
+    }
 
     private func applyPlaybackState(_ state: Int32) {
         playbackState = state
@@ -176,6 +399,96 @@ class PlayerViewModel: ObservableObject {
         thumbRetryWork = nil
     }
 
+    private func resetPlexState() {
+        plexSync = nil
+        plexSyncHealthy = false
+        plexIntroMarker = nil
+        showSkipIntro = false
+        lastPlexTimelineUpdate = 0
+    }
+
+    private func configurePlexSync(for item: PlaybackItem) {
+        resetPlexState()
+
+        guard let context = item.plexContext,
+              let session = PlexSyncSession(context: context) else {
+            return
+        }
+
+        plexSync = session
+        plexSyncHealthy = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            let snapshot = await session.refreshMetadata()
+            await MainActor.run {
+                guard self.currentPlaybackItem?.id == item.id else { return }
+                guard let snapshot else {
+                    self.plexSyncHealthy = false
+                    return
+                }
+
+                self.plexSyncHealthy = true
+                self.plexIntroMarker = snapshot.introMarker
+                self.updateSkipIntroVisibility(for: self.currentPosition)
+            }
+        }
+    }
+
+    private func updateSkipIntroVisibility(for positionUs: Int64) {
+        guard let marker = plexIntroMarker else {
+            showSkipIntro = false
+            return
+        }
+
+        let positionMs = max(0, positionUs / 1_000)
+        showSkipIntro = positionMs >= marker.startTimeOffsetMs &&
+            positionMs < marker.endTimeOffsetMs
+    }
+
+    private func reportPlexTimeline(_ state: PlexTimelineState,
+                                    positionUs: Int64,
+                                    continuing: Bool = false) {
+        guard let plexSync else { return }
+
+        lastPlexTimelineUpdate = CACurrentMediaTime()
+        let durationUs = transport.duration
+
+        Task { [weak self] in
+            let ok = await plexSync.reportTimeline(
+                state: state,
+                positionUs: positionUs,
+                durationUs: durationUs,
+                continuing: continuing
+            )
+            await MainActor.run {
+                self?.plexSyncHealthy = ok
+            }
+        }
+    }
+
+    private func finalizePlexPlayback(positionUs: Int64,
+                                      continuing: Bool,
+                                      finished: Bool) {
+        guard let plexSync else { return }
+
+        lastPlexTimelineUpdate = CACurrentMediaTime()
+        let durationUs = transport.duration
+
+        Task { [weak self] in
+            let timelineOK = await plexSync.reportTimeline(
+                state: .stopped,
+                positionUs: positionUs,
+                durationUs: durationUs,
+                continuing: continuing
+            )
+            let scrobbleOK = finished ? await plexSync.scrobble() : true
+            await MainActor.run {
+                self?.plexSyncHealthy = timelineOK && scrobbleOK
+            }
+        }
+    }
+
     static func seekThumbnailIntervalSeconds(for durationUs: Int64) -> Int32 {
         switch durationUs {
         case ...1_800_000_000:
@@ -190,11 +503,13 @@ class PlayerViewModel: ObservableObject {
     }
 
 
-    func open(path: String, settings: AppSettings,
+    func open(item: PlaybackItem, settings: AppSettings,
               onNextTrack: (() -> Void)? = nil,
               onPreviousTrack: (() -> Void)? = nil) {
         playbackEnded = false
         playbackSpeed = 1.0
+        currentPlaybackItem = item
+        resetPlexState()
 
         bridge.setHWDecodePref(Int32(settings.hwDecodePref))
         bridge.setSubtitleFontScale(settings.styledSubtitleScale)
@@ -202,11 +517,11 @@ class PlayerViewModel: ObservableObject {
         bridge.setHeadTracking(settings.headTrackingEnabled)
         headTrackingEnabled = settings.headTrackingEnabled
 
-        switch bridge.open(path: path) {
+        switch bridge.open(path: item.path) {
         case .success:
             break
         case .failure(let err):
-            let fallback = "Could not open: \(URL(fileURLWithPath: path).lastPathComponent)"
+            let fallback = "Could not open: \(item.displayName)"
             openError = err.message.isEmpty ? fallback : err.message
             mediaTitle = ""
             audioTracks = []
@@ -233,16 +548,9 @@ class PlayerViewModel: ObservableObject {
         volume = Float(settings.volume)
         bridge.setVolume(volume)
 
-        if path.hasPrefix("/") {
-            let url = URL(fileURLWithPath: path)
-            mediaTitle = url.deletingPathExtension().lastPathComponent
-        } else if let url = URL(string: path) {
-            mediaTitle = url.lastPathComponent
-        } else {
-            mediaTitle = (path as NSString).lastPathComponent
-        }
+        mediaTitle = item.displayName
 
-        loadDisplaySettings(for: path)
+        loadDisplaySettings(for: item.resumeKey)
         transport.onCropDetected = { [weak self] crop in
             Task { @MainActor in self?.setCrop(crop) }
         }
@@ -292,14 +600,18 @@ class PlayerViewModel: ObservableObject {
             onNextTrack: onNextTrack,
             onPreviousTrack: onPreviousTrack
         )
+
+        configurePlexSync(for: item)
     }
 
     func play() {
         bridge.play()
+        reportPlexTimeline(.playing, positionUs: max(currentPosition, bridge.position))
     }
 
     func pause() {
         bridge.pause()
+        reportPlexTimeline(.paused, positionUs: max(currentPosition, bridge.position))
     }
 
     func togglePlayPause() {
@@ -319,6 +631,8 @@ class PlayerViewModel: ObservableObject {
         bridge.seek(to: target)
         transport.currentPosition = target
         currentPosition = target
+        updateSkipIntroVisibility(for: target)
+        reportPlexTimeline(isPlaying ? .playing : .paused, positionUs: target)
     }
 
     func seekRelative(seconds: Double) {
@@ -371,7 +685,9 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
-    func stop() {
+    func stop(continuing: Bool = false, finished: Bool = false) {
+        let finalPositionUs = max(currentPosition, bridge.position)
+        finalizePlexPlayback(positionUs: finalPositionUs, continuing: continuing, finished: finished)
         cancelPendingThumbnailRequest()
         bridge.cancelSeekThumbnails()
         bridge.stop()
@@ -392,6 +708,8 @@ class PlayerViewModel: ObservableObject {
         aspectRatioMode = .auto
         cropActive = false
         displaySettingsPath = nil
+        currentPlaybackItem = nil
+        resetPlexState()
         NowPlayingManager.shared.clearNowPlaying()
     }
 
@@ -417,6 +735,7 @@ class PlayerViewModel: ObservableObject {
         currentPosition = transport.currentPosition
         transport.passthroughActive = bridge.isPassthroughActive
         transport.spatialActive = bridge.isSpatialActive
+        updateSkipIntroVisibility(for: transport.currentPosition)
 
         let now = CACurrentMediaTime()
 
@@ -436,6 +755,10 @@ class PlayerViewModel: ObservableObject {
                 duration: Double(transport.duration) / 1_000_000.0,
                 isPlaying: isPlaying
             )
+        }
+
+        if now - lastPlexTimelineUpdate >= 10.0 {
+            reportPlexTimeline(.playing, positionUs: transport.currentPosition)
         }
     }
 
@@ -642,5 +965,10 @@ class PlayerViewModel: ObservableObject {
     func timeText(for fraction: Double) -> String {
         let us = Int64(fraction * Double(transport.duration))
         return transport.formatTime(us)
+    }
+
+    func skipIntro() {
+        guard let marker = plexIntroMarker else { return }
+        seek(toMicroseconds: marker.endTimeOffsetMs * 1_000)
     }
 }

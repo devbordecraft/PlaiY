@@ -2,8 +2,8 @@ import SwiftUI
 
 struct SourceBrowserView: View {
     @ObservedObject var sourcesVM: SourcesViewModel
-    let onSelect: (String) -> Void
-    let onPlayAll: ([(path: String, name: String)]) -> Void
+    let onSelect: (PlaybackItem) -> Void
+    let onPlayAll: ([PlaybackItem]) -> Void
     let onSettings: () -> Void
 
     @State private var showAddSource = false
@@ -220,8 +220,7 @@ struct SourceBrowserView: View {
 
                     if hasMediaFiles {
                         Button {
-                            let items = mediaFileItems
-                            onPlayAll(items)
+                            onPlayAll(mediaPlaybackItems)
                         } label: {
                             Label("Play All", systemImage: "play.fill")
                         }
@@ -297,19 +296,17 @@ struct SourceBrowserView: View {
             sourcesVM.navigateInto(entry)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.blue.opacity(0.1))
-                        .aspectRatio(16.0/9.0, contentMode: .fit)
-
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.blue)
-                }
+                artworkCard(entry, fallbackSystemName: "folder.fill", tint: .blue)
 
                 Text(entry.name)
                     .font(.headline)
                     .lineLimit(2)
+
+                if let progressText = progressText(for: entry) {
+                    Text(progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(8)
             #if !os(tvOS)
@@ -330,23 +327,20 @@ struct SourceBrowserView: View {
 
     private func fileCard(_ entry: SourceEntry) -> some View {
         Button {
-            let path = sourcesVM.playablePath(for: entry)
-            onSelect(path)
+            onSelect(sourcesVM.playbackItem(for: entry))
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .aspectRatio(16.0/9.0, contentMode: .fit)
-
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.white.opacity(0.7))
-                }
+                artworkCard(entry, fallbackSystemName: "play.circle.fill", tint: .white)
 
                 Text(entry.name)
                     .font(.headline)
                     .lineLimit(2)
+
+                if let progressText = progressText(for: entry) {
+                    Text(progressText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if !entry.fileSizeText.isEmpty {
                     Text(entry.fileSizeText)
@@ -377,13 +371,94 @@ struct SourceBrowserView: View {
         sourcesVM.currentEntries.contains { !$0.isDirectory }
     }
 
-    private var mediaFileItems: [(path: String, name: String)] {
-        sourcesVM.currentEntries
-            .filter { !$0.isDirectory }
-            .map { entry in
-                let path = sourcesVM.playablePath(for: entry)
-                let name = (entry.name as NSString).deletingPathExtension
-                return (path: path, name: name)
+    private var mediaPlaybackItems: [PlaybackItem] {
+        sourcesVM.currentPlaybackItems()
+    }
+
+    @ViewBuilder
+    private func artworkCard(_ entry: SourceEntry,
+                             fallbackSystemName: String,
+                             tint: Color) -> some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .bottomLeading) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(backgroundFill(for: entry, tint: tint))
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+
+                if let url = artworkURL(for: entry) {
+                    AsyncImage(url: URL(string: url)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        default:
+                            fallbackArtwork(systemName: fallbackSystemName, tint: tint)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    fallbackArtwork(systemName: fallbackSystemName, tint: tint)
+                }
+
+                if let progress = entry.progressFraction {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(.black.opacity(0.35))
+                            Rectangle()
+                                .fill(entry.isWatched ? .green : .red)
+                                .frame(width: geo.size.width * progress)
+                        }
+                    }
+                    .frame(height: 4)
+                    .clipShape(Capsule())
+                    .padding(8)
+                }
             }
+
+            if entry.isWatched {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white, .green)
+                    .padding(8)
+            }
+        }
+    }
+
+    private func fallbackArtwork(systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 36))
+            .foregroundStyle(tint.opacity(0.85))
+    }
+
+    private func artworkURL(for entry: SourceEntry) -> String? {
+        guard let plex = entry.plex else { return nil }
+        if !plex.thumbURL.isEmpty { return plex.thumbURL }
+        if !plex.artURL.isEmpty { return plex.artURL }
+        return nil
+    }
+
+    private func backgroundFill(for entry: SourceEntry, tint: Color) -> LinearGradient {
+        let opacity = entry.plex == nil ? 0.12 : 0.2
+        return LinearGradient(
+            colors: [tint.opacity(opacity), Color.black.opacity(0.24)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func progressText(for entry: SourceEntry) -> String? {
+        guard let plex = entry.plex else { return nil }
+        if plex.leafCount > 0 {
+            return "\(plex.viewedLeafCount) of \(plex.leafCount) watched"
+        }
+        if plex.isWatched {
+            return "Watched"
+        }
+        if let fraction = plex.progressFraction {
+            return "\(Int(fraction * 100))% watched"
+        }
+        return nil
     }
 }

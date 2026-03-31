@@ -6,8 +6,8 @@ import AppKit
 
 struct LibraryView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
-    let onSelect: (String) -> Void
-    var onPlayAll: ([(path: String, name: String)]) -> Void = { _ in }
+    let onSelect: (PlaybackItem) -> Void
+    var onPlayAll: ([PlaybackItem]) -> Void = { _ in }
     let onSettings: () -> Void
 
     #if os(iOS)
@@ -48,7 +48,9 @@ struct LibraryView: View {
 
                     if !libraryVM.items.isEmpty {
                         Button {
-                            let items = libraryVM.items.map { (path: $0.filePath, name: $0.title) }
+                            let items = libraryVM.items.map {
+                                PlaybackItem.local(path: $0.filePath, displayName: $0.title)
+                            }
                             onPlayAll(items)
                         } label: {
                             Label("Play All", systemImage: "play.fill")
@@ -95,7 +97,7 @@ struct LibraryView: View {
                         ForEach(libraryVM.items) { item in
                             #if os(tvOS)
                             Button {
-                                onSelect(item.filePath)
+                                onSelect(PlaybackItem.local(path: item.filePath, displayName: item.title))
                             } label: {
                                 MediaItemView(item: item)
                             }
@@ -103,7 +105,7 @@ struct LibraryView: View {
                             #else
                             MediaItemView(item: item)
                                 .onTapGesture {
-                                    onSelect(item.filePath)
+                                    onSelect(PlaybackItem.local(path: item.filePath, displayName: item.title))
                                 }
                             #endif
                         }
@@ -125,7 +127,7 @@ struct LibraryView: View {
                       allowedContentTypes: [.movie, .mpeg4Movie, .avi, .mpeg2TransportStream]) { result in
             if case .success(let url) = result {
                 guard url.startAccessingSecurityScopedResource() else { return }
-                onSelect(url.path)
+                onSelect(PlaybackItem.local(path: url.path))
                 url.stopAccessingSecurityScopedResource()
             }
         }
@@ -159,7 +161,7 @@ struct LibraryView: View {
         ]
 
         if panel.runModal() == .OK, let url = panel.url {
-            onSelect(url.path)
+            onSelect(PlaybackItem.local(path: url.path))
         }
         #elseif os(iOS)
         showFilePicker = true

@@ -9,6 +9,7 @@ import UIKit
 struct PlexServer: Identifiable, Sendable {
     let id: String          // clientIdentifier
     let name: String        // friendly name
+    let accessToken: String
     let connections: [PlexConnection]
 
     /// Best available connection URI (prefer local, then relay).
@@ -184,6 +185,7 @@ class PlexAuth: ObservableObject {
 
             let name = resource["name"] as? String ?? "Unknown Server"
             let clientId = resource["clientIdentifier"] as? String ?? UUID().uuidString
+            let accessToken = resource["accessToken"] as? String ?? ""
             let conns = resource["connections"] as? [[String: Any]] ?? []
 
             let connections = conns.compactMap { conn -> PlexConnection? in
@@ -194,7 +196,7 @@ class PlexAuth: ObservableObject {
             }
 
             if !connections.isEmpty {
-                servers.append(PlexServer(id: clientId, name: name, connections: connections))
+                servers.append(PlexServer(id: clientId, name: name, accessToken: accessToken, connections: connections))
             }
         }
 

@@ -163,7 +163,7 @@ struct AddSourceView: View {
                         // Auto-fill fields
                         displayName = server.name
                         address = server.bestURI ?? ""
-                        password = plexAuth.token ?? ""
+                        password = server.accessToken
                         username = "" // Token auth, no username
                     } label: {
                         HStack {

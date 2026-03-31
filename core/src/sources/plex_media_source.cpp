@@ -3,8 +3,9 @@
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
-#include <functional>
 #include <cctype>
+#include <functional>
+#include <utility>
 
 static constexpr const char* TAG = "PlexSource";
 
@@ -14,6 +15,15 @@ namespace {
 
 bool is_unreserved(unsigned char c) {
     return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~';
+}
+
+bool has_prefix(const std::string& s, const std::string& prefix) {
+    return s.rfind(prefix, 0) == 0;
+}
+
+bool has_suffix(const std::string& s, const std::string& suffix) {
+    return s.size() >= suffix.size() &&
+           s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 std::string percent_encode(const std::string& input, bool space_as_plus = false) {
@@ -39,9 +49,132 @@ std::string percent_encode(const std::string& input, bool space_as_plus = false)
     return out;
 }
 
+std::string trim_trailing_slashes(std::string value) {
+    while (value.size() > 1 && !value.empty() && value.back() == '/') {
+        value.pop_back();
+    }
+    return value;
+}
+
+std::string detail_key_for_rating_key(const std::string& rating_key) {
+    return "/library/metadata/" + rating_key;
+}
+
+std::string children_key_for_rating_key(const std::string& rating_key,
+                                        bool grandchildren) {
+    return detail_key_for_rating_key(rating_key) +
+           (grandchildren ? "/grandchildren" : "/children");
+}
+
+std::string detail_key_from_metadata(const json& meta) {
+    std::string rating_key = meta.value("ratingKey", "");
+    std::string key = meta.value("key", "");
+
+    if (key.empty()) {
+        return rating_key.empty() ? std::string{} : detail_key_for_rating_key(rating_key);
+    }
+    if (has_suffix(key, "/children")) {
+        return key.substr(0, key.size() - std::string("/children").size());
+    }
+    if (has_suffix(key, "/grandchildren")) {
+        return key.substr(0, key.size() - std::string("/grandchildren").size());
+    }
+    return key;
+}
+
+std::string browse_key_from_metadata(const json& meta) {
+    const std::string type = meta.value("type", "");
+    const std::string rating_key = meta.value("ratingKey", "");
+    const std::string key = meta.value("key", "");
+
+    if (type == "show") {
+        if (!rating_key.empty()) {
+            return children_key_for_rating_key(rating_key, meta.value("skipChildren", false));
+        }
+        return key;
+    }
+    if (type == "season") {
+        if (!rating_key.empty()) {
+            return children_key_for_rating_key(rating_key, false);
+        }
+        return key;
+    }
+    return detail_key_from_metadata(meta);
+}
+
+std::string section_browse_key(const json& dir) {
+    const std::string key = dir.value("key", "");
+    if (has_prefix(key, "/")) {
+        return has_suffix(key, "/all") ? key : (trim_trailing_slashes(key) + "/all");
+    }
+    return "/library/sections/" + key + "/all";
+}
+
+std::string movie_display_name(const json& meta) {
+    std::string name = meta.value("title", "Untitled");
+    if (meta.contains("year") && meta["year"].is_number_integer()) {
+        name += " (" + std::to_string(meta["year"].get<int>()) + ")";
+    }
+    return name;
+}
+
+std::string episode_display_name(const json& meta) {
+    const int index = meta.value("index", 0);
+    std::string name = "E" + std::to_string(index);
+    const std::string title = meta.value("title", "");
+    if (!title.empty()) {
+        name += " - " + title;
+    }
+    return name;
+}
+
+std::string season_display_name(const json& meta) {
+    const int index = meta.value("index", 0);
+    return "Season " + std::to_string(index);
+}
+
+std::string normalize_connection_uri(const std::string& uri) {
+    return trim_trailing_slashes(uri);
+}
+
+struct ParsedPart {
+    std::string part_id;
+    int64_t size = 0;
+};
+
+ParsedPart first_playable_part(const json& meta) {
+    ParsedPart parsed;
+    if (!meta.contains("Media") || !meta["Media"].is_array() || meta["Media"].empty()) {
+        return parsed;
+    }
+
+    const auto& media = meta["Media"][0];
+    if (!media.contains("Part") || !media["Part"].is_array() || media["Part"].empty()) {
+        return parsed;
+    }
+
+    const auto& part = media["Part"][0];
+    const int part_id = part.value("id", 0);
+    if (part_id > 0) {
+        parsed.part_id = std::to_string(part_id);
+    }
+    parsed.size = part.value("size", static_cast<int64_t>(0));
+    return parsed;
+}
+
 } // namespace
 
 namespace py {
+
+namespace {
+
+struct SortableSourceEntry {
+    SourceEntry entry;
+    bool has_index = false;
+    int index = 0;
+};
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Construction / destruction
@@ -50,9 +183,9 @@ namespace py {
 PlexMediaSource::PlexMediaSource(SourceConfig config,
                                  std::unique_ptr<IHttpClient> http_client)
     : config_(std::move(config)), http_(std::move(http_client)) {
-    // Deterministic client identifier from source_id
     std::size_t h = std::hash<std::string>{}(config_.source_id);
     client_id_ = "plaiy-" + std::to_string(h);
+    config_.base_uri = trim_trailing_slashes(config_.base_uri);
 }
 
 PlexMediaSource::~PlexMediaSource() {
@@ -71,13 +204,12 @@ Error PlexMediaSource::connect() {
         return Error::Ok();
     }
 
-    // Step 1: Obtain auth token
+    playable_items_.clear();
+
     if (!config_.username.empty()) {
-        // plex.tv login: exchange username/password for token
         Error err = authenticate_plex_tv();
         if (err) return err;
     } else {
-        // Direct token mode: password field IS the token
         auth_token_ = config_.password;
     }
 
@@ -86,7 +218,6 @@ Error PlexMediaSource::connect() {
                 "No authentication token — provide a Plex token or plex.tv credentials"};
     }
 
-    // Step 2: Validate token by hitting /identity
     std::string body;
     Error err = fetch_json("/identity", body);
     if (err) {
@@ -140,6 +271,17 @@ Error PlexMediaSource::authenticate_plex_tv() {
         auto j = json::parse(resp.body);
         auth_token_ = j["user"]["authToken"].get<std::string>();
         PY_LOG_INFO(TAG, "Obtained plex.tv auth token");
+
+        std::string server_token;
+        Error err = resolve_pms_access_token(auth_token_, server_token);
+        if (err) return err;
+        if (!server_token.empty()) {
+            auth_token_ = server_token;
+            PY_LOG_INFO(TAG, "Resolved PMS access token for %s", config_.base_uri.c_str());
+        } else {
+            PY_LOG_WARN(TAG, "Falling back to plex.tv token for %s", config_.base_uri.c_str());
+        }
+
         return Error::Ok();
     } catch (const json::exception& e) {
         return {ErrorCode::NetworkError,
@@ -147,10 +289,68 @@ Error PlexMediaSource::authenticate_plex_tv() {
     }
 }
 
+Error PlexMediaSource::resolve_pms_access_token(const std::string& user_token,
+                                                std::string& server_token) {
+    server_token.clear();
+
+    HttpRequest req;
+    req.url = "https://clients.plex.tv/api/v2/resources?includeHttps=1&includeRelay=1&includeIPv6=1";
+    req.method = "GET";
+    req.headers = plex_headers();
+    req.headers["X-Plex-Token"] = user_token;
+    req.timeout_seconds = 15;
+
+    HttpResponse resp = http_->request(req);
+    if (!resp.error_message.empty()) {
+        PY_LOG_WARN(TAG, "Could not resolve PMS token via resources: %s",
+                    resp.error_message.c_str());
+        return Error::Ok();
+    }
+    if (!resp.ok()) {
+        PY_LOG_WARN(TAG, "resources lookup returned status %d", resp.status_code);
+        return Error::Ok();
+    }
+
+    try {
+        const auto resources = json::parse(resp.body);
+        if (!resources.is_array()) {
+            return Error::Ok();
+        }
+
+        const std::string target_uri = normalize_connection_uri(config_.base_uri);
+        for (const auto& resource : resources) {
+            const std::string provides = resource.value("provides", "");
+            if (provides.find("server") == std::string::npos) {
+                continue;
+            }
+
+            const std::string access_token = resource.value("accessToken", "");
+            if (access_token.empty() ||
+                !resource.contains("connections") ||
+                !resource["connections"].is_array()) {
+                continue;
+            }
+
+            for (const auto& connection : resource["connections"]) {
+                const std::string uri = normalize_connection_uri(connection.value("uri", ""));
+                if (!uri.empty() && uri == target_uri) {
+                    server_token = access_token;
+                    return Error::Ok();
+                }
+            }
+        }
+    } catch (const json::exception& e) {
+        PY_LOG_WARN(TAG, "Could not parse resources lookup: %s", e.what());
+    }
+
+    return Error::Ok();
+}
+
 void PlexMediaSource::disconnect() {
     PY_LOG_INFO(TAG, "Disconnecting from %s", server_name_.c_str());
     auth_token_.clear();
     server_name_.clear();
+    playable_items_.clear();
     connected_ = false;
 }
 
@@ -172,13 +372,20 @@ std::map<std::string, std::string> PlexMediaSource::plex_headers() const {
 }
 
 std::string PlexMediaSource::api_url(const std::string& path) const {
-    std::string url = config_.base_uri + path;
-    // Append token as query parameter
+    std::string url = has_prefix(path, "http://") || has_prefix(path, "https://")
+        ? path
+        : config_.base_uri + path;
+
     if (!auth_token_.empty()) {
         url += (url.find('?') != std::string::npos) ? "&" : "?";
         url += "X-Plex-Token=" + percent_encode(auth_token_);
     }
     return url;
+}
+
+std::string PlexMediaSource::media_url(const std::string& path) const {
+    if (path.empty()) return {};
+    return api_url(path);
 }
 
 Error PlexMediaSource::fetch_json(const std::string& api_path, std::string& body) {
@@ -223,31 +430,14 @@ Error PlexMediaSource::list_directory(const std::string& relative_path,
         return {ErrorCode::InvalidState, "Plex source not connected"};
     }
 
-    // Route based on path prefix
     if (relative_path.empty()) {
         return list_sections(entries);
     }
-
-    // Find the last meaningful segment for routing
-    // Format: "section:{id}" or "section:{id}/meta:{key}/meta:{key}"
-    auto last_slash = relative_path.rfind('/');
-    std::string last_segment = (last_slash != std::string::npos)
-        ? relative_path.substr(last_slash + 1)
-        : relative_path;
-
-    if (last_segment.rfind("meta:", 0) == 0) {
-        // meta:{ratingKey} — list children
-        std::string rating_key = last_segment.substr(5);
-        return list_children(rating_key, relative_path, entries);
+    if (!has_prefix(relative_path, "/library/")) {
+        return {ErrorCode::InvalidArgument, "Unrecognized path: " + relative_path};
     }
 
-    if (last_segment.rfind("section:", 0) == 0) {
-        // section:{id} — list section items
-        std::string section_id = last_segment.substr(8);
-        return list_section_items(section_id, entries);
-    }
-
-    return {ErrorCode::InvalidArgument, "Unrecognized path: " + relative_path};
+    return list_api_path(relative_path, entries);
 }
 
 Error PlexMediaSource::list_sections(std::vector<SourceEntry>& entries) {
@@ -256,25 +446,25 @@ Error PlexMediaSource::list_sections(std::vector<SourceEntry>& entries) {
     if (err) return err;
 
     try {
-        auto j = json::parse(body);
-        auto& mc = j["MediaContainer"];
+        const auto j = json::parse(body);
+        const auto& mc = j["MediaContainer"];
 
-        if (!mc.contains("Directory")) {
+        if (!mc.contains("Directory") || !mc["Directory"].is_array()) {
             PY_LOG_INFO(TAG, "No library sections found");
             return Error::Ok();
         }
 
         for (const auto& dir : mc["Directory"]) {
-            std::string type_str = dir.value("type", "");
-            // Only show video-related libraries
-            if (type_str != "movie" && type_str != "show") continue;
+            const std::string type = dir.value("type", "");
+            if (type != "movie" && type != "show") {
+                continue;
+            }
 
-            SourceEntry se;
-            se.name = dir.value("title", "Untitled");
-            se.uri = "section:" + dir.value("key", "");
-            se.is_directory = true;
-            se.size = 0;
-            entries.push_back(std::move(se));
+            SourceEntry entry;
+            entry.name = dir.value("title", "Untitled");
+            entry.uri = section_browse_key(dir);
+            entry.is_directory = true;
+            entries.push_back(std::move(entry));
         }
 
         PY_LOG_DEBUG(TAG, "Found %zu library sections", entries.size());
@@ -286,159 +476,108 @@ Error PlexMediaSource::list_sections(std::vector<SourceEntry>& entries) {
     return Error::Ok();
 }
 
-Error PlexMediaSource::list_section_items(const std::string& section_id,
-                                          std::vector<SourceEntry>& entries) {
-    std::string body;
-    Error err = fetch_json("/library/sections/" + section_id + "/all", body);
-    if (err) return err;
-
-    try {
-        auto j = json::parse(body);
-        auto& mc = j["MediaContainer"];
-
-        if (!mc.contains("Metadata")) {
-            PY_LOG_INFO(TAG, "Section %s is empty", section_id.c_str());
-            return Error::Ok();
-        }
-
-        for (const auto& meta : mc["Metadata"]) {
-            std::string item_type = meta.value("type", "");
-            std::string title = meta.value("title", "Untitled");
-            std::string rating_key = meta.value("ratingKey", "");
-
-            if (item_type == "movie") {
-                // Movies: directly playable
-                std::string year_str;
-                if (meta.contains("year")) {
-                    year_str = " (" + std::to_string(meta["year"].get<int>()) + ")";
-                }
-
-                // Extract part ID from Media[0].Part[0]
-                int64_t file_size = 0;
-                std::string part_id;
-                if (meta.contains("Media") && !meta["Media"].empty()) {
-                    const auto& media = meta["Media"][0];
-                    if (media.contains("Part") && !media["Part"].empty()) {
-                        const auto& part = media["Part"][0];
-                        part_id = std::to_string(part.value("id", 0));
-                        file_size = part.value("size", static_cast<int64_t>(0));
-                    }
-                }
-
-                SourceEntry se;
-                se.name = title + year_str;
-                se.uri = part_id.empty() ? ("meta:" + rating_key) : ("part:" + part_id);
-                se.is_directory = part_id.empty(); // no part = can't play directly
-                se.size = file_size;
-                entries.push_back(std::move(se));
-
-            } else if (item_type == "show") {
-                // TV shows: navigate into seasons
-                SourceEntry se;
-                se.name = title;
-                se.uri = "section:" + section_id + "/meta:" + rating_key;
-                se.is_directory = true;
-                se.size = 0;
-                entries.push_back(std::move(se));
-            }
-        }
-    } catch (const json::exception& e) {
-        return {ErrorCode::NetworkError,
-                std::string("Failed to parse section items: ") + e.what()};
-    }
-
-    // Sort: directories first, then alphabetical
-    std::sort(entries.begin(), entries.end(),
-              [](const SourceEntry& a, const SourceEntry& b) {
-                  if (a.is_directory != b.is_directory)
-                      return a.is_directory > b.is_directory;
-                  return a.name < b.name;
-              });
-
-    PY_LOG_DEBUG(TAG, "Section %s: %zu items", section_id.c_str(), entries.size());
-    return Error::Ok();
-}
-
-Error PlexMediaSource::list_children(const std::string& rating_key,
-                                     const std::string& parent_path,
+Error PlexMediaSource::list_api_path(const std::string& api_path,
                                      std::vector<SourceEntry>& entries) {
-    struct SortableSourceEntry {
-        SourceEntry entry;
-        bool has_index = false;
-        int index = 0;
-    };
-
     std::string body;
-    Error err = fetch_json("/library/metadata/" + rating_key + "/children", body);
+    Error err = fetch_json(api_path, body);
     if (err) return err;
 
     std::vector<SortableSourceEntry> sortable_entries;
 
     try {
-        auto j = json::parse(body);
-        auto& mc = j["MediaContainer"];
+        const auto j = json::parse(body);
+        const auto& mc = j["MediaContainer"];
 
-        if (!mc.contains("Metadata")) {
-            PY_LOG_INFO(TAG, "No children for %s", rating_key.c_str());
+        if (!mc.contains("Metadata") || !mc["Metadata"].is_array()) {
+            PY_LOG_INFO(TAG, "Plex path %s is empty", api_path.c_str());
             return Error::Ok();
         }
 
         for (const auto& meta : mc["Metadata"]) {
-            std::string item_type = meta.value("type", "");
-            std::string child_key = meta.value("ratingKey", "");
-
-            if (item_type == "season") {
-                // Seasons: navigate into episodes
-                int season_index = meta.value("index", 0);
-                SourceEntry se;
-                se.name = "Season " + std::to_string(season_index);
-                se.uri = parent_path + "/meta:" + child_key;
-                se.is_directory = true;
-                se.size = 0;
-                sortable_entries.push_back({
-                    .entry = std::move(se),
-                    .has_index = true,
-                    .index = season_index,
-                });
-
-            } else if (item_type == "episode") {
-                // Episodes: directly playable
-                int episode_index = meta.value("index", 0);
-                std::string title = meta.value("title", "");
-                std::string display = "E" + std::to_string(episode_index);
-                if (!title.empty()) {
-                    display += " - " + title;
-                }
-
-                int64_t file_size = 0;
-                std::string part_id;
-                if (meta.contains("Media") && !meta["Media"].empty()) {
-                    const auto& media = meta["Media"][0];
-                    if (media.contains("Part") && !media["Part"].empty()) {
-                        const auto& part = media["Part"][0];
-                        part_id = std::to_string(part.value("id", 0));
-                        file_size = part.value("size", static_cast<int64_t>(0));
-                    }
-                }
-
-                SourceEntry se;
-                se.name = display;
-                se.uri = part_id.empty() ? ("meta:" + child_key) : ("part:" + part_id);
-                se.is_directory = part_id.empty();
-                se.size = file_size;
-                sortable_entries.push_back({
-                    .entry = std::move(se),
-                    .has_index = true,
-                    .index = episode_index,
-                });
+            const std::string type = meta.value("type", "");
+            if (type.empty()) {
+                continue;
             }
+
+            SourceEntry entry;
+            bool has_index = false;
+            int index = 0;
+
+            if (type == "movie") {
+                const ParsedPart part = first_playable_part(meta);
+                entry.name = movie_display_name(meta);
+                entry.uri = detail_key_from_metadata(meta);
+                entry.is_directory = part.part_id.empty();
+                entry.size = part.size;
+                if (!part.part_id.empty()) {
+                    CachedPlayableItem cached;
+                    cached.part_id = part.part_id;
+                    cached.metadata_key = entry.uri;
+                    cached.rating_key = meta.value("ratingKey", "");
+                    playable_items_[entry.uri] = std::move(cached);
+                }
+            } else if (type == "show") {
+                entry.name = meta.value("title", "Untitled");
+                entry.uri = browse_key_from_metadata(meta);
+                entry.is_directory = true;
+                has_index = false;
+            } else if (type == "season") {
+                index = meta.value("index", 0);
+                has_index = true;
+                entry.name = season_display_name(meta);
+                entry.uri = browse_key_from_metadata(meta);
+                entry.is_directory = true;
+            } else if (type == "episode") {
+                const ParsedPart part = first_playable_part(meta);
+                index = meta.value("index", 0);
+                has_index = true;
+                entry.name = episode_display_name(meta);
+                entry.uri = detail_key_from_metadata(meta);
+                entry.is_directory = part.part_id.empty();
+                entry.size = part.size;
+                if (!part.part_id.empty()) {
+                    CachedPlayableItem cached;
+                    cached.part_id = part.part_id;
+                    cached.metadata_key = entry.uri;
+                    cached.rating_key = meta.value("ratingKey", "");
+                    playable_items_[entry.uri] = std::move(cached);
+                }
+            } else {
+                continue;
+            }
+
+            entry.has_plex_metadata = true;
+            entry.plex.rating_key = meta.value("ratingKey", "");
+            entry.plex.key = detail_key_from_metadata(meta);
+            entry.plex.type = type;
+            entry.plex.duration_ms = meta.value("duration", static_cast<int64_t>(0));
+            entry.plex.view_offset_ms = meta.value("viewOffset", static_cast<int64_t>(0));
+            entry.plex.view_count = meta.value("viewCount", 0);
+            entry.plex.leaf_count = meta.value("leafCount", 0);
+            entry.plex.viewed_leaf_count = meta.value("viewedLeafCount", 0);
+            entry.plex.skip_children = meta.value("skipChildren", false);
+            entry.plex.skip_parent = meta.value("skipParent", false);
+
+            const std::string thumb = meta.value("thumb", "");
+            const std::string art = meta.value("art", "");
+            if (!thumb.empty()) {
+                entry.plex.thumb_url = media_url(thumb);
+            }
+            if (!art.empty()) {
+                entry.plex.art_url = media_url(art);
+            }
+
+            SortableSourceEntry sortable;
+            sortable.entry = std::move(entry);
+            sortable.has_index = has_index;
+            sortable.index = index;
+            sortable_entries.push_back(std::move(sortable));
         }
     } catch (const json::exception& e) {
         return {ErrorCode::NetworkError,
-                std::string("Failed to parse children: ") + e.what()};
+                std::string("Failed to parse Plex listing: ") + e.what()};
     }
 
-    // Sort: directories (seasons) first, then numeric index, then name.
     std::sort(sortable_entries.begin(), sortable_entries.end(),
               [](const SortableSourceEntry& a, const SortableSourceEntry& b) {
                   if (a.entry.is_directory != b.entry.is_directory) {
@@ -458,8 +597,7 @@ Error PlexMediaSource::list_children(const std::string& rating_key,
         entries.push_back(std::move(sortable.entry));
     }
 
-    PY_LOG_DEBUG(TAG, "Children of %s: %zu items", rating_key.c_str(),
-                 entries.size());
+    PY_LOG_DEBUG(TAG, "Plex path %s: %zu items", api_path.c_str(), entries.size());
     return Error::Ok();
 }
 
@@ -467,15 +605,54 @@ Error PlexMediaSource::list_children(const std::string& rating_key,
 // Playback
 // ---------------------------------------------------------------------------
 
+Error PlexMediaSource::load_playable_item(const std::string& metadata_key,
+                                          CachedPlayableItem& item) const {
+    auto it = playable_items_.find(metadata_key);
+    if (it != playable_items_.end()) {
+        item = it->second;
+        return Error::Ok();
+    }
+
+    std::string body;
+    Error err = const_cast<PlexMediaSource*>(this)->fetch_json(metadata_key, body);
+    if (err) return err;
+
+    try {
+        const auto j = json::parse(body);
+        const auto& mc = j["MediaContainer"];
+        if (!mc.contains("Metadata") || !mc["Metadata"].is_array() || mc["Metadata"].empty()) {
+            return {ErrorCode::NetworkError, "Plex item is missing metadata"};
+        }
+
+        const auto& meta = mc["Metadata"][0];
+        const ParsedPart part = first_playable_part(meta);
+        if (part.part_id.empty()) {
+            return {ErrorCode::InvalidArgument, "Plex item is not directly playable"};
+        }
+
+        item.part_id = part.part_id;
+        item.metadata_key = detail_key_from_metadata(meta);
+        item.rating_key = meta.value("ratingKey", "");
+        playable_items_[metadata_key] = item;
+        return Error::Ok();
+    } catch (const json::exception& e) {
+        return {ErrorCode::NetworkError,
+                std::string("Failed to parse playable item metadata: ") + e.what()};
+    }
+}
+
 std::string PlexMediaSource::playable_path(const SourceEntry& entry) const {
-    // Only entries with "part:{id}" URIs are directly playable
-    if (entry.uri.rfind("part:", 0) != 0) {
+    if (entry.is_directory || entry.uri.empty()) {
         return {};
     }
 
-    std::string part_id = entry.uri.substr(5);
-    return config_.base_uri + "/library/parts/" + part_id +
-           "/file?X-Plex-Token=" + percent_encode(auth_token_);
+    CachedPlayableItem item;
+    Error err = load_playable_item(entry.uri, item);
+    if (err || item.part_id.empty()) {
+        return {};
+    }
+
+    return media_url("/library/parts/" + item.part_id + "/file");
 }
 
 } // namespace py

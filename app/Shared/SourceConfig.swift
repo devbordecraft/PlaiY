@@ -108,12 +108,108 @@ struct SourceConfig: Identifiable, Codable, Sendable {
     }
 }
 
+struct PlexEntryMetadata: Codable, Sendable, Equatable {
+    let ratingKey: String
+    let key: String
+    let type: String
+    let durationMs: Int64
+    let viewOffsetMs: Int64
+    let viewCount: Int
+    let leafCount: Int
+    let viewedLeafCount: Int
+    let thumbURL: String
+    let artURL: String
+    let skipChildren: Bool
+    let skipParent: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case ratingKey = "rating_key"
+        case key
+        case type
+        case durationMs = "duration_ms"
+        case viewOffsetMs = "view_offset_ms"
+        case viewCount = "view_count"
+        case leafCount = "leaf_count"
+        case viewedLeafCount = "viewed_leaf_count"
+        case thumbURL = "thumb_url"
+        case artURL = "art_url"
+        case skipChildren = "skip_children"
+        case skipParent = "skip_parent"
+    }
+
+    var isWatched: Bool { viewCount > 0 }
+
+    var progressFraction: Double? {
+        guard durationMs > 0, viewOffsetMs > 0 else { return nil }
+        return min(max(Double(viewOffsetMs) / Double(durationMs), 0), 1)
+    }
+
+    var hierarchyProgressFraction: Double? {
+        guard leafCount > 0 else { return nil }
+        return min(max(Double(viewedLeafCount) / Double(leafCount), 0), 1)
+    }
+}
+
+struct PlexPlaybackContext: Sendable, Equatable {
+    let sourceId: String
+    let serverBaseURL: String
+    let ratingKey: String
+    let key: String
+    let type: String
+    let initialViewOffsetMs: Int64
+    let initialViewCount: Int
+}
+
+struct PlexMarker: Sendable, Equatable {
+    let id: String
+    let type: String
+    let startTimeOffsetMs: Int64
+    let endTimeOffsetMs: Int64
+}
+
+struct PlaybackItem: Identifiable, Sendable, Equatable {
+    let path: String
+    let displayName: String
+    let resumeKey: String
+    let plexContext: PlexPlaybackContext?
+
+    var id: String { resumeKey }
+    var isPlex: Bool { plexContext != nil }
+
+    var initialResumePositionUs: Int64? {
+        guard let plexContext, plexContext.initialViewOffsetMs > 0 else { return nil }
+        return plexContext.initialViewOffsetMs * 1_000
+    }
+
+    static func local(path: String, displayName: String? = nil) -> PlaybackItem {
+        PlaybackItem(
+            path: path,
+            displayName: displayName ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent,
+            resumeKey: path,
+            plexContext: nil
+        )
+    }
+}
+
 struct SourceEntry: Identifiable, Sendable {
     var id: String { uri }
     let name: String
     let uri: String
     let isDirectory: Bool
     let size: Int64
+    let plex: PlexEntryMetadata?
+
+    init(name: String,
+         uri: String,
+         isDirectory: Bool,
+         size: Int64,
+         plex: PlexEntryMetadata? = nil) {
+        self.name = name
+        self.uri = uri
+        self.isDirectory = isDirectory
+        self.size = size
+        self.plex = plex
+    }
 
     var fileSizeText: String {
         guard size > 0 else { return "" }
@@ -122,4 +218,7 @@ struct SourceEntry: Identifiable, Sendable {
         let mb = Double(size) / 1_048_576.0
         return String(format: "%.0f MB", mb)
     }
+
+    var isWatched: Bool { plex?.isWatched ?? false }
+    var progressFraction: Double? { plex?.progressFraction ?? plex?.hierarchyProgressFraction }
 }

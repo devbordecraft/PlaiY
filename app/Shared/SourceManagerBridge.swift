@@ -112,10 +112,19 @@ final class SourceManagerBridge {
             let uri: String
             let is_directory: Bool
             let size: Int64
+            let plex: PlexEntryMetadata?
         }
 
         guard let raw = try? JSONDecoder().decode([RawEntry].self, from: data) else { return [] }
-        return raw.map { SourceEntry(name: $0.name, uri: $0.uri, isDirectory: $0.is_directory, size: $0.size) }
+        return raw.map {
+            SourceEntry(
+                name: $0.name,
+                uri: $0.uri,
+                isDirectory: $0.is_directory,
+                size: $0.size,
+                plex: $0.plex
+            )
+        }
     }
 
     func playablePath(sourceId: String, entryURI: String) -> String {

@@ -197,6 +197,27 @@ struct PlayerView: View {
                 )
             }
 
+            if viewModel.showSkipIntro {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            handleKeyAction { viewModel.skipIntro() }
+                        } label: {
+                            Label("Skip Intro", systemImage: "forward.end.fill")
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.trailing, 28)
+                        .padding(.bottom, showControls ? 190 : 110)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+            }
+
             // Resume prompt overlay
             if showResumePrompt, let pos = resumePosition {
                 ResumePromptView(position: pos, onResume: {

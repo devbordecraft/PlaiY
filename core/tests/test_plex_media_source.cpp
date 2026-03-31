@@ -108,6 +108,22 @@ static const char* SHOWS_JSON = R"({
     }
 })";
 
+static const char* SHOWS_SKIP_CHILDREN_JSON = R"({
+    "MediaContainer": {
+        "size": 1,
+        "Metadata": [
+            {
+                "ratingKey": "211",
+                "title": "Mini Series",
+                "type": "show",
+                "skipChildren": true,
+                "leafCount": 3,
+                "viewedLeafCount": 1
+            }
+        ]
+    }
+})";
+
 static const char* SEASONS_JSON = R"({
     "MediaContainer": {
         "size": 2,
@@ -180,6 +196,22 @@ static const char* PLEX_TV_AUTH_JSON = R"({
         "authToken": "plex-tv-token-xyz"
     }
 })";
+
+static const char* PLEX_RESOURCES_JSON = R"([
+    {
+        "name": "TestPlex",
+        "provides": "server",
+        "clientIdentifier": "abc123",
+        "accessToken": "pms-token-xyz",
+        "connections": [
+            {
+                "uri": "http://192.168.1.50:32400",
+                "local": true,
+                "relay": false
+            }
+        ]
+    }
+])";
 
 // ---------------------------------------------------------------------------
 // Helper to create a PlexMediaSource with a mock HTTP client
@@ -267,23 +299,23 @@ TEST_CASE("PlexMediaSource plex.tv login exchanges credentials for token") {
 
     // First request: plex.tv auth
     f.mock->enqueue(200, PLEX_TV_AUTH_JSON);
-    // Second request: validate token via /identity
+    // Second request: resources lookup for the PMS token
+    f.mock->enqueue(200, PLEX_RESOURCES_JSON);
+    // Third request: validate token via /identity
     f.mock->enqueue(200, IDENTITY_JSON);
 
     Error err = f.source->connect();
     REQUIRE(err.ok());
     REQUIRE(f.source->is_connected());
-    REQUIRE(f.mock->request_count == 2);
+    REQUIRE(f.mock->request_count == 3);
 
-    // Verify plex.tv auth request was POST
-    // (last_request is /identity, but first was plex.tv)
-    // Verify the identity request used the obtained token
-    REQUIRE(f.mock->last_request.url.find("X-Plex-Token=plex-tv-token-xyz") != std::string::npos);
+    REQUIRE(f.mock->last_request.url.find("X-Plex-Token=pms-token-xyz") != std::string::npos);
 }
 
 TEST_CASE("PlexMediaSource plex.tv login encodes form fields") {
     TestFixture f("http://192.168.1.50:32400", "p@ss w+rd&=", "user+name@example.com");
     f.mock->enqueue(200, PLEX_TV_AUTH_JSON);
+    f.mock->enqueue(200, PLEX_RESOURCES_JSON);
     f.mock->enqueue(200, IDENTITY_JSON);
 
     Error err = f.source->connect();
@@ -352,10 +384,10 @@ TEST_CASE("PlexMediaSource list_directory root lists sections") {
     // Music section should be filtered out (not movie/show)
     REQUIRE(entries.size() == 2);
     REQUIRE(entries[0].name == "Movies");
-    REQUIRE(entries[0].uri == "section:1");
+    REQUIRE(entries[0].uri == "/library/sections/1/all");
     REQUIRE(entries[0].is_directory);
     REQUIRE(entries[1].name == "TV Shows");
-    REQUIRE(entries[1].uri == "section:2");
+    REQUIRE(entries[1].uri == "/library/sections/2/all");
     REQUIRE(entries[1].is_directory);
 }
 
@@ -366,19 +398,23 @@ TEST_CASE("PlexMediaSource list_directory section lists movies") {
 
     f.mock->enqueue(200, MOVIES_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:1", entries);
+    Error err = f.source->list_directory("/library/sections/1/all", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 2);
 
     // Movies sorted alphabetically (no directories first since all are files)
     REQUIRE(entries[0].name == "Another Movie (2023)");
-    REQUIRE(entries[0].uri == "part:502");
+    REQUIRE(entries[0].uri == "/library/metadata/102");
     REQUIRE_FALSE(entries[0].is_directory);
     REQUIRE(entries[0].size == 1073741824);
+    REQUIRE(entries[0].has_plex_metadata);
+    REQUIRE(entries[0].plex.rating_key == "102");
+    REQUIRE(entries[0].plex.key == "/library/metadata/102");
+    REQUIRE(entries[0].plex.type == "movie");
 
     REQUIRE(entries[1].name == "Test Movie (2024)");
-    REQUIRE(entries[1].uri == "part:501");
+    REQUIRE(entries[1].uri == "/library/metadata/101");
     REQUIRE_FALSE(entries[1].is_directory);
     REQUIRE(entries[1].size == 2147483648);
 }
@@ -390,13 +426,31 @@ TEST_CASE("PlexMediaSource list_directory section lists TV shows as directories"
 
     f.mock->enqueue(200, SHOWS_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:2", entries);
+    Error err = f.source->list_directory("/library/sections/2/all", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 1);
     REQUIRE(entries[0].name == "Test Show");
-    REQUIRE(entries[0].uri == "section:2/meta:201");
+    REQUIRE(entries[0].uri == "/library/metadata/201/children");
     REQUIRE(entries[0].is_directory);
+    REQUIRE(entries[0].plex.key == "/library/metadata/201");
+}
+
+TEST_CASE("PlexMediaSource list_directory show with skipChildren jumps to grandchildren") {
+    TestFixture f;
+    f.mock->enqueue(200, IDENTITY_JSON);
+    REQUIRE(f.source->connect().ok());
+
+    f.mock->enqueue(200, SHOWS_SKIP_CHILDREN_JSON);
+    std::vector<SourceEntry> entries;
+    Error err = f.source->list_directory("/library/sections/2/all", entries);
+    REQUIRE(err.ok());
+
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].uri == "/library/metadata/211/grandchildren");
+    REQUIRE(entries[0].plex.skip_children);
+    REQUIRE(entries[0].plex.leaf_count == 3);
+    REQUIRE(entries[0].plex.viewed_leaf_count == 1);
 }
 
 TEST_CASE("PlexMediaSource list_directory TV show lists seasons") {
@@ -406,15 +460,15 @@ TEST_CASE("PlexMediaSource list_directory TV show lists seasons") {
 
     f.mock->enqueue(200, SEASONS_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:2/meta:201", entries);
+    Error err = f.source->list_directory("/library/metadata/201/children", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 2);
     REQUIRE(entries[0].name == "Season 1");
-    REQUIRE(entries[0].uri == "section:2/meta:201/meta:301");
+    REQUIRE(entries[0].uri == "/library/metadata/301/children");
     REQUIRE(entries[0].is_directory);
     REQUIRE(entries[1].name == "Season 2");
-    REQUIRE(entries[1].uri == "section:2/meta:201/meta:302");
+    REQUIRE(entries[1].uri == "/library/metadata/302/children");
     REQUIRE(entries[1].is_directory);
 }
 
@@ -425,7 +479,7 @@ TEST_CASE("PlexMediaSource list_directory seasons sorted numerically") {
 
     f.mock->enqueue(200, SEASONS_UNSORTED_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:2/meta:201", entries);
+    Error err = f.source->list_directory("/library/metadata/201/children", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 2);
@@ -440,17 +494,17 @@ TEST_CASE("PlexMediaSource list_directory season lists episodes") {
 
     f.mock->enqueue(200, EPISODES_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:2/meta:201/meta:301", entries);
+    Error err = f.source->list_directory("/library/metadata/301/children", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 2);
     REQUIRE(entries[0].name == "E1 - Pilot");
-    REQUIRE(entries[0].uri == "part:601");
+    REQUIRE(entries[0].uri == "/library/metadata/401");
     REQUIRE_FALSE(entries[0].is_directory);
     REQUIRE(entries[0].size == 524288000);
 
     REQUIRE(entries[1].name == "E2 - Second Episode");
-    REQUIRE(entries[1].uri == "part:602");
+    REQUIRE(entries[1].uri == "/library/metadata/402");
     REQUIRE_FALSE(entries[1].is_directory);
 }
 
@@ -461,14 +515,14 @@ TEST_CASE("PlexMediaSource list_directory episodes sorted numerically") {
 
     f.mock->enqueue(200, EPISODES_UNSORTED_JSON);
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:2/meta:201/meta:301", entries);
+    Error err = f.source->list_directory("/library/metadata/301/children", entries);
     REQUIRE(err.ok());
 
     REQUIRE(entries.size() == 2);
     REQUIRE(entries[0].name == "E2 - Second Episode");
-    REQUIRE(entries[0].uri == "part:602");
+    REQUIRE(entries[0].uri == "/library/metadata/402");
     REQUIRE(entries[1].name == "E10 - Tenth Episode");
-    REQUIRE(entries[1].uri == "part:610");
+    REQUIRE(entries[1].uri == "/library/metadata/410");
 }
 
 TEST_CASE("PlexMediaSource list_directory empty section") {
@@ -478,7 +532,7 @@ TEST_CASE("PlexMediaSource list_directory empty section") {
 
     f.mock->enqueue(200, R"({"MediaContainer": {"size": 0}})");
     std::vector<SourceEntry> entries;
-    Error err = f.source->list_directory("section:1", entries);
+    Error err = f.source->list_directory("/library/sections/1/all", entries);
     REQUIRE(err.ok());
     REQUIRE(entries.empty());
 }
@@ -503,11 +557,12 @@ TEST_CASE("PlexMediaSource playable_path for movie returns stream URL") {
     f.mock->enqueue(200, IDENTITY_JSON);
     REQUIRE(f.source->connect().ok());
 
-    SourceEntry entry;
-    entry.uri = "part:501";
-    entry.is_directory = false;
+    f.mock->enqueue(200, MOVIES_JSON);
+    std::vector<SourceEntry> entries;
+    REQUIRE(f.source->list_directory("/library/sections/1/all", entries).ok());
+    REQUIRE(entries.size() == 2);
 
-    std::string path = f.source->playable_path(entry);
+    std::string path = f.source->playable_path(entries[1]);
     REQUIRE(path == "http://192.168.1.50:32400/library/parts/501/file?X-Plex-Token=test-token");
 }
 
@@ -517,7 +572,7 @@ TEST_CASE("PlexMediaSource playable_path for directory returns empty") {
     REQUIRE(f.source->connect().ok());
 
     SourceEntry entry;
-    entry.uri = "section:1";
+    entry.uri = "/library/sections/1/all";
     entry.is_directory = true;
 
     std::string path = f.source->playable_path(entry);
@@ -529,11 +584,11 @@ TEST_CASE("PlexMediaSource playable_path encodes auth token") {
     f.mock->enqueue(200, IDENTITY_JSON);
     REQUIRE(f.source->connect().ok());
 
-    SourceEntry entry;
-    entry.uri = "part:501";
-    entry.is_directory = false;
+    f.mock->enqueue(200, MOVIES_JSON);
+    std::vector<SourceEntry> entries;
+    REQUIRE(f.source->list_directory("/library/sections/1/all", entries).ok());
 
-    std::string path = f.source->playable_path(entry);
+    std::string path = f.source->playable_path(entries[1]);
     REQUIRE(path.find("X-Plex-Token=tok%2B%2F%25%3F%3D%26") != std::string::npos);
 }
 

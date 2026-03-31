@@ -16,14 +16,14 @@ struct ContentView: View {
 
     @State private var screen: Screen = .library
     @State private var screenBeforePlayer: Screen = .library
-    @State private var selectedFilePath: String?
+    @State private var selectedPlaybackItem: PlaybackItem?
     @State private var didLoadInitialData = false
     @State private var pendingPlaybackStart: PlaybackStartAction?
 
     var body: some View {
         Group {
-            if screen == .player, let path = selectedFilePath {
-                playerView(path: path)
+            if screen == .player, let item = selectedPlaybackItem {
+                playerView(item: item)
             } else {
                 #if os(tvOS)
                 tvBrowseView
@@ -46,7 +46,7 @@ struct ContentView: View {
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
                   let path = components.queryItems?.first(where: { $0.name == "path" })?.value
             else { return }
-            selectedFilePath = path
+            selectedPlaybackItem = .local(path: path)
             screenBeforePlayer = screen
             screen = .player
         }
@@ -54,25 +54,51 @@ struct ContentView: View {
 
     // MARK: - Player
 
-    private func initialPlaybackStart(for path: String) -> PlaybackStartAction {
-        if settings.resumePlayback, ResumeStore.position(for: path) != nil {
+    private func resumePosition(for item: PlaybackItem) -> Int64? {
+        guard settings.resumePlayback else { return nil }
+        if let plexResume = item.initialResumePositionUs {
+            return plexResume
+        }
+        return ResumeStore.position(for: item.resumeKey)
+    }
+
+    private func saveResume(for item: PlaybackItem) {
+        guard settings.resumePlayback else { return }
+        if item.isPlex && !playerVM.shouldPersistLocalResumeFallback {
+            return
+        }
+        ResumeStore.save(
+            path: item.resumeKey,
+            positionUs: playerVM.currentPosition,
+            durationUs: playerVM.duration,
+            title: playerVM.mediaTitle
+        )
+    }
+
+    private func clearResume(for item: PlaybackItem) {
+        guard settings.resumePlayback else { return }
+        ResumeStore.clear(path: item.resumeKey)
+    }
+
+    private func initialPlaybackStart(for item: PlaybackItem) -> PlaybackStartAction {
+        if resumePosition(for: item) != nil {
             return .openOnly
         }
         return settings.autoplayOnOpen ? .play : .openOnly
     }
 
-    private func queuePlaybackStart(for path: String) -> PlaybackStartAction {
-        if settings.resumePlayback, let resumePos = ResumeStore.position(for: path) {
+    private func queuePlaybackStart(for item: PlaybackItem) -> PlaybackStartAction {
+        if let resumePos = resumePosition(for: item) {
             return .seekThenPlay(resumePos)
         }
         return .play
     }
 
-    private func startPlayback(for path: String) {
-        let start = pendingPlaybackStart ?? initialPlaybackStart(for: path)
+    private func startPlayback(for item: PlaybackItem) {
+        let start = pendingPlaybackStart ?? initialPlaybackStart(for: item)
         pendingPlaybackStart = nil
 
-        playerVM.open(path: path, settings: settings,
+        playerVM.open(item: item, settings: settings,
                       onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
                       onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
         if playerVM.openError != nil { return }
@@ -88,87 +114,68 @@ struct ContentView: View {
         }
     }
 
-    private func transitionToPlayer(path: String, start: PlaybackStartAction? = nil) {
+    private func transitionToPlayer(item: PlaybackItem, start: PlaybackStartAction? = nil) {
         pendingPlaybackStart = start
-        selectedFilePath = path
+        selectedPlaybackItem = item
     }
 
-    private func playerView(path: String) -> some View {
+    private func playerView(item: PlaybackItem) -> some View {
         PlayerView(
             viewModel: playerVM,
             playQueue: playQueue,
-            resumePosition: settings.resumePlayback ? ResumeStore.position(for: path) : nil,
+            resumePosition: resumePosition(for: item),
             onBack: {
-                if settings.resumePlayback {
-                    ResumeStore.save(
-                        path: path,
-                        positionUs: playerVM.currentPosition,
-                        durationUs: playerVM.duration,
-                        title: playerVM.mediaTitle
-                    )
-                }
+                saveResume(for: item)
                 settings.volume = Double(playerVM.volume)
                 playerVM.stop()
                 playQueue.clear()
                 pendingPlaybackStart = nil
                 screen = screenBeforePlayer
-                selectedFilePath = nil
+                selectedPlaybackItem = nil
             },
             onNextTrack: { skipToNext() },
             onPreviousTrack: { skipToPrevious() },
             onJumpToQueueItem: { index in jumpToQueueItem(at: index) }
         )
-        .id(path)
+        .id(item.id)
         .onAppear {
-            startPlayback(for: path)
+            startPlayback(for: item)
         }
         .onChange(of: playerVM.playbackEnded) { ended in
             if ended {
-                handlePlaybackEnded(finishedPath: path)
+                handlePlaybackEnded(finishedItem: item)
             }
         }
     }
 
-    private func handlePlaybackEnded(finishedPath: String) {
-        // Clear resume for finished file (it was watched to the end)
-        if settings.resumePlayback {
-            ResumeStore.clear(path: finishedPath)
-        }
+    private func handlePlaybackEnded(finishedItem: PlaybackItem) {
+        clearResume(for: finishedItem)
 
         if let next = playQueue.advance() {
-            // Auto-advance to next track
-            playerVM.stop()
-            transitionToPlayer(path: next.path, start: queuePlaybackStart(for: next.path))
+            playerVM.stop(continuing: true, finished: true)
+            transitionToPlayer(item: next.playbackItem, start: queuePlaybackStart(for: next.playbackItem))
         } else {
-            // Queue exhausted or single file -- navigate back
             settings.volume = Double(playerVM.volume)
-            playerVM.stop()
+            playerVM.stop(finished: true)
             playQueue.clear()
             pendingPlaybackStart = nil
             screen = screenBeforePlayer
-            selectedFilePath = nil
+            selectedPlaybackItem = nil
         }
     }
 
     private func skipToNext() {
         guard let current = playQueue.currentItem else { return }
         guard let next = playQueue.advance() else { return }
-        if settings.resumePlayback {
-            ResumeStore.save(
-                path: current.path,
-                positionUs: playerVM.currentPosition,
-                durationUs: playerVM.duration,
-                title: playerVM.mediaTitle
-            )
-        }
-        playerVM.stop()
-        transitionToPlayer(path: next.path, start: queuePlaybackStart(for: next.path))
+        saveResume(for: current.playbackItem)
+        playerVM.stop(continuing: true)
+        transitionToPlayer(item: next.playbackItem, start: queuePlaybackStart(for: next.playbackItem))
     }
 
-    private func playAllFromSource(_ items: [(path: String, name: String)]) {
+    private func playAllFromSource(_ items: [PlaybackItem]) {
         guard !items.isEmpty else { return }
         playQueue.setQueue(items, startIndex: 0)
-        selectedFilePath = items[0].path
+        selectedPlaybackItem = items[0]
         screenBeforePlayer = screen
         screen = .player
     }
@@ -176,31 +183,17 @@ struct ContentView: View {
     private func jumpToQueueItem(at index: Int) {
         guard let current = playQueue.currentItem else { return }
         guard let target = playQueue.jumpTo(index: index) else { return }
-        if settings.resumePlayback {
-            ResumeStore.save(
-                path: current.path,
-                positionUs: playerVM.currentPosition,
-                durationUs: playerVM.duration,
-                title: playerVM.mediaTitle
-            )
-        }
-        playerVM.stop()
-        transitionToPlayer(path: target.path, start: queuePlaybackStart(for: target.path))
+        saveResume(for: current.playbackItem)
+        playerVM.stop(continuing: true)
+        transitionToPlayer(item: target.playbackItem, start: queuePlaybackStart(for: target.playbackItem))
     }
 
     private func skipToPrevious() {
         guard let current = playQueue.currentItem else { return }
         guard let prev = playQueue.goBack() else { return }
-        if settings.resumePlayback {
-            ResumeStore.save(
-                path: current.path,
-                positionUs: playerVM.currentPosition,
-                durationUs: playerVM.duration,
-                title: playerVM.mediaTitle
-            )
-        }
-        playerVM.stop()
-        transitionToPlayer(path: prev.path, start: queuePlaybackStart(for: prev.path))
+        saveResume(for: current.playbackItem)
+        playerVM.stop(continuing: true)
+        transitionToPlayer(item: prev.playbackItem, start: queuePlaybackStart(for: prev.playbackItem))
     }
 
     // MARK: - tvOS TabView
@@ -211,8 +204,8 @@ struct ContentView: View {
             Tab("Sources", systemImage: "network") {
                 SourceBrowserView(
                     sourcesVM: sourcesVM,
-                    onSelect: { uri in
-                        selectedFilePath = uri
+                    onSelect: { item in
+                        selectedPlaybackItem = item
                         screenBeforePlayer = screen
                         screen = .player
                     },
@@ -223,8 +216,8 @@ struct ContentView: View {
 
             Tab("Library", systemImage: "film.stack") {
                 LibraryView(
-                    onSelect: { path in
-                        selectedFilePath = path
+                    onSelect: { item in
+                        selectedPlaybackItem = item
                         screenBeforePlayer = screen
                         screen = .player
                     },
@@ -260,8 +253,8 @@ struct ContentView: View {
                 browseContainer {
                     SourceBrowserView(
                         sourcesVM: sourcesVM,
-                        onSelect: { uri in
-                            selectedFilePath = uri
+                        onSelect: { item in
+                            selectedPlaybackItem = item
                             screenBeforePlayer = screen
                             screen = .player
                         },
@@ -275,8 +268,8 @@ struct ContentView: View {
             default:
                 browseContainer {
                     LibraryView(
-                        onSelect: { path in
-                            selectedFilePath = path
+                        onSelect: { item in
+                            selectedPlaybackItem = item
                             screenBeforePlayer = screen
                             screen = .player
                         },

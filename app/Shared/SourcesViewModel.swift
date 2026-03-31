@@ -105,6 +105,10 @@ class SourcesViewModel: ObservableObject {
         sources = (try? JSONDecoder().decode([SourceConfig].self, from: data)) ?? []
     }
 
+    private func sourceConfig(for sourceId: String) -> SourceConfig? {
+        sources.first(where: { $0.id == sourceId })
+    }
+
     private func message(_ err: BridgeOperationError, fallback: String) -> String {
         err.message.isEmpty ? fallback : err.message
     }
@@ -207,7 +211,7 @@ class SourcesViewModel: ObservableObject {
     func navigateInto(_ entry: SourceEntry) {
         guard let sourceId = currentSourceId, entry.isDirectory else { return }
 
-        if let config = sources.first(where: { $0.id == sourceId }) {
+        if let config = sourceConfig(for: sourceId) {
             let newPath: String
             if config.type == .plex {
                 // Plex: entry.uri contains the structured navigation key
@@ -228,7 +232,7 @@ class SourcesViewModel: ObservableObject {
         navigationPath.removeLast()
         navigationDisplayNames.removeLast()
 
-        if let config = sources.first(where: { $0.id == sourceId }) {
+        if let config = sourceConfig(for: sourceId) {
             let path: String
             if config.type == .plex {
                 path = navigationPath.last ?? ""
@@ -250,5 +254,37 @@ class SourcesViewModel: ObservableObject {
         guard let sourceId = currentSourceId else { return entry.uri }
         let path = bridge.playablePath(sourceId: sourceId, entryURI: entry.uri)
         return path.isEmpty ? entry.uri : path
+    }
+
+    func playbackItem(for entry: SourceEntry) -> PlaybackItem {
+        let path = playablePath(for: entry)
+
+        guard let sourceId = currentSourceId,
+              let config = sourceConfig(for: sourceId),
+              config.type == .plex,
+              let plex = entry.plex else {
+            return .local(path: path, displayName: entry.name)
+        }
+
+        return PlaybackItem(
+            path: path,
+            displayName: entry.name,
+            resumeKey: "plex:\(sourceId):\(plex.ratingKey)",
+            plexContext: PlexPlaybackContext(
+                sourceId: sourceId,
+                serverBaseURL: config.baseURI,
+                ratingKey: plex.ratingKey,
+                key: plex.key,
+                type: plex.type,
+                initialViewOffsetMs: plex.viewOffsetMs,
+                initialViewCount: plex.viewCount
+            )
+        )
+    }
+
+    func currentPlaybackItems() -> [PlaybackItem] {
+        currentEntries
+            .filter { !$0.isDirectory }
+            .map(playbackItem(for:))
     }
 }

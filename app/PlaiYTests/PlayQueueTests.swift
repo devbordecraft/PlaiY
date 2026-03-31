@@ -6,8 +6,10 @@ final class PlayQueueTests: XCTestCase {
 
     private func makeQueue(count: Int, startIndex: Int = 0) -> PlayQueue {
         let queue = PlayQueue()
-        let paths = (0..<count).map { (path: "/video\($0).mkv", name: "Video \($0)") }
-        queue.setQueue(paths, startIndex: startIndex)
+        let items = (0..<count).map {
+            PlaybackItem.local(path: "/video\($0).mkv", displayName: "Video \($0)")
+        }
+        queue.setQueue(items, startIndex: startIndex)
         return queue
     }
 
@@ -178,14 +180,14 @@ final class PlayQueueTests: XCTestCase {
 
     func testAppendItems() {
         let queue = makeQueue(count: 2)
-        queue.appendItems([(path: "/extra.mkv", name: "Extra")])
+        queue.appendItems([PlaybackItem.local(path: "/extra.mkv", displayName: "Extra")])
         XCTAssertEqual(queue.items.count, 3)
         XCTAssertEqual(queue.items.last?.path, "/extra.mkv")
     }
 
     func testAppendToEmptyQueue() {
         let queue = PlayQueue()
-        queue.appendItems([(path: "/first.mkv", name: "First")])
+        queue.appendItems([PlaybackItem.local(path: "/first.mkv", displayName: "First")])
         XCTAssertEqual(queue.currentIndex, 0)
         XCTAssertEqual(queue.currentItem?.path, "/first.mkv")
     }
@@ -195,7 +197,7 @@ final class PlayQueueTests: XCTestCase {
     func testPlayNext() {
         let queue = makeQueue(count: 3)
         // current = 0
-        queue.playNext(path: "/inserted.mkv", name: "Inserted")
+        queue.playNext(PlaybackItem.local(path: "/inserted.mkv", displayName: "Inserted"))
         XCTAssertEqual(queue.items.count, 4)
         XCTAssertEqual(queue.items[1].path, "/inserted.mkv")
         // Advance should go to inserted item

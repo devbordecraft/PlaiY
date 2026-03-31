@@ -23,6 +23,8 @@ TEST_CASE("SourceEntry default values") {
     REQUIRE(entry.uri.empty());
     REQUIRE(entry.is_directory == false);
     REQUIRE(entry.size == 0);
+    REQUIRE_FALSE(entry.has_plex_metadata);
+    REQUIRE(entry.plex.rating_key.empty());
 }
 
 // ---- SourceManager lifecycle ----

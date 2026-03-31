@@ -1118,6 +1118,22 @@ const char* py_source_list_directory(PYSourceManager* sm,
         j["uri"] = e.uri;
         j["is_directory"] = e.is_directory;
         j["size"] = e.size;
+        if (e.has_plex_metadata) {
+            json plex;
+            plex["rating_key"] = e.plex.rating_key;
+            plex["key"] = e.plex.key;
+            plex["type"] = e.plex.type;
+            plex["duration_ms"] = e.plex.duration_ms;
+            plex["view_offset_ms"] = e.plex.view_offset_ms;
+            plex["view_count"] = e.plex.view_count;
+            plex["leaf_count"] = e.plex.leaf_count;
+            plex["viewed_leaf_count"] = e.plex.viewed_leaf_count;
+            plex["thumb_url"] = e.plex.thumb_url;
+            plex["art_url"] = e.plex.art_url;
+            plex["skip_children"] = e.plex.skip_children;
+            plex["skip_parent"] = e.plex.skip_parent;
+            j["plex"] = std::move(plex);
+        }
         arr.push_back(j);
     }
 

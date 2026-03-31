@@ -17,12 +17,29 @@ enum class MediaSourceType {
     Plex,
 };
 
+struct PlexSourceEntryMetadata {
+    std::string rating_key;
+    std::string key;
+    std::string type;
+    int64_t duration_ms = 0;
+    int64_t view_offset_ms = 0;
+    int view_count = 0;
+    int leaf_count = 0;
+    int viewed_leaf_count = 0;
+    std::string thumb_url;
+    std::string art_url;
+    bool skip_children = false;
+    bool skip_parent = false;
+};
+
 // A single entry in a directory listing from a media source
 struct SourceEntry {
     std::string name;           // display name
     std::string uri;            // full path or URI for playback / navigation
     bool is_directory = false;
     int64_t size = 0;           // bytes, 0 if unknown
+    bool has_plex_metadata = false;
+    PlexSourceEntryMetadata plex;
 };
 
 // Configuration needed to connect to a source

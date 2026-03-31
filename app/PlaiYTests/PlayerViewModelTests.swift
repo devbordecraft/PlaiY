@@ -251,7 +251,7 @@ final class PlayerViewModelTests: XCTestCase {
         )
         let settings = AppSettings()
 
-        vm.open(path: "/tmp/test-video.mkv", settings: settings)
+        vm.open(item: .local(path: "/tmp/test-video.mkv"), settings: settings)
 
         XCTAssertEqual(vm.openError, "Failed to open media stream")
         XCTAssertEqual(vm.mediaTitle, "")

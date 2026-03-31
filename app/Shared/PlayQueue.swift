@@ -8,8 +8,10 @@ enum RepeatMode: Int, CaseIterable {
 class PlayQueue: ObservableObject {
     struct Item: Identifiable, Equatable {
         let id = UUID()
-        let path: String
-        let displayName: String
+        let playbackItem: PlaybackItem
+
+        var path: String { playbackItem.path }
+        var displayName: String { playbackItem.displayName }
 
         static func == (lhs: Item, rhs: Item) -> Bool {
             lhs.id == rhs.id
@@ -51,16 +53,16 @@ class PlayQueue: ObservableObject {
 
     // MARK: - Queue population
 
-    func setQueue(_ paths: [(path: String, name: String)], startIndex: Int) {
-        items = paths.map { Item(path: $0.path, displayName: $0.name) }
+    func setQueue(_ playbackItems: [PlaybackItem], startIndex: Int) {
+        items = playbackItems.map { Item(playbackItem: $0) }
         currentIndex = max(0, min(startIndex, items.count - 1))
         if shuffleEnabled {
             rebuildShuffleOrder()
         }
     }
 
-    func appendItems(_ paths: [(path: String, name: String)]) {
-        let newItems = paths.map { Item(path: $0.path, displayName: $0.name) }
+    func appendItems(_ playbackItems: [PlaybackItem]) {
+        let newItems = playbackItems.map { Item(playbackItem: $0) }
         items.append(contentsOf: newItems)
         if items.count == newItems.count {
             currentIndex = 0
@@ -70,8 +72,8 @@ class PlayQueue: ObservableObject {
         }
     }
 
-    func playNext(path: String, name: String) {
-        let item = Item(path: path, displayName: name)
+    func playNext(_ playbackItem: PlaybackItem) {
+        let item = Item(playbackItem: playbackItem)
         let insertAt = currentIndex >= 0 ? currentIndex + 1 : items.count
         items.insert(item, at: insertAt)
         if shuffleEnabled {
