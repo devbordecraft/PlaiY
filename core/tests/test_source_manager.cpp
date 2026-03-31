@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "plaiy/source_manager.h"
 #include "plaiy/media_source.h"
+#include "sources/direct_media_source.h"
 
 using namespace py;
 
@@ -206,6 +207,21 @@ TEST_CASE("SourceManager load_configs_json roundtrips") {
     REQUIRE(s2->config().base_uri == "smb://192.168.1.1/share");
 }
 
+TEST_CASE("SourceManager load_configs_json roundtrips HTTP and NFS direct sources") {
+    SourceManager mgr;
+    Error err = mgr.load_configs_json(R"([
+        {"source_id":"http-1","display_name":"HTTP","type":"http","base_uri":"http://example.com/video.mkv","username":""},
+        {"source_id":"nfs-1","display_name":"NFS","type":"nfs","base_uri":"nfs://nas.local/export/movie.mkv","username":""}
+    ])");
+
+    REQUIRE(err.ok());
+    REQUIRE(mgr.source_count() == 2);
+    REQUIRE(mgr.source_by_id("http-1") != nullptr);
+    REQUIRE(mgr.source_by_id("http-1")->type() == MediaSourceType::HTTP);
+    REQUIRE(mgr.source_by_id("nfs-1") != nullptr);
+    REQUIRE(mgr.source_by_id("nfs-1")->type() == MediaSourceType::NFS);
+}
+
 TEST_CASE("SourceManager load_configs_json rejects invalid JSON") {
     SourceManager mgr;
     Error err = mgr.load_configs_json("not valid json");
@@ -251,13 +267,150 @@ TEST_CASE("SourceManager create_source returns SMB for SMB type") {
     REQUIRE(src->type() == MediaSourceType::SMB);
 }
 
-TEST_CASE("SourceManager create_source returns null for unsupported types") {
+TEST_CASE("SourceManager create_source returns HTTP direct media source") {
+    SourceConfig cfg;
+    cfg.source_id = "factory-http";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "http://example.com/video.mkv";
+
+    auto src = SourceManager::create_source(std::move(cfg));
+    REQUIRE(src != nullptr);
+    REQUIRE(src->type() == MediaSourceType::HTTP);
+}
+
+TEST_CASE("SourceManager create_source returns NFS direct media source") {
     SourceConfig cfg;
     cfg.source_id = "factory-nfs";
     cfg.type = MediaSourceType::NFS;
+    cfg.base_uri = "nfs://nas.local/export/movie.mkv";
+
+    auto src = SourceManager::create_source(std::move(cfg));
+    REQUIRE(src != nullptr);
+    REQUIRE(src->type() == MediaSourceType::NFS);
+}
+
+TEST_CASE("SourceManager create_source returns null for unsupported types") {
+    SourceConfig cfg;
+    cfg.source_id = "factory-invalid";
+    cfg.type = static_cast<MediaSourceType>(999);
 
     auto src = SourceManager::create_source(std::move(cfg));
     REQUIRE(src == nullptr);
+}
+
+// ---- DirectMediaSource ----
+
+TEST_CASE("DirectMediaSource connect succeeds for valid HTTP URI") {
+    bool probe_called = false;
+
+    SourceConfig cfg;
+    cfg.source_id = "direct-http";
+    cfg.display_name = "Remote Movie";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "https://example.com/video/movie.mkv";
+
+    DirectMediaSource src(std::move(cfg), [&](MediaSourceType type, const std::string& uri) {
+        probe_called = true;
+        REQUIRE(type == MediaSourceType::HTTP);
+        REQUIRE(uri == "https://example.com/video/movie.mkv");
+        return Error::Ok();
+    });
+
+    Error err = src.connect();
+    REQUIRE(err.ok());
+    REQUIRE(probe_called);
+    REQUIRE(src.is_connected());
+}
+
+TEST_CASE("DirectMediaSource rejects mismatched URI scheme before probing") {
+    bool probe_called = false;
+
+    SourceConfig cfg;
+    cfg.source_id = "direct-http-bad";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "nfs://nas.local/export/movie.mkv";
+
+    DirectMediaSource src(std::move(cfg), [&](MediaSourceType, const std::string&) {
+        probe_called = true;
+        return Error::Ok();
+    });
+
+    Error err = src.connect();
+    REQUIRE(err);
+    REQUIRE(err.code == ErrorCode::InvalidArgument);
+    REQUIRE_FALSE(probe_called);
+    REQUIRE_FALSE(src.is_connected());
+}
+
+TEST_CASE("DirectMediaSource list_directory returns a single playable entry") {
+    SourceConfig cfg;
+    cfg.source_id = "direct-list";
+    cfg.display_name = "Stream";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "http://example.com/playlist.m3u8";
+
+    DirectMediaSource src(std::move(cfg), [](MediaSourceType, const std::string&) {
+        return Error::Ok();
+    });
+    REQUIRE(src.connect().ok());
+
+    std::vector<SourceEntry> entries;
+    Error err = src.list_directory("", entries);
+    REQUIRE(err.ok());
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "Stream");
+    REQUIRE(entries[0].uri == "http://example.com/playlist.m3u8");
+    REQUIRE_FALSE(entries[0].is_directory);
+}
+
+TEST_CASE("DirectMediaSource falls back to URI leaf name") {
+    SourceConfig cfg;
+    cfg.source_id = "direct-leaf";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "http://example.com/video/test-file.mkv?token=abc";
+
+    DirectMediaSource src(std::move(cfg), [](MediaSourceType, const std::string&) {
+        return Error::Ok();
+    });
+    REQUIRE(src.connect().ok());
+
+    std::vector<SourceEntry> entries;
+    REQUIRE(src.list_directory("", entries).ok());
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].name == "test-file.mkv");
+}
+
+TEST_CASE("DirectMediaSource does not support subdirectories") {
+    SourceConfig cfg;
+    cfg.source_id = "direct-subdir";
+    cfg.type = MediaSourceType::NFS;
+    cfg.base_uri = "nfs://nas.local/export/movie.mkv";
+
+    DirectMediaSource src(std::move(cfg), [](MediaSourceType, const std::string&) {
+        return Error::Ok();
+    });
+    REQUIRE(src.connect().ok());
+
+    std::vector<SourceEntry> entries;
+    Error err = src.list_directory("child", entries);
+    REQUIRE(err);
+    REQUIRE(err.code == ErrorCode::InvalidArgument);
+}
+
+TEST_CASE("DirectMediaSource playable_path returns configured URI") {
+    SourceConfig cfg;
+    cfg.source_id = "direct-path";
+    cfg.type = MediaSourceType::NFS;
+    cfg.base_uri = "nfs://nas.local/export/movie.mkv";
+
+    DirectMediaSource src(std::move(cfg), [](MediaSourceType, const std::string&) {
+        return Error::Ok();
+    });
+
+    SourceEntry entry;
+    entry.uri = "nfs://nas.local/export/movie.mkv";
+    entry.is_directory = false;
+    REQUIRE(src.playable_path(entry) == "nfs://nas.local/export/movie.mkv");
 }
 
 // ---- LocalMediaSource ----

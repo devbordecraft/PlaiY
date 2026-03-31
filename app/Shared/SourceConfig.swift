@@ -38,11 +38,18 @@ enum SourceType: Int, Codable, CaseIterable, Sendable {
     }
 
     var isAvailable: Bool {
-        #if os(tvOS)
-        self == .smb || self == .plex
-        #else
-        self == .local || self == .smb || self == .plex
-        #endif
+        switch self {
+        case .local:
+            #if os(tvOS)
+            false
+            #else
+            true
+            #endif
+        case .http, .nfs:
+            SourceManagerBridge.isSourceTypeSupported(self)
+        case .smb, .plex:
+            true
+        }
     }
 }
 

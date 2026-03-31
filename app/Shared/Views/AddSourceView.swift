@@ -241,7 +241,7 @@ struct AddSourceView: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($focusedField, equals: .address)
                 }
-                if sourceType != .plex || showManualPlex {
+                if showsCredentialsFields {
                     GridRow {
                         Text(sourceType == .plex ? "Email" : "Username")
                             .foregroundStyle(.secondary)
@@ -252,20 +252,31 @@ struct AddSourceView: View {
                             .focused($focusedField, equals: .username)
                     }
                 }
-                GridRow {
-                    Text(sourceType == .plex ? "Token" : "Password")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .trailing)
-                    SecureField(sourceType == .plex ? "X-Plex-Token or password" : "Optional",
-                                text: $password)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($focusedField, equals: .password)
+                if showsCredentialsFields {
+                    GridRow {
+                        Text(sourceType == .plex ? "Token" : "Password")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 80, alignment: .trailing)
+                        SecureField(sourceType == .plex ? "X-Plex-Token or password" : "Optional",
+                                    text: $password)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .password)
+                    }
                 }
                 if sourceType == .plex && showManualPlex {
                     GridRow {
                         Spacer()
                             .frame(width: 80)
                         Text("Enter your X-Plex-Token for direct auth, or email + password for plex.tv login")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                if sourceType == .http || sourceType == .nfs {
+                    GridRow {
+                        Spacer()
+                            .frame(width: 80)
+                        Text("Use a direct media URL. These sources expose a single playable item instead of remote folder browsing.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -317,10 +328,17 @@ struct AddSourceView: View {
 
     // MARK: - Helpers
 
+    private var showsCredentialsFields: Bool {
+        if sourceType == .plex {
+            return showManualPlex
+        }
+        return sourceType != .http && sourceType != .nfs
+    }
+
     private var addressPlaceholder: String {
         switch sourceType {
         case .smb: "smb://192.168.1.50/share"
-        case .nfs: "nfs://192.168.1.50/export"
+        case .nfs: "nfs://192.168.1.50/export/movie.mkv"
         case .http: "http://example.com/video.mp4"
         case .local: "/Users/me/Movies"
         case .plex: "http://192.168.1.50:32400"
@@ -335,7 +353,7 @@ struct AddSourceView: View {
             displayName: displayName,
             type: sourceType,
             baseURI: normalizedAddress,
-            username: username
+            username: persistedUsername
         )
 
         let tempId = config.id
@@ -349,7 +367,7 @@ struct AddSourceView: View {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let connectResult = sourcesVM.bridge.connect(sourceId: tempId, password: password)
+            let connectResult = sourcesVM.bridge.connect(sourceId: tempId, password: persistedPassword)
             let connected = (try? connectResult.get()) != nil && sourcesVM.bridge.isConnected(sourceId: tempId)
             let failureMessage: String
             if case .failure(let err) = connectResult {
@@ -379,14 +397,14 @@ struct AddSourceView: View {
             displayName: displayName,
             type: sourceType,
             baseURI: normalizedAddress,
-            username: username
+            username: persistedUsername
         )
 
         let autoConnect = sourceType == .plex && !showManualPlex && selectedServer != nil
         if autoConnect {
-            sourcesVM.addSourceAndConnect(config, password: password)
+            sourcesVM.addSourceAndConnect(config, password: persistedPassword)
         } else {
-            sourcesVM.addSource(config, password: password)
+            sourcesVM.addSource(config, password: persistedPassword)
         }
         onDismiss()
     }
@@ -396,6 +414,14 @@ struct AddSourceView: View {
         if sourceType == .smb && !addr.hasPrefix("smb://") {
             addr = "smb://" + addr
         }
+        if sourceType == .nfs && !addr.hasPrefix("nfs://") {
+            addr = "nfs://" + addr
+        }
+        if sourceType == .http &&
+           !addr.hasPrefix("http://") &&
+           !addr.hasPrefix("https://") {
+            addr = "http://" + addr
+        }
         if sourceType == .plex {
             while addr.hasSuffix("/") { addr = String(addr.dropLast()) }
             if !addr.hasPrefix("http://") && !addr.hasPrefix("https://") {
@@ -403,5 +429,19 @@ struct AddSourceView: View {
             }
         }
         return addr
+    }
+
+    private var persistedUsername: String {
+        if sourceType == .http || sourceType == .nfs {
+            return ""
+        }
+        return username
+    }
+
+    private var persistedPassword: String {
+        if sourceType == .http || sourceType == .nfs {
+            return ""
+        }
+        return password
     }
 }

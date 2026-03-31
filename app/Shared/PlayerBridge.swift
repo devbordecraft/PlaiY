@@ -538,6 +538,37 @@ enum SubtitleData {
     case bitmap(regions: [SubtitleBitmapRegion])
 }
 
+struct LibraryBridgeError: Error, Equatable, Sendable {
+    let operation: String
+    let code: Int32
+    let message: String
+
+    var localizedDescription: String {
+        if !message.isEmpty {
+            return message
+        }
+
+        switch code {
+        case Int32(PY_ERROR_FILE_NOT_FOUND.rawValue):
+            return "Folder not found"
+        case Int32(PY_ERROR_INVALID_ARG.rawValue):
+            return "Invalid folder path"
+        default:
+            return "\(operation) failed (code \(code))"
+        }
+    }
+}
+
+protocol LibraryBridgeProtocol: AnyObject, Sendable {
+    var itemCount: Int32 { get }
+    var folderCount: Int32 { get }
+    func addFolder(_ path: String) -> Result<Void, LibraryBridgeError>
+    func removeFolder(at index: Int32) -> Bool
+    func itemJSON(at index: Int32) -> String
+    func allItemsJSON() -> String
+    func folder(at index: Int32) -> String
+}
+
 /// Library bridge
 final class LibraryBridge: @unchecked Sendable {
     private let handle: OpaquePointer
@@ -562,9 +593,19 @@ func removeFolder(at index: Int32) -> Bool {
         py_library_remove_folder(handle, index) == Int32(PY_OK.rawValue)
     }
 
-    func addFolder(_ path: String) -> Bool {
+    func addFolder(_ path: String) -> Result<Void, LibraryBridgeError> {
         let result = py_library_add_folder(handle, path)
-        return result == Int32(PY_OK.rawValue)
+        if result == Int32(PY_OK.rawValue) {
+            return .success(())
+        }
+
+        return .failure(
+            LibraryBridgeError(
+                operation: "addFolder",
+                code: result,
+                message: ""
+            )
+        )
     }
 
     func itemJSON(at index: Int32) -> String {
@@ -582,3 +623,5 @@ func removeFolder(at index: Int32) -> Bool {
         return String(cString: cStr)
     }
 }
+
+extension LibraryBridge: LibraryBridgeProtocol {}

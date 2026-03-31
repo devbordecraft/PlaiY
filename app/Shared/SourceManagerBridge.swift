@@ -67,6 +67,10 @@ final class SourceManagerBridge {
         return String(cString: cStr)
     }
 
+    static func isSourceTypeSupported(_ type: SourceType) -> Bool {
+        py_source_type_supported(type.jsonString)
+    }
+
     func loadConfigsJSON(_ json: String) -> Bool {
         py_source_load_configs_json(handle, json) == Int32(PY_OK.rawValue)
     }

@@ -4,6 +4,7 @@
 #include "plaiy/media_library.h"
 #include "plaiy/source_manager.h"
 #include "library/seek_thumbnail_generator.h"
+#include "sources/direct_media_source.h"
 
 #include <nlohmann/json.hpp>
 #include <string>
@@ -1015,6 +1016,22 @@ int py_source_load_configs_json(PYSourceManager* sm, const char* json_str) {
     }
     source_clear_error(sm);
     return PY_OK;
+}
+
+bool py_source_type_supported(const char* type) {
+    if (!type) return false;
+
+    std::string type_str = type;
+    if (type_str == "http") {
+        return py::DirectMediaSource::is_runtime_supported(py::MediaSourceType::HTTP);
+    }
+    if (type_str == "nfs") {
+        return py::DirectMediaSource::is_runtime_supported(py::MediaSourceType::NFS);
+    }
+    if (type_str == "local" || type_str == "smb" || type_str == "plex") {
+        return true;
+    }
+    return false;
 }
 
 int py_source_connect(PYSourceManager* sm, const char* source_id, const char* password) {

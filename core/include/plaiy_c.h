@@ -392,6 +392,8 @@ const char*      py_source_get_config_json(PYSourceManager* sm, int index);
 const char*      py_source_all_configs_json(PYSourceManager* sm);
 // Load sources from JSON array (re-creates source objects).
 int              py_source_load_configs_json(PYSourceManager* sm, const char* json);
+// Returns whether the current runtime supports a source type string ("http", "nfs", etc.).
+bool             py_source_type_supported(const char* type);
 
 // Connect/disconnect a source. Password is passed at connect time (not serialized).
 int              py_source_connect(PYSourceManager* sm, const char* source_id,

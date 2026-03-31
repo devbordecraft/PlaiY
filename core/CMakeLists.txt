@@ -61,6 +61,7 @@ set(CORE_SOURCES
     src/library/seek_thumbnail_generator.cpp
     src/sources/source_manager.cpp
     src/sources/local_media_source.cpp
+    src/sources/direct_media_source.cpp
     src/sources/plex_media_source.cpp
     src/util/logger.cpp
     src/bridge/plaiy_c.cpp

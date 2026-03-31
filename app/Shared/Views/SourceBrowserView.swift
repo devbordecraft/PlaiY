@@ -136,7 +136,7 @@ struct SourceBrowserView: View {
             Text("No sources configured")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("Add an SMB share or local folder to get started")
+            Text("Add a share, server, or direct media URL to get started")
                 .foregroundStyle(.tertiary)
             Button("Add Source") { showAddSource = true }
                 .buttonStyle(.borderedProminent)

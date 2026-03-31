@@ -1,5 +1,6 @@
 #include "plaiy/source_manager.h"
 #include "plaiy/logger.h"
+#include "direct_media_source.h"
 #include "local_media_source.h"
 #include "plex_media_source.h"
 
@@ -136,6 +137,9 @@ std::unique_ptr<IMediaSource> SourceManager::create_source(SourceConfig config) 
     switch (config.type) {
         case MediaSourceType::Local:
             return std::make_unique<LocalMediaSource>(std::move(config));
+        case MediaSourceType::NFS:
+        case MediaSourceType::HTTP:
+            return std::make_unique<DirectMediaSource>(std::move(config));
 #if defined(__APPLE__) && !TARGET_OS_TV
         case MediaSourceType::SMB:
             return std::make_unique<SMBMediaSource>(std::move(config));

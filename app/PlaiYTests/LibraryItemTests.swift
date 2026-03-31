@@ -1,14 +1,77 @@
 import XCTest
 @testable import PlaiY
 
+private typealias AppLibraryItem = PlaiY.LibraryItem
+
+private final class MockLibraryBridge: LibraryBridgeProtocol, @unchecked Sendable {
+    var folderPaths: [String] = []
+    var items: [AppLibraryItem] = []
+    var addResults: [String: Result<Void, LibraryBridgeError>] = [:]
+
+    var itemCount: Int32 { Int32(items.count) }
+    var folderCount: Int32 { Int32(folderPaths.count) }
+
+    func addFolder(_ path: String) -> Result<Void, LibraryBridgeError> {
+        let result = addResults[path] ?? .success(())
+        if case .success = result, !folderPaths.contains(path) {
+            folderPaths.append(path)
+        }
+        return result
+    }
+
+    func removeFolder(at index: Int32) -> Bool {
+        guard index >= 0, index < Int32(folderPaths.count) else { return false }
+        folderPaths.remove(at: Int(index))
+        return true
+    }
+
+    func itemJSON(at index: Int32) -> String {
+        guard index >= 0, index < Int32(items.count),
+              let data = try? JSONEncoder().encode(items[Int(index)]),
+              let json = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return json
+    }
+
+    func allItemsJSON() -> String {
+        guard let data = try? JSONEncoder().encode(items),
+              let json = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+        return json
+    }
+
+    func folder(at index: Int32) -> String {
+        guard index >= 0, index < Int32(folderPaths.count) else { return "" }
+        return folderPaths[Int(index)]
+    }
+}
+
+private final class InMemoryLibraryFolderStore: LibraryFolderStore, @unchecked Sendable {
+    var storedFolders: [String]
+
+    init(storedFolders: [String] = []) {
+        self.storedFolders = storedFolders
+    }
+
+    func load() -> [String] {
+        storedFolders
+    }
+
+    func save(_ folders: [String]) {
+        storedFolders = folders
+    }
+}
+
 final class LibraryItemTests: XCTestCase {
 
     private func makeItem(
         width: Int = 1920, height: Int = 1080,
         hdrType: Int = 0, fileSize: Int64 = 0,
         durationUs: Int64 = 0
-    ) -> PlaiY.LibraryItem {
-        PlaiY.LibraryItem(
+    ) -> AppLibraryItem {
+        AppLibraryItem(
             filePath: "/test/video.mkv",
             title: "Test",
             durationUs: durationUs,
@@ -109,12 +172,132 @@ final class LibraryItemTests: XCTestCase {
         }
         """
         let data = json.data(using: .utf8)!
-        let item = try JSONDecoder().decode(PlaiY.LibraryItem.self, from: data)
+        let item = try JSONDecoder().decode(AppLibraryItem.self, from: data)
         XCTAssertEqual(item.filePath, "/test/movie.mkv")
         XCTAssertEqual(item.title, "Movie")
         XCTAssertEqual(item.videoWidth, 3840)
         XCTAssertEqual(item.hdrType, 4)
         XCTAssertEqual(item.resolutionText, "4K")
         XCTAssertEqual(item.hdrText, "DV")
+    }
+}
+
+@MainActor
+final class LibraryViewModelPersistenceTests: XCTestCase {
+    private func makeItem(path: String = "/test/video.mkv") -> AppLibraryItem {
+        AppLibraryItem(
+            filePath: path,
+            title: "Test",
+            durationUs: 0,
+            videoWidth: 1920,
+            videoHeight: 1080,
+            videoCodec: "hevc",
+            audioCodec: "aac",
+            hdrType: 0,
+            fileSize: 0
+        )
+    }
+
+    private func waitForCondition(
+        timeout: TimeInterval = 1.0,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        condition: @escaping @MainActor () -> Bool
+    ) {
+        let exp = expectation(description: "condition met")
+
+        func poll(deadline: Date) {
+            Task { @MainActor in
+                if condition() {
+                    exp.fulfill()
+                } else if Date() < deadline {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+                        poll(deadline: deadline)
+                    }
+                }
+            }
+        }
+
+        poll(deadline: Date().addingTimeInterval(timeout))
+        wait(for: [exp], timeout: timeout + 0.1)
+        XCTAssertTrue(condition(), file: file, line: line)
+    }
+
+    func testRestoreSavedFoldersLoadsPersistedFoldersOnLaunch() {
+        let bridge = MockLibraryBridge()
+        bridge.items = [makeItem(path: "/movies/feature.mkv")]
+        let store = InMemoryLibraryFolderStore(storedFolders: ["/movies", "/shows"])
+        let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
+
+        viewModel.restoreSavedFolders()
+
+        waitForCondition {
+            viewModel.folders == ["/movies", "/shows"] && !viewModel.isScanning
+        }
+
+        XCTAssertEqual(store.storedFolders, ["/movies", "/shows"])
+        XCTAssertEqual(viewModel.items.count, 1)
+        XCTAssertEqual(bridge.folderPaths, ["/movies", "/shows"])
+    }
+
+    func testRestoreSavedFoldersDropsMissingFoldersFromPersistence() {
+        let bridge = MockLibraryBridge()
+        bridge.addResults["/missing"] = .failure(
+            LibraryBridgeError(
+                operation: "addFolder",
+                code: Int32(PY_ERROR_FILE_NOT_FOUND.rawValue),
+                message: ""
+            )
+        )
+        let store = InMemoryLibraryFolderStore(storedFolders: ["/missing", "/movies"])
+        let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
+
+        viewModel.restoreSavedFolders()
+
+        waitForCondition {
+            viewModel.folders == ["/movies"] && !viewModel.isScanning
+        }
+
+        XCTAssertEqual(store.storedFolders, ["/movies"])
+        XCTAssertEqual(bridge.folderPaths, ["/movies"])
+    }
+
+    func testRestoreSavedFoldersKeepsNonMissingFailuresPersisted() {
+        let bridge = MockLibraryBridge()
+        bridge.addResults["/denied"] = .failure(
+            LibraryBridgeError(
+                operation: "addFolder",
+                code: Int32(PY_ERROR_INVALID_ARG.rawValue),
+                message: "Permission denied"
+            )
+        )
+        let store = InMemoryLibraryFolderStore(storedFolders: ["/denied", "/movies"])
+        let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
+
+        viewModel.restoreSavedFolders()
+
+        waitForCondition {
+            viewModel.folders == ["/movies"] && !viewModel.isScanning
+        }
+
+        XCTAssertEqual(store.storedFolders, ["/denied", "/movies"])
+    }
+
+    func testAddAndRemoveFolderUpdatePersistedRoots() {
+        let bridge = MockLibraryBridge()
+        let store = InMemoryLibraryFolderStore()
+        let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
+
+        viewModel.addFolder("/movies")
+        waitForCondition {
+            viewModel.folders == ["/movies"] && !viewModel.isScanning
+        }
+        XCTAssertEqual(store.storedFolders, ["/movies"])
+
+        viewModel.removeFolder(at: 0)
+        waitForCondition {
+            viewModel.folders.isEmpty && !viewModel.isScanning
+        }
+        XCTAssertEqual(store.storedFolders, [])
     }
 }

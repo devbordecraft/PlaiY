@@ -10,7 +10,7 @@ A high-quality video player built with a C++20 core and SwiftUI frontend. Design
 - **Audio processing**: 10-band EQ, compressor, dialogue boost, variable speed (0.25x to 4x)
 - **Subtitle support**: SRT, ASS/SSA via libass, PGS bitmap subtitles
 - **Video processing**: deinterlacing (yadif/bwdif), brightness/contrast/saturation/sharpness, auto-crop, zoom/pan, aspect ratio overrides
-- **Sources**: local files, SMB browsing, Plex browsing/auth, plus media library scanning and seek thumbnails
+- **Sources**: local files, SMB browsing, Plex browsing/auth, direct-play HTTP URLs, plus media library scanning and seek thumbnails
 - **Platforms**: macOS, iOS, tvOS targets (Apple platform toolchains)
 
 ## Screenshots
@@ -29,6 +29,10 @@ A high-quality video player built with a C++20 core and SwiftUI frontend. Design
 
 ```bash
 brew install cmake ffmpeg libass nlohmann-json xcodegen
+
+# Optional: NFS direct-play URLs require an FFmpeg build with libnfs support.
+# Homebrew's `ffmpeg` formula does not currently advertise `nfs://` input support.
+# Use an FFmpeg build with `libnfs` enabled if you need NFS playback.
 ```
 
 ### 2. Build and run
@@ -126,7 +130,7 @@ HDR10 (SMPTE ST 2084 PQ), HLG (ARIB STD-B67), Dolby Vision (detection)
 ## Roadmap
 
 - [ ] Chapter navigation
-- [ ] NFS and HTTP streaming sources
+- [ ] Remote HTTP/NFS browsing beyond direct-play URLs
 - [ ] Playlist / play queue improvements
 - [ ] Subtitle timing adjustment
 - [ ] TMDb/OMDb poster art and metadata

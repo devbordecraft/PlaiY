@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var screen: Screen = .library
     @State private var screenBeforePlayer: Screen = .library
     @State private var selectedFilePath: String?
+    @State private var didLoadInitialData = false
 
     var body: some View {
         Group {
@@ -28,6 +29,9 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 500)
         #endif
         .onAppear {
+            guard !didLoadInitialData else { return }
+            didLoadInitialData = true
+            libraryVM.restoreSavedFolders()
             sourcesVM.loadSavedSources()
         }
         .onOpenURL { url in
