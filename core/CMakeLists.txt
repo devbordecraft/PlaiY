@@ -58,7 +58,6 @@ set(CORE_SOURCES
     src/library/media_library.cpp
     src/library/metadata_reader.cpp
     src/library/ffmpeg_video_opener.cpp
-    src/library/thumbnail_generator.cpp
     src/library/seek_thumbnail_generator.cpp
     src/sources/source_manager.cpp
     src/sources/local_media_source.cpp

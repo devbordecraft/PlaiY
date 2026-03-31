@@ -76,7 +76,6 @@ plaiy/
       BlackBarDetector.swift   # Auto-crop via luma analysis of CVPixelBuffer
       ResumeStore.swift        # Per-file playback position persistence
       NowPlayingManager.swift  # MPRemoteCommandCenter / media key integration
-      ThumbnailManager.swift   # Seek preview thumbnail cache
       SourceManagerBridge.swift # Swift wrapper for source manager C API
       SourceConfig.swift       # Source configuration model (Codable)
       SourcesViewModel.swift   # Sources UI state

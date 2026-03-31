@@ -24,7 +24,6 @@
 		1BED360F89786695CF6176BE /* PlayQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA82CDE08702A80B59C30143 /* PlayQueueView.swift */; };
 		1D8C9A37C65C57C507DD7FDC /* SourceBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1F5AC0A4064E5EB7F33E9A /* SourceBrowserView.swift */; };
 		215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */; };
-		229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
 		229C71D626C47A78933F6DA7 /* PlayerBridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */; };
 		24F1DB801D5BCF9CD2C7F7F3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		2544ED48649D0ABF8557C1ED /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
@@ -47,7 +46,6 @@
 		3F9D2AD57A1B39344332BCE6 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
 		3FBCF0FC5FA79A2719225C38 /* VideoDisplaySettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */; };
 		441A41FD6B5258C9639D21B7 /* metal_shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = CCBDB17BEB259661A261AFC0 /* metal_shaders.metal */; };
-		46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
 		50189BD14F4F69D217B78C81 /* NowPlayingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */; };
 		525814C9FECD19A1D806314F /* TimeFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */; };
 		53039595BA63C362C34FDB5F /* BlackBarDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CA424D5C2F7FDF4E8E2A02F /* BlackBarDetector.swift */; };
@@ -98,7 +96,6 @@
 		AE8FBE98517FDCFBA59A5175 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E13F471AA3B2426876CCB66 /* ContentView.swift */; };
 		AF1113C432323357C7924DAB /* ResumeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 175B51B7CAC6CB7A43502C27 /* ResumeStore.swift */; };
 		B1CF24A9AA6EC6AEE82DA49E /* DVDisplayLayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4469503804BE56C07D0519EA /* DVDisplayLayerView.swift */; };
-		B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */; };
 		B793F06F838726972E3CFDB9 /* SourceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */; };
 		BE1A651BACF92BF98B86A038 /* SourceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */; };
 		C0643DD0B403D7989A7C6225 /* PlayerBridgeProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC2E9FB0E16F724DB3FD8DC5 /* PlayerBridgeProtocol.swift */; };
@@ -217,7 +214,6 @@
 		6969ACD6B001ECEDE1F998F1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		73392F2BF07CE4E2AF775C8B /* DVDebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DVDebugLogger.swift; sourceTree = "<group>"; };
 		7E15C77D6E3C12683522BA9D /* LibraryItemTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryItemTests.swift; sourceTree = "<group>"; };
-		89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailManager.swift; sourceTree = "<group>"; };
 		89C302597C64CE365A2C47C5 /* ColorFilterUniformBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorFilterUniformBuilder.swift; sourceTree = "<group>"; };
 		8B333B492F5300A36DA03FF6 /* NowPlayingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingManager.swift; sourceTree = "<group>"; };
 		8BA579447B8F379FB5BA79D2 /* ResumeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumeStoreTests.swift; sourceTree = "<group>"; };
@@ -272,7 +268,6 @@
 				3FA3B873231A6C1DB5030E39 /* SourceConfig.swift */,
 				5F6D7E28739BF8CDFD04F5A6 /* SourceManagerBridge.swift */,
 				F2859B8BA9FFDB1E85454DAD /* SourcesViewModel.swift */,
-				89283E3C6E24C57A2C9B63E4 /* ThumbnailManager.swift */,
 				203C6CDD94EC0AAE81058701 /* TimeFormatting.swift */,
 				A1E84597FDD2AED7B577CBD7 /* TrackInfo.swift */,
 				C44C43163E76DF6660045965 /* VideoDisplaySettings.swift */,
@@ -594,7 +589,6 @@
 				30FE48B046995D7BF5F5AF01 /* SourcesViewModel.swift in Sources */,
 				1B47148518CC9CCF37D04B9F /* SubtitleOverlayView.swift in Sources */,
 				9FEF606B339940FC9096A323 /* TVRemoteGestureView.swift in Sources */,
-				229AD5F621E54F536954A052 /* ThumbnailManager.swift in Sources */,
 				C1ED694DD7BD6AC7E857218B /* TimeFormatting.swift in Sources */,
 				08738D349252B6BF3B9BCCAB /* TrackInfo.swift in Sources */,
 				A2D0C4EA7980B7F32D1383A5 /* TrackSelectionView.swift in Sources */,
@@ -644,7 +638,6 @@
 				F600BA41FF9C15DB714758D8 /* SourcesViewModel.swift in Sources */,
 				D2972D3B58C33762E722AE92 /* SubtitleOverlayView.swift in Sources */,
 				2659FDCF431087D04FCCF0CA /* TVRemoteGestureView.swift in Sources */,
-				46548EDB89048B4128800E50 /* ThumbnailManager.swift in Sources */,
 				E1565D0064E80D10029AD72F /* TimeFormatting.swift in Sources */,
 				215218F97C48B6B0B6B5B0FD /* TrackInfo.swift in Sources */,
 				8948589A135281D4060501FD /* TrackSelectionView.swift in Sources */,
@@ -694,7 +687,6 @@
 				8C1F10FC293503EA3C2C8A4B /* SourcesViewModel.swift in Sources */,
 				39AEFA01F61800DBC53BECA7 /* SubtitleOverlayView.swift in Sources */,
 				37797A475F2B9B213966509A /* TVRemoteGestureView.swift in Sources */,
-				B1ED4BD45590361300FE9A3B /* ThumbnailManager.swift in Sources */,
 				525814C9FECD19A1D806314F /* TimeFormatting.swift in Sources */,
 				67DFEAD98CC7D5E7FC6C9F6B /* TrackInfo.swift in Sources */,
 				A2E284ABBD5EE2667F577161 /* TrackSelectionView.swift in Sources */,

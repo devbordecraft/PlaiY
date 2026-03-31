@@ -2,27 +2,18 @@ import SwiftUI
 
 struct MediaItemView: View {
     let item: LibraryItem
-    @State private var thumbnail: PlatformImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Thumbnail
+            // Library cover placeholder
             ZStack {
-                if let thumbnail {
-                    thumbnailImage(thumbnail)
-                        .resizable()
-                        .aspectRatio(16.0/9.0, contentMode: .fill)
-                        .clipped()
-                        .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .aspectRatio(16.0/9.0, contentMode: .fit)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.black)
+                    .aspectRatio(16.0/9.0, contentMode: .fit)
 
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.white.opacity(0.7))
-                }
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.white.opacity(0.7))
 
                 // Duration badge + progress bar
                 VStack(spacing: 0) {
@@ -53,9 +44,6 @@ struct MediaItemView: View {
                         .frame(height: 3)
                     }
                 }
-            }
-            .task(id: item.filePath) {
-                thumbnail = await ThumbnailManager.shared.loadThumbnail(for: item.filePath)
             }
 
             // Title
@@ -91,14 +79,6 @@ struct MediaItemView: View {
                 NSCursor.pop()
             }
         }
-        #endif
-    }
-
-    private func thumbnailImage(_ image: PlatformImage) -> Image {
-        #if os(macOS)
-        Image(nsImage: image)
-        #else
-        Image(uiImage: image)
         #endif
     }
 }

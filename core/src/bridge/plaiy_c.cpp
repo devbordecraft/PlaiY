@@ -3,7 +3,6 @@
 #include "plaiy/player_engine.h"
 #include "plaiy/media_library.h"
 #include "plaiy/source_manager.h"
-#include "library/thumbnail_generator.h"
 #include "library/seek_thumbnail_generator.h"
 
 #include <nlohmann/json.hpp>
@@ -694,15 +693,6 @@ void py_log_set_callback(PYLogCallback cb, void* userdata) {
     } else {
         py::Logger::instance().set_callback(nullptr);
     }
-}
-
-// ---- Thumbnails ----
-
-int py_thumbnail_generate(const char* video_path, const char* output_path,
-                          int max_width, int max_height) {
-    if (!video_path || !output_path) return PY_ERROR_INVALID_ARG;
-    return py::ThumbnailGenerator::generate(video_path, output_path, max_width, max_height)
-        ? PY_OK : PY_ERROR_DECODER;
 }
 
 // ---- Seek preview thumbnails ----

@@ -346,10 +346,6 @@ int         py_library_get_item_count(PYLibrary* lib);
 const char* py_library_get_item_json(PYLibrary* lib, int index);
 const char* py_library_get_all_items_json(PYLibrary* lib);
 
-// ---- Thumbnails ----
-int py_thumbnail_generate(const char* video_path, const char* output_path,
-                          int max_width, int max_height);
-
 // ---- Seek preview thumbnails ----
 // Start background generation of seek preview thumbnails.
 // interval_seconds: one thumbnail every N seconds. Call after py_player_open().

@@ -524,11 +524,6 @@ func removeFolder(at index: Int32) -> Bool {
         py_library_remove_folder(handle, index) == Int32(PY_OK.rawValue)
     }
 
-static func generateThumbnail(videoPath: String, outputPath: String,
-                                                    maxWidth: Int32, maxHeight: Int32) -> Bool {
-        py_thumbnail_generate(videoPath, outputPath, maxWidth, maxHeight) == Int32(PY_OK.rawValue)
-    }
-
     func addFolder(_ path: String) -> Bool {
         let result = py_library_add_folder(handle, path)
         return result == Int32(PY_OK.rawValue)

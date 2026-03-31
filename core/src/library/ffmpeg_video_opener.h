@@ -7,7 +7,7 @@ struct AVCodecContext;
 namespace py {
 
 // RAII helper for opening a video file with FFmpeg (demux + decode setup).
-// Used by ThumbnailGenerator and SeekThumbnailGenerator.
+// Used by SeekThumbnailGenerator.
 struct FFmpegVideoOpener {
     AVFormatContext* fmt = nullptr;
     AVCodecContext*  dec = nullptr;
