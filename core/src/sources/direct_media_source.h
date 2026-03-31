@@ -28,6 +28,7 @@ public:
 
 private:
     static Error default_probe(MediaSourceType type, const std::string& uri);
+    static bool protocol_supported(MediaSourceType type, const std::string& uri);
     static std::string probe_uri_for_type(MediaSourceType type);
     static std::string uri_scheme(const std::string& uri);
     static std::string entry_name_for_config(const SourceConfig& config);

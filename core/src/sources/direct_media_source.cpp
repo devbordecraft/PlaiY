@@ -3,9 +3,11 @@
 
 extern "C" {
 #include <libavformat/avio.h>
+#include <libavutil/error.h>
 }
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 static constexpr const char* TAG = "DirectSource";
@@ -27,6 +29,12 @@ std::string lowercase(std::string value) {
     return value;
 }
 
+std::string ffmpeg_error_string(int errnum) {
+    std::array<char, AV_ERROR_MAX_STRING_SIZE> buffer{};
+    av_strerror(errnum, buffer.data(), buffer.size());
+    return std::string(buffer.data());
+}
+
 } // namespace
 
 DirectMediaSource::DirectMediaSource(SourceConfig config, UriProbe probe)
@@ -38,7 +46,7 @@ bool DirectMediaSource::is_runtime_supported(MediaSourceType type) {
         return false;
     }
 
-    return !default_probe(type, probe_uri_for_type(type));
+    return protocol_supported(type, probe_uri_for_type(type));
 }
 
 Error DirectMediaSource::connect() {
@@ -110,24 +118,48 @@ std::string DirectMediaSource::playable_path(const SourceEntry& entry) const {
 }
 
 Error DirectMediaSource::default_probe(MediaSourceType type, const std::string& uri) {
+    if (!protocol_supported(type, uri)) {
+        if (type == MediaSourceType::HTTP) {
+            return {ErrorCode::UnsupportedFormat,
+                    "FFmpeg build does not support http(s) media URLs"};
+        }
+
+        if (type == MediaSourceType::NFS) {
+            return {ErrorCode::UnsupportedFormat,
+                    "FFmpeg build does not support nfs:// media URLs"};
+        }
+
+        return {ErrorCode::UnsupportedFormat, "Unsupported media URL protocol"};
+    }
+
+    AVIOContext* io_ctx = nullptr;
+    int ret = avio_open2(&io_ctx, uri.c_str(), AVIO_FLAG_READ, nullptr, nullptr);
+    if (ret < 0) {
+        return {ErrorCode::NetworkError,
+                "Failed to open media URL: " + ffmpeg_error_string(ret)};
+    }
+
+    avio_closep(&io_ctx);
+    return Error::Ok();
+}
+
+bool DirectMediaSource::protocol_supported(MediaSourceType type, const std::string& uri) {
     const char* protocol = avio_find_protocol_name(uri.c_str());
     if (!protocol) {
-        return {ErrorCode::UnsupportedFormat, "Unsupported media URL protocol"};
+        return false;
     }
 
     std::string protocol_name = lowercase(protocol);
     if (type == MediaSourceType::HTTP &&
         protocol_name != "http" && protocol_name != "https") {
-        return {ErrorCode::UnsupportedFormat,
-                "FFmpeg build does not support http(s) media URLs"};
+        return false;
     }
 
     if (type == MediaSourceType::NFS && protocol_name != "nfs") {
-        return {ErrorCode::UnsupportedFormat,
-                "FFmpeg build does not support nfs:// media URLs"};
+        return false;
     }
 
-    return Error::Ok();
+    return true;
 }
 
 std::string DirectMediaSource::probe_uri_for_type(MediaSourceType type) {

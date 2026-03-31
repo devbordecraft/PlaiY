@@ -7,9 +7,16 @@ private final class MockLibraryBridge: LibraryBridgeProtocol, @unchecked Sendabl
     var folderPaths: [String] = []
     var items: [AppLibraryItem] = []
     var addResults: [String: Result<Void, LibraryBridgeError>] = [:]
+    var onNextFolderCountRead: (() -> Void)?
 
     var itemCount: Int32 { Int32(items.count) }
-    var folderCount: Int32 { Int32(folderPaths.count) }
+    var folderCount: Int32 {
+        if let hook = onNextFolderCountRead {
+            onNextFolderCountRead = nil
+            hook()
+        }
+        return Int32(folderPaths.count)
+    }
 
     func addFolder(_ path: String) -> Result<Void, LibraryBridgeError> {
         let result = addResults[path] ?? .success(())
@@ -49,17 +56,27 @@ private final class MockLibraryBridge: LibraryBridgeProtocol, @unchecked Sendabl
 }
 
 private final class InMemoryLibraryFolderStore: LibraryFolderStore, @unchecked Sendable {
-    var storedFolders: [String]
+    var storedFolders: [SavedLibraryFolder]
 
-    init(storedFolders: [String] = []) {
+    init(storedFolders: [SavedLibraryFolder] = []) {
         self.storedFolders = storedFolders
     }
 
-    func load() -> [String] {
+    convenience init(storedPaths: [String]) {
+        self.init(storedFolders: storedPaths.map {
+            SavedLibraryFolder(path: $0, bookmarkData: nil)
+        })
+    }
+
+    var storedPaths: [String] {
+        storedFolders.map(\.path)
+    }
+
+    func load() -> [SavedLibraryFolder] {
         storedFolders
     }
 
-    func save(_ folders: [String]) {
+    func save(_ folders: [SavedLibraryFolder]) {
         storedFolders = folders
     }
 }
@@ -226,7 +243,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
     func testRestoreSavedFoldersLoadsPersistedFoldersOnLaunch() {
         let bridge = MockLibraryBridge()
         bridge.items = [makeItem(path: "/movies/feature.mkv")]
-        let store = InMemoryLibraryFolderStore(storedFolders: ["/movies", "/shows"])
+        let store = InMemoryLibraryFolderStore(storedPaths: ["/movies", "/shows"])
         let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
 
         viewModel.restoreSavedFolders()
@@ -235,7 +252,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
             viewModel.folders == ["/movies", "/shows"] && !viewModel.isScanning
         }
 
-        XCTAssertEqual(store.storedFolders, ["/movies", "/shows"])
+        XCTAssertEqual(store.storedPaths, ["/movies", "/shows"])
         XCTAssertEqual(viewModel.items.count, 1)
         XCTAssertEqual(bridge.folderPaths, ["/movies", "/shows"])
     }
@@ -249,7 +266,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
                 message: ""
             )
         )
-        let store = InMemoryLibraryFolderStore(storedFolders: ["/missing", "/movies"])
+        let store = InMemoryLibraryFolderStore(storedPaths: ["/missing", "/movies"])
         let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
 
         viewModel.restoreSavedFolders()
@@ -258,7 +275,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
             viewModel.folders == ["/movies"] && !viewModel.isScanning
         }
 
-        XCTAssertEqual(store.storedFolders, ["/movies"])
+        XCTAssertEqual(store.storedPaths, ["/movies"])
         XCTAssertEqual(bridge.folderPaths, ["/movies"])
     }
 
@@ -271,7 +288,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
                 message: "Permission denied"
             )
         )
-        let store = InMemoryLibraryFolderStore(storedFolders: ["/denied", "/movies"])
+        let store = InMemoryLibraryFolderStore(storedPaths: ["/denied", "/movies"])
         let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
 
         viewModel.restoreSavedFolders()
@@ -280,7 +297,7 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
             viewModel.folders == ["/movies"] && !viewModel.isScanning
         }
 
-        XCTAssertEqual(store.storedFolders, ["/denied", "/movies"])
+        XCTAssertEqual(store.storedPaths, ["/denied", "/movies"])
     }
 
     func testAddAndRemoveFolderUpdatePersistedRoots() {
@@ -292,12 +309,66 @@ final class LibraryViewModelPersistenceTests: XCTestCase {
         waitForCondition {
             viewModel.folders == ["/movies"] && !viewModel.isScanning
         }
-        XCTAssertEqual(store.storedFolders, ["/movies"])
+        XCTAssertEqual(store.storedPaths, ["/movies"])
 
         viewModel.removeFolder(at: 0)
         waitForCondition {
             viewModel.folders.isEmpty && !viewModel.isScanning
         }
-        XCTAssertEqual(store.storedFolders, [])
+        XCTAssertEqual(store.storedPaths, [])
+    }
+
+    func testRemoveFolderUsesCurrentPathWhenBridgeOrderChangesBeforeDeleteRuns() {
+        let bridge = MockLibraryBridge()
+        bridge.folderPaths = ["/movies", "/shows"]
+        bridge.onNextFolderCountRead = {
+            bridge.folderPaths.removeFirst()
+        }
+
+        let store = InMemoryLibraryFolderStore(storedPaths: ["/movies", "/shows"])
+        let viewModel = LibraryViewModel(bridge: bridge, folderStore: store)
+        viewModel.folders = ["/movies", "/shows"]
+
+        viewModel.removeFolder(at: 1)
+
+        waitForCondition {
+            viewModel.folders.isEmpty && !viewModel.isScanning
+        }
+
+        XCTAssertEqual(bridge.folderPaths, [])
+        XCTAssertEqual(store.storedPaths, [])
+    }
+
+    func testUserDefaultsLibraryFolderStoreMigratesLegacyPaths() {
+        let suiteName = "com.plaiy.tests.library.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let key = "savedLibraryFolders"
+        defaults.set(["/movies", "/shows"], forKey: key)
+
+        let store = UserDefaultsLibraryFolderStore(defaults: defaults, key: key)
+        XCTAssertEqual(
+            store.load(),
+            [
+                SavedLibraryFolder(path: "/movies", bookmarkData: nil),
+                SavedLibraryFolder(path: "/shows", bookmarkData: nil)
+            ]
+        )
+
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    func testUserDefaultsLibraryFolderStoreRoundTripsBookmarks() throws {
+        let suiteName = "com.plaiy.tests.library.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let key = "savedLibraryFolders"
+        let store = UserDefaultsLibraryFolderStore(defaults: defaults, key: key)
+        let folders = [
+            SavedLibraryFolder(path: "/movies", bookmarkData: Data([0x01, 0x02, 0x03]))
+        ]
+
+        store.save(folders)
+
+        XCTAssertEqual(store.load(), folders)
+        defaults.removePersistentDomain(forName: suiteName)
     }
 }

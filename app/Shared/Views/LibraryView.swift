@@ -117,7 +117,7 @@ struct LibraryView: View {
                       allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
                 guard url.startAccessingSecurityScopedResource() else { return }
-                libraryVM.addFolder(url.path)
+                libraryVM.addFolder(url)
                 url.stopAccessingSecurityScopedResource()
             }
         }
@@ -141,7 +141,7 @@ struct LibraryView: View {
         panel.message = "Select a folder containing media files"
 
         if panel.runModal() == .OK, let url = panel.url {
-            libraryVM.addFolder(url.path)
+            libraryVM.addFolder(url)
         }
         #elseif os(iOS)
         showFolderPicker = true

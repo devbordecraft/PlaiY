@@ -322,6 +322,25 @@ TEST_CASE("DirectMediaSource connect succeeds for valid HTTP URI") {
     REQUIRE(src.is_connected());
 }
 
+TEST_CASE("DirectMediaSource connect fails when probe cannot open URI") {
+    SourceConfig cfg;
+    cfg.source_id = "direct-http-offline";
+    cfg.type = MediaSourceType::HTTP;
+    cfg.base_uri = "https://offline.example.com/video/movie.mkv";
+
+    DirectMediaSource src(std::move(cfg), [](MediaSourceType type, const std::string& uri) -> Error {
+        REQUIRE(type == MediaSourceType::HTTP);
+        REQUIRE(uri == "https://offline.example.com/video/movie.mkv");
+        return {ErrorCode::NetworkError, "connection refused"};
+    });
+
+    Error err = src.connect();
+    REQUIRE(err);
+    REQUIRE(err.code == ErrorCode::NetworkError);
+    REQUIRE(err.message == "connection refused");
+    REQUIRE_FALSE(src.is_connected());
+}
+
 TEST_CASE("DirectMediaSource rejects mismatched URI scheme before probing") {
     bool probe_called = false;
 
