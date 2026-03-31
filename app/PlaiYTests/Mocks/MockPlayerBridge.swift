@@ -24,6 +24,7 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var stubPlaybackStats = PYPlaybackStats()
     var stubMediaInfoJSON = "{\"tracks\":[]}"
     var stubSeekThumbnailProgress: Int32 = 0
+    var seekThumbnailHandler: ((Int64) -> CGImage?)?
 
     // MARK: - Call tracking
 
@@ -93,7 +94,9 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
 
     func startSeekThumbnails(interval: Int32) { startSeekThumbnailsCalled = true }
     func cancelSeekThumbnails() { cancelSeekThumbnailsCalled = true }
-    func seekThumbnail(at timestampUs: Int64) -> CGImage? { nil }
+    func seekThumbnail(at timestampUs: Int64) -> CGImage? {
+        seekThumbnailHandler?(timestampUs)
+    }
     var seekThumbnailProgress: Int32 { stubSeekThumbnailProgress }
 
     func getSubtitle(at timestamp: Int64) -> SubtitleData? { nil }

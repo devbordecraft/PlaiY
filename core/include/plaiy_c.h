@@ -296,6 +296,7 @@ uint32_t    py_player_frame_get_min_luminance(void* frame);
 // Pre-computed reshaping LUT (1024 float entries for the given component 0=Y, 1=Cb, 2=Cr)
 bool        py_player_frame_dovi_has_reshaping(void* frame);
 bool        py_player_frame_dovi_reshape_lut(void* frame, int component, float* lut1024);
+uint64_t    py_player_frame_dovi_reshape_fingerprint(void* frame);
 
 // ---- Subtitle ----
 typedef struct {

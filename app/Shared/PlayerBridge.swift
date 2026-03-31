@@ -428,6 +428,10 @@ static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
         py_player_frame_dovi_has_reshaping(frame)
     }
 
+    static func frameDoviReshapeFingerprint(_ frame: UnsafeMutableRawPointer) -> UInt64 {
+        py_player_frame_dovi_reshape_fingerprint(frame)
+    }
+
     static func frameDoviReshapeLUT(_ frame: UnsafeMutableRawPointer, component: Int32) -> [Float]? {
         var lut = [Float](repeating: 0, count: 1024)
         guard py_player_frame_dovi_reshape_lut(frame, component, &lut) else { return nil }

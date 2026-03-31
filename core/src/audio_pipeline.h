@@ -27,6 +27,9 @@ public:
         SPSCRingBuffer<float>& audio_ring;
         std::mutex& audio_ring_flush_mutex;
         std::condition_variable& audio_ring_not_full;
+        std::atomic<bool>& pause_requested;
+        std::mutex& pause_mutex;
+        std::condition_variable& pause_cv;
         std::atomic<int64_t>& audio_pts_for_ring;
         std::atomic<bool>& waiting_for_first_frame;
         Clock& clock;
@@ -55,6 +58,7 @@ public:
                  std::function<void()> audio_decode_loop_fn,
                  int spatial_audio_mode,
                  bool head_tracking_enabled,
+                 bool start_output,
                  bool muted, float volume);
 
     // Real-time audio pull callback (called from CoreAudio thread).
@@ -66,6 +70,10 @@ public:
     // Thread entry for passthrough mode (called from audio decode thread).
     // Returns true when end-of-stream drained normally.
     bool passthrough_write_loop();
+
+    // Blocks decode work while paused. Returns false if playback stops or the
+    // audio pipeline is being restarted.
+    bool wait_if_paused();
 
     // Wait for the active output ring to drain. Returns false if playback stops
     // or the pipeline restarts before the ring empties.

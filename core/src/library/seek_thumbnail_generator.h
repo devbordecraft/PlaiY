@@ -5,6 +5,8 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <list>
+#include <unordered_map>
 #include <cstdint>
 
 namespace py {
@@ -33,22 +35,39 @@ public:
     int progress() const { return progress_.load(); }
 
 private:
+    struct DecodedThumbnail {
+        int width = 0;
+        int height = 0;
+        std::vector<uint8_t> bgra;
+    };
+
+    struct DecodedThumbnailEntry {
+        DecodedThumbnail thumbnail;
+        std::list<int>::iterator lru_it;
+    };
+
     void generate_loop(std::string video_path, std::string cache_dir,
                        int interval_seconds);
+    bool try_get_cached_thumbnail(int index,
+                                  const uint8_t** out_data,
+                                  int* out_width,
+                                  int* out_height);
+    void store_decoded_thumbnail(int index, DecodedThumbnail thumbnail);
 
     std::atomic<bool> cancel_flag_{false};
     std::atomic<int> progress_{0};
     std::atomic<int> total_count_{0};
     std::atomic<int> generated_count_{0};
     int interval_seconds_ = 10;
-    int thumb_width_ = 0;
-    int thumb_height_ = 0;
     std::string cache_dir_;
 
     std::thread worker_;
     std::mutex data_mutex_;
-    std::vector<uint8_t> last_bgra_data_;
     int last_index_{-1};
+    std::list<int> decoded_lru_;
+    std::unordered_map<int, DecodedThumbnailEntry> decoded_cache_;
+
+    static constexpr size_t DECODED_CACHE_CAPACITY = 8;
 };
 
 } // namespace py

@@ -140,6 +140,11 @@ class PlayerViewModel: ObservableObject {
     private var pendingSeekFraction: Double?
     private var hoverEndWork: DispatchWorkItem?
 
+    private func cancelPendingThumbnailRequest() {
+        thumbRequestId &+= 1
+        lastThumbIndex = -1
+    }
+
 
     func open(path: String, settings: AppSettings,
               onNextTrack: (() -> Void)? = nil,
@@ -327,6 +332,7 @@ class PlayerViewModel: ObservableObject {
     }
 
     func stop() {
+        cancelPendingThumbnailRequest()
         bridge.cancelSeekThumbnails()
         bridge.stop()
         isPlaying = false
@@ -493,11 +499,11 @@ class PlayerViewModel: ObservableObject {
         if hovering {
             transport.isHoveringTimeline = true
         } else {
+            cancelPendingThumbnailRequest()
             let work = DispatchWorkItem { [weak self] in
                 guard let self else { return }
                 self.transport.isHoveringTimeline = false
                 self.transport.seekPreviewImage = nil
-                self.lastThumbIndex = -1
             }
             hoverEndWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
@@ -527,7 +533,7 @@ class PlayerViewModel: ObservableObject {
         pendingSeekFraction = nil
         transport.isDraggingTimeline = false
         transport.seekPreviewImage = nil
-        lastThumbIndex = -1
+        cancelPendingThumbnailRequest()
     }
 
     private func updateSeekPreview(fraction: Double) {
@@ -548,6 +554,7 @@ class PlayerViewModel: ObservableObject {
             let image = bridge.seekThumbnail(at: timestampUs)
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.thumbRequestId == requestId else { return }
+                guard self.transport.isHoveringTimeline || self.transport.isDraggingTimeline else { return }
                 self.transport.seekPreviewImage = image
             }
         }

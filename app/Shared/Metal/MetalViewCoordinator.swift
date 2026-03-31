@@ -105,6 +105,8 @@ class MetalViewCoordinator {
 
     // DV reshape LUT buffer (3 components x 1024 entries x 4 bytes = 12KB)
     private var reshapeLUTBuffer: MTLBuffer?
+    private var reshapeLUTFingerprint: UInt64 = 0
+    private var reshapeLUTValid = false
 
     // Blue noise texture for dithering (64x64, single-channel)
     private var blueNoiseTexture: MTLTexture?
@@ -177,6 +179,40 @@ class MetalViewCoordinator {
             return max(Float(L * 10000.0), 100.0)
         }
         return uniforms.maxLuminance
+    }
+
+    private func reshapeLUTBufferIfNeeded(framePtr: UnsafeMutableRawPointer) -> MTLBuffer? {
+        guard PlayerBridge.frameDoviHasReshaping(framePtr) else { return nil }
+
+        let fingerprint = PlayerBridge.frameDoviReshapeFingerprint(framePtr)
+        guard fingerprint != 0 else {
+            reshapeLUTValid = false
+            return nil
+        }
+
+        if !reshapeLUTValid || reshapeLUTFingerprint != fingerprint {
+            guard let lutData = HDRUniformBuilder.buildDoviReshapeLUT(framePtr: framePtr) else {
+                reshapeLUTValid = false
+                return nil
+            }
+
+            let byteCount = lutData.count * MemoryLayout<Float>.size
+            if reshapeLUTBuffer == nil || reshapeLUTBuffer!.length < byteCount {
+                reshapeLUTBuffer = device.makeBuffer(length: byteCount, options: .storageModeShared)
+            }
+            guard let buffer = reshapeLUTBuffer else {
+                reshapeLUTValid = false
+                return nil
+            }
+
+            lutData.withUnsafeBufferPointer { ptr in
+                memcpy(buffer.contents(), ptr.baseAddress!, byteCount)
+            }
+            reshapeLUTFingerprint = fingerprint
+            reshapeLUTValid = true
+        }
+
+        return reshapeLUTBuffer
     }
 
     private func setupPipeline(mtkView: MTKView) {
@@ -374,19 +410,17 @@ class MetalViewCoordinator {
             framePtr: framePtr, edrHeadroom: cachedEDRHeadroom)
         uniforms.bitDepth = is10bit ? 10 : 8
 
-        // Upload DV reshaping LUT to GPU buffer
-        var reshapeLUTData: [Float]?
-        if uniforms.doviHasReshaping != 0 {
-            reshapeLUTData = HDRUniformBuilder.buildDoviReshapeLUT(framePtr: framePtr)
-            if reshapeLUTData == nil {
-                uniforms.doviHasReshaping = 0 // No data available, disable in shader
-            }
+        let reshapeBuffer = uniforms.doviHasReshaping != 0
+            ? reshapeLUTBufferIfNeeded(framePtr: framePtr)
+            : nil
+        if uniforms.doviHasReshaping != 0, reshapeBuffer == nil {
+            uniforms.doviHasReshaping = 0
         }
 
         #if DEBUG
         DVDebugLogger.shared.log(
             uniforms: uniforms,
-            reshapingActive: reshapeLUTData != nil,
+            reshapingActive: reshapeBuffer != nil && uniforms.doviHasReshaping != 0,
             edrHeadroom: cachedEDRHeadroom)
         #endif
 
@@ -491,17 +525,8 @@ class MetalViewCoordinator {
         encoder.setFragmentBytes(&colorFilterUniforms, length: MemoryLayout<ColorFilterUniforms>.size, index: 2)
 
         // Bind DV reshaping LUT buffer (12KB = 3072 floats, exceeds setFragmentBytes 4KB limit)
-        if let lutData = reshapeLUTData {
-            let byteCount = lutData.count * MemoryLayout<Float>.size
-            if reshapeLUTBuffer == nil || reshapeLUTBuffer!.length < byteCount {
-                reshapeLUTBuffer = device.makeBuffer(length: byteCount, options: .storageModeShared)
-            }
-            if let buffer = reshapeLUTBuffer {
-                lutData.withUnsafeBufferPointer { ptr in
-                    memcpy(buffer.contents(), ptr.baseAddress!, byteCount)
-                }
-                encoder.setFragmentBuffer(buffer, offset: 0, index: 3)
-            }
+        if let reshapeBuffer {
+            encoder.setFragmentBuffer(reshapeBuffer, offset: 0, index: 3)
         } else {
             // Shader declares buffer(3) — bind a dummy to avoid validation errors
             var zero: Float = 0

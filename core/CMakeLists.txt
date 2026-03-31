@@ -145,6 +145,7 @@ if(APPLE)
         "-framework CoreFoundation"
         "-framework CoreAudio"
         "-framework AudioToolbox"
+        "-framework Accelerate"
         "-framework Metal"
         "-framework QuartzCore"
         "-framework IOSurface"

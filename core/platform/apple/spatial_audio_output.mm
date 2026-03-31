@@ -1,6 +1,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMotion/CoreMotion.h>
 #import <AudioToolbox/AudioToolbox.h>
+#import <Accelerate/Accelerate.h>
 
 #include "spatial_audio_output.h"
 #include "plaiy/logger.h"
@@ -158,25 +159,21 @@ Error SpatialAudioOutput::open(int sample_rate, int channels) {
             pulled = pImpl->pull_callback(pImpl->interleavedBuf, frames, numCh);
         }
 
+        float vol = pImpl->volume.load(std::memory_order_relaxed);
+
         // Deinterleave into AVAudioEngine's non-interleaved output buffers.
         // outputData has one buffer per channel (non-interleaved format).
         for (int ch = 0; ch < numCh && ch < static_cast<int>(outputData->mNumberBuffers); ch++) {
             auto *dst = static_cast<float *>(outputData->mBuffers[ch].mData);
-            // Copy this channel from interleaved source
-            for (int f = 0; f < pulled; f++) {
-                dst[f] = pImpl->interleavedBuf[f * numCh + ch];
-            }
-            // Zero-fill remainder on underrun
-            for (int f = pulled; f < frames; f++) {
-                dst[f] = 0.0f;
-            }
 
-            // Apply volume
-            float vol = pImpl->volume.load(std::memory_order_relaxed);
-            if (vol < 0.999f) {
-                for (int f = 0; f < frames; f++) {
-                    dst[f] *= vol;
-                }
+            if (pulled > 0) {
+                const float scale = vol < 0.999f ? vol : 1.0f;
+                vDSP_vsmul(pImpl->interleavedBuf + ch, numCh, &scale, dst, 1,
+                           static_cast<vDSP_Length>(pulled));
+            }
+            if (pulled < frames) {
+                memset(dst + pulled, 0,
+                       static_cast<size_t>(frames - pulled) * sizeof(float));
             }
         }
 

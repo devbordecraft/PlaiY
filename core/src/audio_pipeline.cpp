@@ -158,6 +158,7 @@ void AudioPipeline::restart(const TrackInfo& track,
                             std::function<void()> audio_decode_loop_fn,
                             int spatial_audio_mode,
                             bool head_tracking_enabled,
+                            bool start_output,
                             bool muted, float volume) {
     PY_LOG_INFO(TAG, "Restarting audio pipeline");
 
@@ -169,6 +170,7 @@ void AudioPipeline::restart(const TrackInfo& track,
     // 2. Signal audio decode thread to exit
     shared_.audio_restart_requested.store(true);
     shared_.audio_packet_queue.abort();
+    shared_.pause_cv.notify_all();
     shared_.audio_ring_not_full.notify_all();
 
     // 3. Join the audio decode thread
@@ -205,7 +207,7 @@ void AudioPipeline::restart(const TrackInfo& track,
     audio_decode_thread = std::thread(audio_decode_loop_fn);
 
     // 7. Start audio output
-    if (audio_output) {
+    if (audio_output && start_output) {
         audio_output->start();
     }
 
@@ -218,22 +220,52 @@ void AudioPipeline::restart(const TrackInfo& track,
                 audio_output_mode_ == AudioOutputMode::Passthrough ? "passthrough" : "PCM");
 }
 
-bool AudioPipeline::wait_for_drain() {
-    std::unique_lock lock(shared_.audio_ring_flush_mutex);
-    shared_.audio_ring_not_full.wait(lock, [&] {
-        bool drained = false;
-        if (audio_output_mode_ == AudioOutputMode::Passthrough) {
-            drained = (passthrough_ring_size_ == 0);
-        } else {
-            drained = (shared_.audio_ring.available_read() == 0);
-        }
-        return drained ||
+bool AudioPipeline::wait_if_paused() {
+    if (!shared_.pause_requested.load(std::memory_order_acquire)) {
+        return shared_.running.load(std::memory_order_relaxed) &&
+               !shared_.audio_restart_requested.load(std::memory_order_relaxed);
+    }
+
+    std::unique_lock lock(shared_.pause_mutex);
+    shared_.pause_cv.wait(lock, [&] {
+        return !shared_.pause_requested.load(std::memory_order_acquire) ||
                !shared_.running.load(std::memory_order_relaxed) ||
                shared_.audio_restart_requested.load(std::memory_order_relaxed);
     });
 
     return shared_.running.load(std::memory_order_relaxed) &&
            !shared_.audio_restart_requested.load(std::memory_order_relaxed);
+}
+
+bool AudioPipeline::wait_for_drain() {
+    while (shared_.running.load(std::memory_order_relaxed) &&
+           !shared_.audio_restart_requested.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) return false;
+
+        std::unique_lock lock(shared_.audio_ring_flush_mutex);
+        shared_.audio_ring_not_full.wait(lock, [&] {
+            bool drained = false;
+            if (audio_output_mode_ == AudioOutputMode::Passthrough) {
+                drained = (passthrough_ring_size_ == 0);
+            } else {
+                drained = (shared_.audio_ring.available_read() == 0);
+            }
+            return drained ||
+                   shared_.pause_requested.load(std::memory_order_acquire) ||
+                   !shared_.running.load(std::memory_order_relaxed) ||
+                   shared_.audio_restart_requested.load(std::memory_order_relaxed);
+        });
+
+        bool drained = false;
+        if (audio_output_mode_ == AudioOutputMode::Passthrough) {
+            drained = (passthrough_ring_size_ == 0);
+        } else {
+            drained = (shared_.audio_ring.available_read() == 0);
+        }
+        if (drained) return true;
+    }
+
+    return false;
 }
 
 int AudioPipeline::pcm_pull(float* buffer, int frames, int channels) {
@@ -292,6 +324,8 @@ bool AudioPipeline::passthrough_write_loop() {
     std::vector<uint8_t> mat_buf;
 
     while (shared_.running.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) break;
+
         Packet pkt;
         if (!shared_.audio_packet_queue.pop(pkt)) break;
 
@@ -333,23 +367,28 @@ bool AudioPipeline::passthrough_write_loop() {
         }
 
         // Write compressed packet data to byte ring buffer
-        {
+        while (shared_.running.load(std::memory_order_relaxed) &&
+               !shared_.audio_restart_requested.load(std::memory_order_relaxed)) {
+            if (!wait_if_paused()) return false;
+
             std::unique_lock lock(shared_.audio_ring_flush_mutex);
             size_t to_write = write_size;
             size_t capacity = passthrough_ring_buffer_.size();
 
             if (to_write > capacity) {
                 PY_LOG_WARN(TAG, "Passthrough packet too large: %zu > %zu", to_write, capacity);
-                continue;
+                break;
             }
 
             shared_.audio_ring_not_full.wait(lock, [&] {
                 return passthrough_ring_size_ + to_write <= capacity ||
+                       shared_.pause_requested.load(std::memory_order_acquire) ||
                        !shared_.running.load(std::memory_order_relaxed) ||
                        shared_.audio_restart_requested.load(std::memory_order_relaxed);
             });
             if (!shared_.running.load(std::memory_order_relaxed) ||
                 shared_.audio_restart_requested.load(std::memory_order_relaxed)) break;
+            if (shared_.pause_requested.load(std::memory_order_acquire)) continue;
 
             const uint8_t* src = write_data;
             size_t first_chunk = std::min(to_write, capacity - passthrough_ring_write_);
@@ -366,6 +405,7 @@ bool AudioPipeline::passthrough_write_loop() {
                 pkt_duration_us = pkt.duration * 1000000LL * pkt.time_base_num / pkt.time_base_den;
             }
             passthrough_pts_for_ring_ = pts_us + pkt_duration_us;
+            break;
         }
     }
 

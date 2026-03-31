@@ -102,6 +102,12 @@ struct PlayerEngine::Impl {
 
     std::atomic<int64_t> audio_pts_for_ring{0}; // PTS at ring write position
 
+    // Pause gate for worker loops. Pause blocks demux/decode without tearing
+    // down threads so resume stays fast and control operations can still wake them.
+    std::atomic<bool> pause_requested{false};
+    std::mutex pause_mutex;
+    std::condition_variable pause_cv;
+
     // Audio pipeline (owns passthrough ring buffer, callbacks, setup/restart)
     std::unique_ptr<AudioPipeline> audio_pipeline;
 
@@ -198,6 +204,8 @@ struct PlayerEngine::Impl {
     void audio_decode_loop();
     void stop_threads();
     void apply_audio_output_runtime_state();
+    bool wait_if_paused();
+    void wake_workers();
 
     // For audio pipeline restart (live toggle / track change)
     std::atomic<bool> audio_restart_requested{false};
@@ -221,6 +229,9 @@ PlayerEngine::PlayerEngine() : impl_(std::make_unique<Impl>()) {
             .audio_ring = impl_->audio_ring,
             .audio_ring_flush_mutex = impl_->audio_ring_flush_mutex,
             .audio_ring_not_full = impl_->audio_ring_not_full,
+            .pause_requested = impl_->pause_requested,
+            .pause_mutex = impl_->pause_mutex,
+            .pause_cv = impl_->pause_cv,
             .audio_pts_for_ring = impl_->audio_pts_for_ring,
             .waiting_for_first_frame = impl_->waiting_for_first_frame,
             .clock = impl_->clock,
@@ -318,6 +329,9 @@ void PlayerEngine::play() {
     auto s = impl_->state.load();
     if (s != PlaybackState::Ready && s != PlaybackState::Paused) return;
 
+    impl_->pause_requested.store(false, std::memory_order_release);
+    impl_->wake_workers();
+
     if (!impl_->running.load(std::memory_order_relaxed)) {
         // Start threads
         impl_->running.store(true);
@@ -358,8 +372,10 @@ void PlayerEngine::play() {
 void PlayerEngine::pause() {
     if (impl_->state.load() != PlaybackState::Playing) return;
 
+    impl_->pause_requested.store(true, std::memory_order_release);
     impl_->clock.set_paused(true);
     if (impl_->audio_output) impl_->audio_output->stop();
+    impl_->wake_workers();
 #ifdef __APPLE__
     if (impl_->is_dv_output && impl_->dv_output) {
         impl_->dv_output->set_rate(0);
@@ -407,6 +423,7 @@ void PlayerEngine::seek(int64_t timestamp_us) {
     impl_->audio_ring_not_full.notify_one();
 
     impl_->subtitle_manager->flush();
+    impl_->wake_workers();
 }
 
 void PlayerEngine::stop() {
@@ -507,6 +524,7 @@ void PlayerEngine::select_audio_track(int stream_index) {
         Packet flush_pkt;
         flush_pkt.is_flush = true;
         impl_->audio_packet_queue.push(flush_pkt);
+        impl_->wake_workers();
     }
 
     PY_LOG_INFO(TAG, "Audio track switched to stream %d", stream_index);
@@ -567,12 +585,14 @@ void PlayerEngine::restart_audio_pipeline() {
     if (active_audio_stream < 0) return;
 
     const auto& track = impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)];
+    bool start_output = impl_->state.load(std::memory_order_relaxed) == PlaybackState::Playing;
     impl_->audio_pipeline->restart(track, impl_->audio_output,
                                     impl_->audio_decoder,
                                     impl_->audio_decode_thread,
                                     [this] { impl_->audio_decode_loop(); },
                                     impl_->spatial_audio_mode,
                                     impl_->head_tracking_enabled,
+                                    start_output,
                                     impl_->muted, impl_->volume);
     impl_->apply_audio_output_runtime_state();
 }
@@ -847,12 +867,32 @@ void PlayerEngine::Impl::apply_audio_output_runtime_state() {
     }
 }
 
+bool PlayerEngine::Impl::wait_if_paused() {
+    if (!pause_requested.load(std::memory_order_acquire)) {
+        return running.load(std::memory_order_relaxed);
+    }
+
+    std::unique_lock lock(pause_mutex);
+    pause_cv.wait(lock, [&] {
+        return !pause_requested.load(std::memory_order_acquire) ||
+               !running.load(std::memory_order_relaxed);
+    });
+    return running.load(std::memory_order_relaxed);
+}
+
+void PlayerEngine::Impl::wake_workers() {
+    pause_cv.notify_all();
+    audio_ring_not_full.notify_all();
+}
+
 // ---- Thread implementations ----
 
 void PlayerEngine::Impl::demux_loop() {
     PY_LOG_INFO(TAG, "Demux thread started");
 
     while (running.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) break;
+
         // Handle full seek
         if (seeking.load(std::memory_order_relaxed)) {
             demuxer->seek(seek_target_us.load(std::memory_order_relaxed));
@@ -919,6 +959,7 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
     // The layer is created asynchronously by SwiftUI after open() returns.
     PY_LOG_INFO(TAG, "DV output: waiting for display layer...");
     while (!dv_output->has_display_layer() && running.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     if (!running.load(std::memory_order_relaxed)) return;
@@ -927,6 +968,8 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
     bool first_packet = true;
 
     while (running.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) break;
+
         Packet pkt;
         if (!video_packet_queue.pop(pkt)) break;
 
@@ -948,6 +991,7 @@ void PlayerEngine::Impl::dv_video_decode_loop() {
         // Wait until the display layer is ready for more data
         while (!dv_output->wait_until_ready(running)) {
             if (!running.load(std::memory_order_relaxed)) break;
+            if (!wait_if_paused()) break;
         }
         if (!running.load(std::memory_order_relaxed)) break;
 
@@ -1040,6 +1084,8 @@ void PlayerEngine::Impl::video_decode_loop() {
     // periodic stuttering every ~2 seconds.
     auto drain_frames = [&]() -> bool {
         while (running.load(std::memory_order_relaxed)) {
+            if (!wait_if_paused()) return false;
+
             VideoFrame frame;
             Error err = video_decoder->receive_frame(frame);
             if (err.code == ErrorCode::OutputNotReady) break;
@@ -1127,6 +1173,8 @@ void PlayerEngine::Impl::video_decode_loop() {
     };
 
     while (running.load(std::memory_order_relaxed)) {
+        if (!wait_if_paused()) break;
+
         // Drain any frames completed by the async decoder from previous iterations.
         // This is critical for VT: after send_packet, the GPU decodes asynchronously
         // and frames arrive via callback. We must collect them before blocking on
@@ -1249,13 +1297,19 @@ void PlayerEngine::Impl::audio_decode_loop() {
         }
 
         size_t to_write = static_cast<size_t>(num_samples) * static_cast<size_t>(channels);
-        {
+        while (running.load(std::memory_order_relaxed) &&
+               !audio_restart_requested.load(std::memory_order_relaxed)) {
+            if (!audio_pipeline->wait_if_paused()) return false;
+
             std::unique_lock lock(audio_ring_flush_mutex);
             audio_ring_not_full.wait(lock, [&] {
                 return audio_ring.available_write() >= to_write ||
+                       pause_requested.load(std::memory_order_acquire) ||
                        !running.load(std::memory_order_relaxed) ||
                        audio_restart_requested.load(std::memory_order_relaxed);
             });
+            if (pause_requested.load(std::memory_order_acquire)) continue;
+            break;
         }
         if (!running.load(std::memory_order_relaxed) || audio_restart_requested.load(std::memory_order_relaxed)) {
             return false;
@@ -1285,6 +1339,8 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
     auto drain_decoder_frames = [&]() -> bool {
         while (running.load(std::memory_order_relaxed)) {
+            if (!audio_pipeline->wait_if_paused()) return false;
+
             int ret = avcodec_receive_frame(ctx, av_frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
@@ -1331,6 +1387,8 @@ void PlayerEngine::Impl::audio_decode_loop() {
     };
 
     while (running.load(std::memory_order_relaxed)) {
+        if (!audio_pipeline->wait_if_paused()) break;
+
         Packet pkt;
         if (!audio_packet_queue.pop(pkt)) break;
 
@@ -1422,7 +1480,9 @@ void PlayerEngine::Impl::audio_decode_loop() {
                         });
                     audio_output->set_pts_callback([](int64_t) {});
                     apply_audio_output_runtime_state();
-                    audio_output->start();
+                    if (!pause_requested.load(std::memory_order_acquire)) {
+                        audio_output->start();
+                    }
                     PY_LOG_INFO(TAG, "Audio output reconfigured: %d Hz, %d ch", out_rate, out_channels);
                 }
 
@@ -1472,12 +1532,12 @@ void PlayerEngine::Impl::audio_decode_loop() {
 
 void PlayerEngine::Impl::stop_threads() {
     running.store(false);
+    pause_requested.store(false, std::memory_order_release);
     video_packet_queue.abort();
     audio_packet_queue.abort();
     video_frame_queue.abort();
 
-    // Wake the audio decode thread if it's blocked waiting for ring buffer space
-    audio_ring_not_full.notify_all();
+    wake_workers();
 
     if (demux_thread.joinable()) demux_thread.join();
     if (video_decode_thread.joinable()) video_decode_thread.join();

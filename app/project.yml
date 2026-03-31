@@ -34,6 +34,7 @@ _ldflags: &ldflags
   - -framework CoreFoundation
   - -framework CoreAudio
   - -framework AudioToolbox
+  - -framework Accelerate
   - -framework Metal
   - -framework MetalKit
   - -framework QuartzCore
@@ -66,6 +67,7 @@ _ldflags_tvos: &ldflags_tvos
   - -framework CoreFoundation
   - -framework CoreAudio
   - -framework AudioToolbox
+  - -framework Accelerate
   - -framework Metal
   - -framework MetalKit
   - -framework QuartzCore

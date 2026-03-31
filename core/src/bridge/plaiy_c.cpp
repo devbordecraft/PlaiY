@@ -620,6 +620,22 @@ bool py_player_frame_dovi_reshape_lut(void* frame, int component, float* lut1024
     return true;
 }
 
+uint64_t py_player_frame_dovi_reshape_fingerprint(void* frame) {
+    if (!frame) return 0;
+    auto* vf = static_cast<py::VideoFrame*>(frame);
+    if (!vf->dovi_color.has_reshaping) return 0;
+
+    const auto* bytes = reinterpret_cast<const uint8_t*>(vf->dovi_color.reshape_lut);
+    constexpr size_t lut_size = sizeof(vf->dovi_color.reshape_lut);
+
+    uint64_t hash = 1469598103934665603ull;
+    for (size_t i = 0; i < lut_size; i++) {
+        hash ^= static_cast<uint64_t>(bytes[i]);
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
+
 // ---- Subtitle ----
 
 PYSubtitleFrame* py_player_get_subtitle(PYPlayer* p, int64_t timestamp_us) {

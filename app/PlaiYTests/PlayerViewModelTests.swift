@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import PlaiY
 
 @MainActor
@@ -189,5 +190,39 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertTrue(mock.cancelSeekThumbnailsCalled)
         XCTAssertFalse(vm.isPlaying)
         XCTAssertEqual(vm.playbackSpeed, 1.0)
+    }
+
+    func testTimelineHoverEndCancelsPendingThumbnail() async {
+        mock.seekThumbnailHandler = { _ in
+            Thread.sleep(forTimeInterval: 0.075)
+            return Self.makeTestImage()
+        }
+        vm.transport.duration = 10_000_000
+
+        vm.timelineHoverChanged(true)
+        vm.timelineHoverMoved(fraction: 0.5)
+        vm.timelineHoverChanged(false)
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertNil(vm.transport.seekPreviewImage)
+    }
+
+    private static func makeTestImage() -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let data: [UInt8] = [255, 255, 255, 255]
+        guard let provider = CGDataProvider(data: Data(data) as CFData) else { return nil }
+        return CGImage(
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
     }
 }

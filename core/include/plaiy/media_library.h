@@ -2,6 +2,7 @@
 
 #include "plaiy/error.h"
 #include "plaiy/types.h"
+#include <memory>
 #include <string>
 #include <vector>
 

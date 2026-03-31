@@ -36,7 +36,12 @@ void SeekThumbnailGenerator::start(const std::string& video_path,
     total_count_.store(0);
     interval_seconds_ = interval_seconds;
     cache_dir_ = cache_dir;
-    last_index_ = -1;
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        last_index_ = -1;
+        decoded_lru_.clear();
+        decoded_cache_.clear();
+    }
 
     // Create cache directory
     std::error_code ec;
@@ -58,6 +63,45 @@ void SeekThumbnailGenerator::cancel() {
     }
 }
 
+bool SeekThumbnailGenerator::try_get_cached_thumbnail(int index,
+                                                      const uint8_t** out_data,
+                                                      int* out_width,
+                                                      int* out_height) {
+    auto it = decoded_cache_.find(index);
+    if (it == decoded_cache_.end()) return false;
+
+    decoded_lru_.erase(it->second.lru_it);
+    decoded_lru_.push_front(index);
+    it->second.lru_it = decoded_lru_.begin();
+    last_index_ = index;
+
+    *out_data = it->second.thumbnail.bgra.data();
+    *out_width = it->second.thumbnail.width;
+    *out_height = it->second.thumbnail.height;
+    return true;
+}
+
+void SeekThumbnailGenerator::store_decoded_thumbnail(int index, DecodedThumbnail thumbnail) {
+    auto existing = decoded_cache_.find(index);
+    if (existing != decoded_cache_.end()) {
+        decoded_lru_.erase(existing->second.lru_it);
+        decoded_cache_.erase(existing);
+    }
+
+    decoded_lru_.push_front(index);
+    decoded_cache_.emplace(index, DecodedThumbnailEntry{
+        .thumbnail = std::move(thumbnail),
+        .lru_it = decoded_lru_.begin(),
+    });
+
+    while (decoded_cache_.size() > DECODED_CACHE_CAPACITY) {
+        int evict_index = decoded_lru_.back();
+        decoded_lru_.pop_back();
+        decoded_cache_.erase(evict_index);
+    }
+    last_index_ = index;
+}
+
 bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duration_us,
                                             const uint8_t** out_data,
                                             int* out_width, int* out_height) {
@@ -69,13 +113,9 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
     if (index > max_index) index = max_index;
     if (index < 0) index = 0;
 
-    // Fast path: same index as last request
     {
         std::lock_guard<std::mutex> lock(data_mutex_);
-        if (index == last_index_ && !last_bgra_data_.empty()) {
-            *out_data = last_bgra_data_.data();
-            *out_width = thumb_width_;
-            *out_height = thumb_height_;
+        if (try_get_cached_thumbnail(index, out_data, out_width, out_height)) {
             return true;
         }
     }
@@ -153,15 +193,20 @@ bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duratio
     av_frame_free(&frame);
     avcodec_free_context(&dec);
 
-    std::lock_guard<std::mutex> lock(data_mutex_);
-    last_bgra_data_ = std::move(bgra);
-    last_index_ = index;
-    thumb_width_ = w;
-    thumb_height_ = h;
+    {
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        store_decoded_thumbnail(index, DecodedThumbnail{
+            .width = w,
+            .height = h,
+            .bgra = std::move(bgra),
+        });
+        auto it = decoded_cache_.find(index);
+        if (it == decoded_cache_.end()) return false;
 
-    *out_data = last_bgra_data_.data();
-    *out_width = w;
-    *out_height = h;
+        *out_data = it->second.thumbnail.bgra.data();
+        *out_width = it->second.thumbnail.width;
+        *out_height = it->second.thumbnail.height;
+    }
     return true;
 }
 
