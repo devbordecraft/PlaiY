@@ -162,6 +162,133 @@ final class PlexCatalogClientTests: XCTestCase {
         XCTAssertEqual(zulu?.isWatched, true)
     }
 
+    func testFetchSnapshotPreservesArtworkQueryItemsWhenAppendingToken() async throws {
+        let source = makeSourceConfig()
+        let client = PlexCatalogClient(session: makeSession())
+
+        MockPlexURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            switch components.path {
+            case "/library/sections":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "Directory": [
+                                ["key": "1", "type": "movie"]
+                            ]
+                        ]
+                    ]
+                )
+
+            case "/library/sections/1/all":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "totalSize": 1,
+                            "Metadata": [
+                                Self.movieMetadata(
+                                    ratingKey: 1,
+                                    title: "Poster Query",
+                                    thumb: "/photo/:/transcode?width=240&height=360&url=%2Flibrary%2Fmetadata%2F1%2Fthumb",
+                                    art: "/photo/:/transcode?width=1280&height=720&url=%2Flibrary%2Fmetadata%2F1%2Fart"
+                                )
+                            ]
+                        ]
+                    ]
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let snapshot = await client.fetchSnapshot(sources: [source])
+        let item = try XCTUnwrap(snapshot.movies.first)
+        let poster = try XCTUnwrap(item.artwork.posterURL)
+        let backdrop = try XCTUnwrap(item.artwork.backdropURL)
+
+        let posterComponents = try XCTUnwrap(URLComponents(string: poster))
+        XCTAssertEqual(posterComponents.path, "/photo/:/transcode")
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "width" })?.value, "240")
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "height" })?.value, "360")
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "url" })?.value, "/library/metadata/1/thumb")
+        XCTAssertEqual(posterComponents.queryItems?.filter { $0.name == "X-Plex-Token" }.count, 1)
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "X-Plex-Token" })?.value, "test-token")
+
+        let backdropComponents = try XCTUnwrap(URLComponents(string: backdrop))
+        XCTAssertEqual(backdropComponents.path, "/photo/:/transcode")
+        XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "width" })?.value, "1280")
+        XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "height" })?.value, "720")
+        XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "url" })?.value, "/library/metadata/1/art")
+        XCTAssertEqual(backdropComponents.queryItems?.filter { $0.name == "X-Plex-Token" }.count, 1)
+    }
+
+    func testFetchSnapshotBuildsAbsoluteArtworkURLsWithReservedTokenCharacters() async throws {
+        try resetToken("tok+/%?=&")
+
+        let source = makeSourceConfig()
+        let client = PlexCatalogClient(session: makeSession())
+
+        MockPlexURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            switch components.path {
+            case "/library/sections":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "Directory": [
+                                ["key": "1", "type": "movie"]
+                            ]
+                        ]
+                    ]
+                )
+
+            case "/library/sections/1/all":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "totalSize": 1,
+                            "Metadata": [
+                                Self.movieMetadata(
+                                    ratingKey: 2,
+                                    title: "Absolute Poster",
+                                    thumb: "https://images.example.com/poster.jpg?fit=crop",
+                                    art: "https://images.example.com/backdrop.jpg?fit=fill"
+                                )
+                            ]
+                        ]
+                    ]
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let snapshot = await client.fetchSnapshot(sources: [source])
+        let item = try XCTUnwrap(snapshot.movies.first)
+        let poster = try XCTUnwrap(item.artwork.posterURL)
+        let backdrop = try XCTUnwrap(item.artwork.backdropURL)
+
+        let posterComponents = try XCTUnwrap(URLComponents(string: poster))
+        XCTAssertEqual(posterComponents.scheme, "https")
+        XCTAssertEqual(posterComponents.host, "images.example.com")
+        XCTAssertEqual(posterComponents.path, "/poster.jpg")
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "fit" })?.value, "crop")
+        XCTAssertEqual(posterComponents.queryItems?.first(where: { $0.name == "X-Plex-Token" })?.value, "tok+/%?=&")
+
+        let backdropComponents = try XCTUnwrap(URLComponents(string: backdrop))
+        XCTAssertEqual(backdropComponents.scheme, "https")
+        XCTAssertEqual(backdropComponents.host, "images.example.com")
+        XCTAssertEqual(backdropComponents.path, "/backdrop.jpg")
+        XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "fit" })?.value, "fill")
+        XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "X-Plex-Token" })?.value, "tok+/%?=&")
+    }
+
     private func makeSourceConfig() -> SourceConfig {
         SourceConfig(
             id: sourceID,
@@ -183,8 +310,16 @@ final class PlexCatalogClientTests: XCTestCase {
         return (response, data)
     }
 
-    private static func movieMetadata(ratingKey: Int, title: String) -> [String: Any] {
-        [
+    private func resetToken(_ token: String) throws {
+        KeychainHelper.delete(for: sourceID)
+        XCTAssertTrue(KeychainHelper.save(password: token, for: sourceID))
+    }
+
+    private static func movieMetadata(ratingKey: Int,
+                                      title: String,
+                                      thumb: String? = nil,
+                                      art: String? = nil) -> [String: Any] {
+        var metadata: [String: Any] = [
             "type": "movie",
             "ratingKey": "\(ratingKey)",
             "key": "/library/metadata/\(ratingKey)",
@@ -192,6 +327,15 @@ final class PlexCatalogClientTests: XCTestCase {
             "duration": 7_200_000,
             "addedAt": 1_700_000_000 + ratingKey
         ]
+
+        if let thumb {
+            metadata["thumb"] = thumb
+        }
+        if let art {
+            metadata["art"] = art
+        }
+
+        return metadata
     }
 
     private static func showMetadata(ratingKey: Int,

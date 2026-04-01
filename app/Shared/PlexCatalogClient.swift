@@ -292,24 +292,7 @@ actor PlexCatalogClient {
     }
 
     private func makeRequest(path: String, context: PlexContext) throws -> URLRequest {
-        let trimmedBase = trimTrailingSlashes(context.config.baseURI)
-        let urlString: String
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            urlString = path
-        } else {
-            let separator = path.hasPrefix("/") ? "" : "/"
-            urlString = trimmedBase + separator + path
-        }
-
-        guard var components = URLComponents(string: urlString) else {
-            throw URLError(.badURL)
-        }
-
-        var queryItems = components.queryItems ?? []
-        queryItems.append(URLQueryItem(name: "X-Plex-Token", value: context.token))
-        components.queryItems = queryItems
-
-        guard let url = components.url else {
+        guard let url = plexURL(path: path, context: context) else {
             throw URLError(.badURL)
         }
 
@@ -443,16 +426,34 @@ actor PlexCatalogClient {
     }
 
     private func playableURL(partID: String, context: PlexContext) -> String {
-        let base = trimTrailingSlashes(context.config.baseURI)
-        let query = "X-Plex-Token=\(context.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? context.token)"
-        return "\(base)/library/parts/\(partID)/file?\(query)"
+        plexURL(path: "/library/parts/\(partID)/file", context: context)?.absoluteString ?? ""
     }
 
     private func assetURL(_ path: String?, context: PlexContext) -> String? {
         guard let path, !path.isEmpty else { return nil }
-        let base = trimTrailingSlashes(context.config.baseURI)
-        let encodedToken = context.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? context.token
-        return "\(base)\(path)?X-Plex-Token=\(encodedToken)"
+        return plexURL(path: path, context: context)?.absoluteString
+    }
+
+    private func plexURL(path: String, context: PlexContext) -> URL? {
+        guard !path.isEmpty else { return nil }
+
+        let trimmedBase = trimTrailingSlashes(context.config.baseURI)
+        let urlString: String
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            urlString = path
+        } else {
+            let separator = path.hasPrefix("/") ? "" : "/"
+            urlString = trimmedBase + separator + path
+        }
+
+        guard var components = URLComponents(string: urlString) else {
+            return nil
+        }
+
+        var queryItems = (components.queryItems ?? []).filter { $0.name != "X-Plex-Token" }
+        queryItems.append(URLQueryItem(name: "X-Plex-Token", value: context.token))
+        components.queryItems = queryItems.isEmpty ? nil : queryItems
+        return components.url
     }
 
     private func firstPartID(from meta: [String: Any]) -> String? {

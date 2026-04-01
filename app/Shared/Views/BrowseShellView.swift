@@ -621,22 +621,19 @@ private struct BrowsePosterCard: View {
 private struct BrowseArtworkView: View {
     let item: BrowseItem
     let aspectRatio: CGFloat
+    private let cardShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(backgroundGradient)
-                .aspectRatio(aspectRatio, contentMode: .fit)
+            backgroundGradient
 
             content
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             LinearGradient(
                 colors: [.clear, .black.opacity(0.55)],
                 startPoint: .center,
                 endPoint: .bottom
             )
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             VStack(alignment: .leading, spacing: 6) {
                 if let badge = item.badge {
@@ -666,6 +663,8 @@ private struct BrowseArtworkView: View {
             }
             .padding(12)
         }
+        .aspectRatio(aspectRatio, contentMode: .fit)
+        .clipShape(cardShape)
     }
 
     @ViewBuilder
@@ -673,6 +672,8 @@ private struct BrowseArtworkView: View {
         if let posterPath = item.artwork.posterPath,
            let image = platformImage(at: posterPath) {
             platformImageView(image)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
         } else if let posterURL = item.artwork.posterURL,
                   let url = URL(string: posterURL) {
             AsyncImage(url: url) { phase in
@@ -685,20 +686,23 @@ private struct BrowseArtworkView: View {
                     fallbackContent
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         } else {
             fallbackContent
         }
     }
 
     private var fallbackContent: some View {
-        ZStack(alignment: .bottomLeading) {
-            backgroundGradient
-            Text(item.title)
-                .font(.system(size: 20, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(3)
-                .padding(16)
-        }
+        Color.clear
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottomLeading) {
+                Text(item.title)
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(3)
+                    .padding(16)
+            }
     }
 
     private var backgroundGradient: LinearGradient {
@@ -988,13 +992,14 @@ private struct BrowseItemDetailView: View {
     }
 
     private func hero(for model: BrowseDetailModel) -> some View {
-        ZStack(alignment: .bottomLeading) {
+        let heroShape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+
+        return ZStack(alignment: .bottomLeading) {
             if let backdropPath = model.item.artwork.backdropPath,
                let image = platformImage(at: backdropPath) {
                 platformImageView(image)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 320)
-                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
             } else if let backdropURL = model.item.artwork.backdropURL,
                       let url = URL(string: backdropURL) {
                 AsyncImage(url: url) { phase in
@@ -1007,17 +1012,14 @@ private struct BrowseItemDetailView: View {
                         BrowseBackdrop()
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 320)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             } else {
                 BrowseBackdrop()
-                    .frame(height: 320)
-                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
 
             HStack(alignment: .bottom, spacing: 18) {
                 BrowseArtworkView(item: model.item, aspectRatio: 0.68)
@@ -1037,6 +1039,9 @@ private struct BrowseItemDetailView: View {
             }
             .padding(24)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 320)
+        .clipShape(heroShape)
     }
 
     private func metadataBlock(for model: BrowseDetailModel) -> some View {

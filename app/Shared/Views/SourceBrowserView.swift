@@ -382,11 +382,11 @@ struct SourceBrowserView: View {
     private func artworkCard(_ entry: SourceEntry,
                              fallbackSystemName: String,
                              tint: Color) -> some View {
+        let cardShape = RoundedRectangle(cornerRadius: 8)
+
         ZStack(alignment: .topTrailing) {
             ZStack(alignment: .bottomLeading) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(backgroundFill(for: entry, tint: tint))
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                backgroundFill(for: entry, tint: tint)
 
                 if let url = artworkURL(for: entry) {
                     AsyncImage(url: URL(string: url)) { phase in
@@ -399,7 +399,8 @@ struct SourceBrowserView: View {
                             fallbackArtwork(systemName: fallbackSystemName, tint: tint)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
                 } else {
                     fallbackArtwork(systemName: fallbackSystemName, tint: tint)
                 }
@@ -419,6 +420,8 @@ struct SourceBrowserView: View {
                     .padding(8)
                 }
             }
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .clipShape(cardShape)
 
             if entry.isWatched {
                 Image(systemName: "checkmark.circle.fill")
