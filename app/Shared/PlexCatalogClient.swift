@@ -78,6 +78,9 @@ actor PlexCatalogClient {
                         movies.append(item)
                     case .show:
                         shows.append(item)
+                        if item.progress != nil && !item.isWatched {
+                            continueWatching.append(item)
+                        }
                     case .episode:
                         if item.progress != nil && !item.isWatched {
                             continueWatching.append(item)

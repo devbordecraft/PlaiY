@@ -319,7 +319,7 @@ private enum LocalMetadataParser {
     private static func inferredShowFolder(from fileURL: URL) -> String? {
         let parent = fileURL.deletingLastPathComponent()
         let parentName = parent.lastPathComponent
-        if parseSeasonFolder(parentName) != nil {
+        if LocalCatalogPatterns.parseSeasonFolder(parentName) != nil {
             let showFolder = parent.deletingLastPathComponent().lastPathComponent
             return showFolder.nonEmpty
         }
@@ -327,11 +327,7 @@ private enum LocalMetadataParser {
     }
 
     private static func parseSeasonFolder(_ name: String) -> Int? {
-        if let match = firstRegexMatch(pattern: #"(?i)season[ ._-]?(\d{1,2})"#, in: name),
-           let season = Int(match.captures[0]) {
-            return season
-        }
-        return nil
+        LocalCatalogPatterns.parseSeasonFolder(name)
     }
 
     private static func leadingEpisodeNumber(in fileName: String) -> Int? {
@@ -366,19 +362,11 @@ private enum LocalMetadataParser {
 
     private static func cleanTitle(_ value: String) -> String {
         var text = value
-        let tokens = [
-            "2160p", "1080p", "720p", "480p", "bluray", "blu ray", "web dl", "web-dl",
-            "webrip", "brrip", "dvdrip", "x264", "x265", "h264", "h265", "hevc", "aac",
-            "dts", "hdr", "dolby vision", "dv", "remux", "atmos", "truehd", "ddp", "yts"
-        ]
 
         text = text.replacingOccurrences(of: "[._]+", with: " ", options: .regularExpression)
         text = text.replacingOccurrences(of: #"\[[^\]]+\]"#, with: "", options: .regularExpression)
         text = text.replacingOccurrences(of: #"\([^\)]+\)"#, with: "", options: .regularExpression)
-
-        for token in tokens {
-            text = text.replacingOccurrences(of: token, with: "", options: [.caseInsensitive, .diacriticInsensitive])
-        }
+        text = LocalCatalogPatterns.stripReleaseTags(from: text)
 
         text = text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -491,10 +479,44 @@ private enum LocalArtworkResolver {
     private static func showDirectory(for fileURL: URL) -> URL? {
         let parent = fileURL.deletingLastPathComponent()
         let name = parent.lastPathComponent.lowercased()
-        if name.hasPrefix("season ") {
+        if LocalCatalogPatterns.parseSeasonFolder(name) != nil {
             return parent.deletingLastPathComponent()
         }
         return parent
+    }
+}
+
+private enum LocalCatalogPatterns {
+    private static let releaseTokens = [
+        "2160p", "1080p", "720p", "480p", "bluray", "blu ray", "web dl", "webrip",
+        "brrip", "dvdrip", "x264", "x265", "h264", "h265", "hevc", "aac", "dts",
+        "hdr", "dolby vision", "dv", "remux", "atmos", "truehd", "ddp", "yts"
+    ]
+
+    private static let releaseTagRegex: NSRegularExpression? = {
+        let tokenPattern = releaseTokens
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: "|")
+        let pattern = "(?<![\\p{L}\\p{N}])(?:\(tokenPattern))(?![\\p{L}\\p{N}])"
+        return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+    }()
+
+    private static let seasonFolderRegex = try? NSRegularExpression(pattern: #"(?i)season[ ._-]?(\d{1,2})"#)
+
+    static func parseSeasonFolder(_ name: String) -> Int? {
+        guard let seasonFolderRegex else { return nil }
+        let range = NSRange(name.startIndex..., in: name)
+        guard let match = seasonFolderRegex.firstMatch(in: name, range: range),
+              let capture = Range(match.range(at: 1), in: name) else {
+            return nil
+        }
+        return Int(name[capture])
+    }
+
+    static func stripReleaseTags(from text: String) -> String {
+        guard let releaseTagRegex else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        return releaseTagRegex.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: "")
     }
 }
 

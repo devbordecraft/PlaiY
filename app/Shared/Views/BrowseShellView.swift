@@ -1055,9 +1055,11 @@ private struct BrowseItemDetailView: View {
     }
 
     private func actionRow(for model: BrowseDetailModel) -> some View {
-        HStack(spacing: 12) {
+        let playback = browseStore.playbackItem(for: model.item, sections: model.sections)
+
+        return HStack(spacing: 12) {
             if model.actions.contains(.resume),
-               let playback = model.item.playbackItem ?? model.sections.first?.items.first?.playbackItem {
+               let playback {
                 Button {
                     onResume(playback)
                 } label: {
@@ -1067,7 +1069,7 @@ private struct BrowseItemDetailView: View {
             }
 
             if model.actions.contains(.play),
-               let playback = browseStore.defaultPlaybackItem(for: model.item) ?? model.sections.first?.items.first?.playbackItem {
+               let playback {
                 Button {
                     let playback = playback.startingFromBeginning()
                     if !playback.isPlex {

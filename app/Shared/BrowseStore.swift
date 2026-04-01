@@ -275,18 +275,25 @@ final class BrowseStore: ObservableObject {
         return item.kind == .show ? "Resume Show" : "Resume"
     }
 
-    func defaultPlaybackItem(for item: BrowseItem) -> PlaybackItem? {
+    func playbackItem(for item: BrowseItem, sections: [BrowseDetailSection] = []) -> PlaybackItem? {
         if let playback = item.playbackItem {
             return playback
         }
 
-        if item.kind == .show, item.source == .local {
-            let showID = item.id.replacingOccurrences(of: "local:show:", with: "")
-            let episodes = (localSnapshot.showSections[showID] ?? []).flatMap(\.items)
-            return episodes.first(where: { !$0.isWatched })?.playbackItem ?? episodes.first?.playbackItem
-        }
+        guard item.kind == .show else { return nil }
 
-        return nil
+        let episodes = playbackEpisodes(for: item, sections: sections)
+        if let current = episodes.first(where: { ($0.progress ?? 0) > 0 && !$0.isWatched })?.playbackItem {
+            return current
+        }
+        if let next = episodes.first(where: { !$0.isWatched })?.playbackItem {
+            return next
+        }
+        return episodes.first?.playbackItem
+    }
+
+    func defaultPlaybackItem(for item: BrowseItem) -> PlaybackItem? {
+        playbackItem(for: item)
     }
 
     func buildBaseDetail(for item: BrowseItem) -> BrowseDetailModel {
@@ -299,11 +306,12 @@ final class BrowseStore: ObservableObject {
             sections = []
         }
 
+        let resolvedPlayback = playbackItem(for: item, sections: sections)
         var actions: [BrowseDetailAction] = [.favorite]
-        if item.progress != nil {
+        if item.progress != nil, resolvedPlayback != nil {
             actions.insert(.resume, at: 0)
         }
-        if defaultPlaybackItem(for: item) != nil {
+        if resolvedPlayback != nil {
             actions.insert(.play, at: 0)
         }
 
@@ -324,11 +332,11 @@ final class BrowseStore: ObservableObject {
 
         if let payload = await plexClient.fetchDetail(for: item) {
             let resolvedItem = payload.refreshedItem ?? item
+            let resolvedPlayback = playbackItem(for: resolvedItem, sections: payload.sections)
             var actions: [BrowseDetailAction] = [.favorite]
-            if resolvedItem.progress != nil {
+            if resolvedItem.progress != nil, resolvedPlayback != nil {
                 actions.insert(.resume, at: 0)
             }
-            let resolvedPlayback = resolvedItem.playbackItem ?? payload.sections.first?.items.first?.playbackItem
             if resolvedPlayback != nil {
                 actions.insert(.play, at: 0)
             }
@@ -364,6 +372,20 @@ final class BrowseStore: ObservableObject {
         pinNavigationToken = UUID()
         destination = .files
         return destination
+    }
+
+    private func playbackEpisodes(for item: BrowseItem,
+                                  sections: [BrowseDetailSection]) -> [BrowseItem] {
+        if !sections.isEmpty {
+            return sections.flatMap(\.items)
+        }
+
+        guard item.kind == .show, item.source == .local else {
+            return []
+        }
+
+        let showID = item.id.replacingOccurrences(of: "local:show:", with: "")
+        return (localSnapshot.showSections[showID] ?? []).flatMap(\.items)
     }
 
     private func performSearch() {

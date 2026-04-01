@@ -155,6 +155,7 @@ final class PlexCatalogClientTests: XCTestCase {
         XCTAssertEqual(alpha?.title, "Alpha")
         XCTAssertEqual(alpha?.progress ?? 0, 0.4, accuracy: 0.0001)
         XCTAssertEqual(alpha?.isWatched, false)
+        XCTAssertEqual(snapshot.continueWatching.map(\.title), ["Alpha"])
 
         XCTAssertEqual(zulu?.title, "Zulu")
         XCTAssertEqual(zulu?.progress ?? 0, 1.0, accuracy: 0.0001)

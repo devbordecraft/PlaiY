@@ -167,6 +167,51 @@ final class BrowseStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testPlaybackItemForPlexShowPrefersInProgressEpisode() {
+        let store = makeStore()
+        let show = makePlexShow(progress: 0.5, isWatched: false)
+        let firstEpisode = makePlexEpisode(title: "S01E01", season: 1, episode: 1)
+        let currentEpisode = makePlexEpisode(title: "S01E02", season: 1, episode: 2, progress: 0.35)
+
+        let playback = store.playbackItem(
+            for: show,
+            sections: [makeSection(season: 1, items: [firstEpisode, currentEpisode])]
+        )
+
+        XCTAssertEqual(playback?.resumeKey, currentEpisode.playbackItem?.resumeKey)
+    }
+
+    @MainActor
+    func testPlaybackItemForPlexShowFallsBackToNextUnwatchedEpisode() {
+        let store = makeStore()
+        let show = makePlexShow(progress: 0.5, isWatched: false)
+        let watchedEpisode = makePlexEpisode(title: "S01E01", season: 1, episode: 1, isWatched: true)
+        let nextEpisode = makePlexEpisode(title: "S01E02", season: 1, episode: 2)
+
+        let playback = store.playbackItem(
+            for: show,
+            sections: [makeSection(season: 1, items: [watchedEpisode, nextEpisode])]
+        )
+
+        XCTAssertEqual(playback?.resumeKey, nextEpisode.playbackItem?.resumeKey)
+    }
+
+    @MainActor
+    func testPlaybackItemForPlexShowFallsBackToFirstEpisodeWhenAllWatched() {
+        let store = makeStore()
+        let show = makePlexShow(progress: 1.0, isWatched: true)
+        let firstEpisode = makePlexEpisode(title: "S01E01", season: 1, episode: 1, isWatched: true)
+        let secondEpisode = makePlexEpisode(title: "S01E02", season: 1, episode: 2, isWatched: true)
+
+        let playback = store.playbackItem(
+            for: show,
+            sections: [makeSection(season: 1, items: [firstEpisode, secondEpisode])]
+        )
+
+        XCTAssertEqual(playback?.resumeKey, firstEpisode.playbackItem?.resumeKey)
+    }
+
+    @MainActor
     private func makeStore() -> BrowseStore {
         BrowseStore(
             homeLayoutStore: UserDefaultsHomeLayoutStore(defaults: homeLayoutDefaults!, key: "layout"),
@@ -200,5 +245,86 @@ final class BrowseStoreTests: XCTestCase {
             fatalError("Expected non-nil value")
         }
         return value
+    }
+
+    private func makePlexShow(progress: Double?, isWatched: Bool) -> BrowseItem {
+        BrowseItem(
+            id: "plex:test:show",
+            kind: .show,
+            source: .plex,
+            title: "The Show",
+            subtitle: "2 episodes",
+            summary: nil,
+            metadataLine: nil,
+            badge: nil,
+            artwork: BrowseArtwork(),
+            progress: progress,
+            isWatched: isWatched,
+            sourceName: "Plex Test",
+            playbackItem: nil,
+            filePath: nil,
+            ratingKey: "show-rating-key",
+            plexKey: "/library/metadata/show-rating-key",
+            sourceID: "plex-test",
+            sourceTypeRawValue: SourceType.plex.rawValue,
+            addedAt: nil,
+            year: nil,
+            seasonNumber: nil,
+            episodeNumber: nil
+        )
+    }
+
+    private func makePlexEpisode(title: String,
+                                 season: Int,
+                                 episode: Int,
+                                 progress: Double? = nil,
+                                 isWatched: Bool = false) -> BrowseItem {
+        let playback = PlaybackItem(
+            path: "http://127.0.0.1/\(title)",
+            displayName: title,
+            resumeKey: "plex:test:\(title)",
+            plexContext: PlexPlaybackContext(
+                sourceId: "plex-test",
+                serverBaseURL: "http://127.0.0.1:32400",
+                ratingKey: "\(season)-\(episode)",
+                key: "/library/metadata/\(season)-\(episode)",
+                type: "episode",
+                initialViewOffsetMs: progress == nil ? 0 : 120_000,
+                initialViewCount: isWatched ? 1 : 0
+            )
+        )
+
+        return BrowseItem(
+            id: "plex:test:\(title)",
+            kind: .episode,
+            source: .plex,
+            title: title,
+            subtitle: "The Show • S\(season)E\(episode)",
+            summary: nil,
+            metadataLine: nil,
+            badge: nil,
+            artwork: BrowseArtwork(),
+            progress: progress,
+            isWatched: isWatched,
+            sourceName: "Plex Test",
+            playbackItem: playback,
+            filePath: nil,
+            ratingKey: "\(season)-\(episode)",
+            plexKey: "/library/metadata/\(season)-\(episode)",
+            sourceID: "plex-test",
+            sourceTypeRawValue: SourceType.plex.rawValue,
+            addedAt: nil,
+            year: nil,
+            seasonNumber: season,
+            episodeNumber: episode
+        )
+    }
+
+    private func makeSection(season: Int, items: [BrowseItem]) -> BrowseDetailSection {
+        BrowseDetailSection(
+            id: "season-\(season)",
+            title: "Season \(season)",
+            items: items
+        )
     }
 }

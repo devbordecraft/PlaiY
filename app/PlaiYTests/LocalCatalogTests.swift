@@ -37,6 +37,15 @@ final class LocalCatalogTests: XCTestCase {
         XCTAssertTrue(snapshot.movies[0].metadataLine?.contains("4K") ?? false)
     }
 
+    func testBuildPreservesMovieTitlesContainingReleaseTokenSubstrings() throws {
+        let movieURL = try makeFile(at: "Movies/Adventureland.2009.1080p.mkv")
+        let item = makeLibraryItem(path: movieURL.path)
+
+        let snapshot = LocalCatalogBuilder.build(items: [item], watchedIDs: [])
+
+        XCTAssertEqual(snapshot.movies.map(\.title), ["Adventureland (2009)"])
+    }
+
     func testBuildGroupsEpisodesIntoShowAndUsesSidecarArtwork() throws {
         let showFolder = tempDirectory.appendingPathComponent("Shows/The Expanse")
         try FileManager.default.createDirectory(at: showFolder, withIntermediateDirectories: true)
@@ -70,6 +79,16 @@ final class LocalCatalogTests: XCTestCase {
         XCTAssertEqual(sections?.first?.items.map(\.title), ["Dulcinea", "The Big Empty"])
     }
 
+    func testBuildPreservesReleaseTokenSubstringsInShowTitlesEpisodeTitlesAndIDs() throws {
+        let episodeURL = try makeFile(at: "Shows/Adventure Time/Season 1/Adventure.Time.S01E01.The.Adventurer.mkv")
+        let item = makeLibraryItem(path: episodeURL.path)
+
+        let snapshot = LocalCatalogBuilder.build(items: [item], watchedIDs: [])
+
+        XCTAssertEqual(snapshot.shows.map(\.title), ["Adventure Time"])
+        XCTAssertEqual(snapshot.showSections["adventure-time"]?.first?.items.map(\.title), ["The Adventurer"])
+    }
+
     func testBuildMarksShowWatchedWhenAllEpisodesAreWatched() throws {
         let episode = try makeFile(at: "Shows/Dark/Season 1/Dark.S01E01.Secrets.mkv")
         let item = makeLibraryItem(path: episode.path)
@@ -82,6 +101,41 @@ final class LocalCatalogTests: XCTestCase {
         XCTAssertEqual(snapshot.shows.count, 1)
         XCTAssertTrue(snapshot.shows[0].isWatched)
         XCTAssertTrue(snapshot.continueWatching.isEmpty)
+    }
+
+    func testBuildResolvesShowArtworkFromUnderscoreAndHyphenSeasonFolders() throws {
+        let foundationFolder = tempDirectory.appendingPathComponent("Shows/Foundation")
+        try FileManager.default.createDirectory(at: foundationFolder, withIntermediateDirectories: true)
+        let foundationPoster = foundationFolder.appendingPathComponent("poster.jpg")
+        let foundationFanart = foundationFolder.appendingPathComponent("fanart.jpg")
+        FileManager.default.createFile(atPath: foundationPoster.path, contents: Data())
+        FileManager.default.createFile(atPath: foundationFanart.path, contents: Data())
+
+        let severanceFolder = tempDirectory.appendingPathComponent("Shows/Severance")
+        try FileManager.default.createDirectory(at: severanceFolder, withIntermediateDirectories: true)
+        let severancePoster = severanceFolder.appendingPathComponent("poster.jpg")
+        let severanceFanart = severanceFolder.appendingPathComponent("fanart.jpg")
+        FileManager.default.createFile(atPath: severancePoster.path, contents: Data())
+        FileManager.default.createFile(atPath: severanceFanart.path, contents: Data())
+
+        let foundationEpisode = try makeFile(at: "Shows/Foundation/Season_1/Foundation.S01E01.The.Emperor's.Peace.mkv")
+        let severanceEpisode = try makeFile(at: "Shows/Severance/Season-1/Severance.S01E01.Good.News.About.Hell.mkv")
+
+        let snapshot = LocalCatalogBuilder.build(
+            items: [
+                makeLibraryItem(path: foundationEpisode.path),
+                makeLibraryItem(path: severanceEpisode.path)
+            ],
+            watchedIDs: []
+        )
+
+        let foundation = try XCTUnwrap(snapshot.shows.first(where: { $0.title == "Foundation" }))
+        XCTAssertEqual(foundation.artwork.posterPath, foundationPoster.path)
+        XCTAssertEqual(foundation.artwork.backdropPath, foundationFanart.path)
+
+        let severance = try XCTUnwrap(snapshot.shows.first(where: { $0.title == "Severance" }))
+        XCTAssertEqual(severance.artwork.posterPath, severancePoster.path)
+        XCTAssertEqual(severance.artwork.backdropPath, severanceFanart.path)
     }
 
     private func makeLibraryItem(path: String,
