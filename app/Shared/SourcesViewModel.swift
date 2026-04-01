@@ -207,6 +207,17 @@ class SourcesViewModel: ObservableObject {
         connect(sourceId: sourceId, passwordOverride: nil)
     }
 
+    func openSourceRoot(sourceId: String) {
+        if isConnected(sourceId: sourceId) {
+            currentSourceId = sourceId
+            navigationPath = []
+            navigationDisplayNames = []
+            browse(sourceId: sourceId, relativePath: "")
+        } else {
+            connect(sourceId: sourceId)
+        }
+    }
+
     func connect(sourceId: String, passwordOverride: String?) {
         invalidatePendingRequests()
         isConnecting = true

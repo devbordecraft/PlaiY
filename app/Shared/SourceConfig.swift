@@ -150,7 +150,7 @@ struct PlexEntryMetadata: Codable, Sendable, Equatable {
     }
 }
 
-struct PlexPlaybackContext: Sendable, Equatable {
+struct PlexPlaybackContext: Sendable, Equatable, Hashable {
     let sourceId: String
     let serverBaseURL: String
     let ratingKey: String
@@ -167,7 +167,7 @@ struct PlexMarker: Sendable, Equatable {
     let endTimeOffsetMs: Int64
 }
 
-struct PlaybackItem: Identifiable, Sendable, Equatable {
+struct PlaybackItem: Identifiable, Sendable, Equatable, Hashable {
     let path: String
     let displayName: String
     let resumeKey: String
@@ -187,6 +187,24 @@ struct PlaybackItem: Identifiable, Sendable, Equatable {
             displayName: displayName ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent,
             resumeKey: path,
             plexContext: nil
+        )
+    }
+
+    func startingFromBeginning() -> PlaybackItem {
+        guard let plexContext else { return self }
+        return PlaybackItem(
+            path: path,
+            displayName: displayName,
+            resumeKey: resumeKey,
+            plexContext: PlexPlaybackContext(
+                sourceId: plexContext.sourceId,
+                serverBaseURL: plexContext.serverBaseURL,
+                ratingKey: plexContext.ratingKey,
+                key: plexContext.key,
+                type: plexContext.type,
+                initialViewOffsetMs: 0,
+                initialViewCount: plexContext.initialViewCount
+            )
         )
     }
 }

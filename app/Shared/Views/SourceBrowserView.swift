@@ -5,6 +5,8 @@ struct SourceBrowserView: View {
     let onSelect: (PlaybackItem) -> Void
     let onPlayAll: ([PlaybackItem]) -> Void
     let onSettings: () -> Void
+    var selectedSourceID: String? = nil
+    var selectedSourceToken: UUID? = nil
 
     @State private var showAddSource = false
 
@@ -18,6 +20,12 @@ struct SourceBrowserView: View {
             toolbar
             sourceSelector
             content
+        }
+        .onAppear {
+            applyPinnedSourceSelection()
+        }
+        .onChange(of: selectedSourceToken) { _, _ in
+            applyPinnedSourceSelection()
         }
     }
 
@@ -72,12 +80,7 @@ struct SourceBrowserView: View {
         let connected = sourcesVM.isConnected(sourceId: source.id)
 
         return Button {
-            if connected {
-                sourcesVM.currentSourceId = source.id
-                sourcesVM.navigateToRoot()
-            } else {
-                sourcesVM.connect(sourceId: source.id)
-            }
+            sourcesVM.openSourceRoot(sourceId: source.id)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: source.type.systemImage)
@@ -460,5 +463,12 @@ struct SourceBrowserView: View {
             return "\(Int(fraction * 100))% watched"
         }
         return nil
+    }
+
+    private func applyPinnedSourceSelection() {
+        guard let selectedSourceID, sourcesVM.sources.contains(where: { $0.id == selectedSourceID }) else {
+            return
+        }
+        sourcesVM.openSourceRoot(sourceId: selectedSourceID)
     }
 }

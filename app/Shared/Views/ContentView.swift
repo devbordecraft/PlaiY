@@ -6,16 +6,20 @@ struct ContentView: View {
     @StateObject private var playerVM = PlayerViewModel()
     @StateObject private var sourcesVM = SourcesViewModel()
     @StateObject private var playQueue = PlayQueue()
+    @StateObject private var browseStore = BrowseStore()
 
-    enum Screen { case library, sources, settings, player }
+    private enum Screen {
+        case browse
+        case player
+    }
+
     private enum PlaybackStartAction {
         case openOnly
         case play
         case seekThenPlay(Int64)
     }
 
-    @State private var screen: Screen = .library
-    @State private var screenBeforePlayer: Screen = .library
+    @State private var screen: Screen = .browse
     @State private var selectedPlaybackItem: PlaybackItem?
     @State private var didLoadInitialData = false
     @State private var pendingPlaybackStart: PlaybackStartAction?
@@ -25,15 +29,19 @@ struct ContentView: View {
             if screen == .player, let item = selectedPlaybackItem {
                 playerView(item: item)
             } else {
-                #if os(tvOS)
-                tvBrowseView
-                #else
-                desktopBrowseView
-                #endif
+                BrowseShellView(
+                    sourcesVM: sourcesVM,
+                    browseStore: browseStore,
+                    onPlay: { item in playPlayback(item) },
+                    onResume: { item in resumePlayback(item) },
+                    onPlayAll: { items in playAllFromSource(items) }
+                )
+                .environmentObject(libraryVM)
+                .environmentObject(settings)
             }
         }
         #if os(macOS)
-        .frame(minWidth: 800, minHeight: 500)
+        .frame(minWidth: 960, minHeight: 620)
         #endif
         .onAppear {
             guard !didLoadInitialData else { return }
@@ -44,12 +52,31 @@ struct ContentView: View {
         .onOpenURL { url in
             guard url.scheme == "plaiy", url.host == "play",
                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  let path = components.queryItems?.first(where: { $0.name == "path" })?.value
-            else { return }
+                  let path = components.queryItems?.first(where: { $0.name == "path" })?.value else {
+                return
+            }
             selectedPlaybackItem = .local(path: path)
-            screenBeforePlayer = screen
+            pendingPlaybackStart = nil
             screen = .player
         }
+    }
+
+    // MARK: - Browse -> Player
+
+    private func playPlayback(_ item: PlaybackItem) {
+        pendingPlaybackStart = .play
+        selectedPlaybackItem = item
+        screen = .player
+    }
+
+    private func resumePlayback(_ item: PlaybackItem) {
+        if let position = resumePosition(for: item) {
+            pendingPlaybackStart = .seekThenPlay(position)
+        } else {
+            pendingPlaybackStart = .play
+        }
+        selectedPlaybackItem = item
+        screen = .player
     }
 
     // MARK: - Player
@@ -98,9 +125,12 @@ struct ContentView: View {
         let start = pendingPlaybackStart ?? initialPlaybackStart(for: item)
         pendingPlaybackStart = nil
 
-        playerVM.open(item: item, settings: settings,
-                      onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
-                      onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil)
+        playerVM.open(
+            item: item,
+            settings: settings,
+            onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
+            onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil
+        )
         if playerVM.openError != nil { return }
 
         switch start {
@@ -130,7 +160,7 @@ struct ContentView: View {
                 playerVM.stop()
                 playQueue.clear()
                 pendingPlaybackStart = nil
-                screen = screenBeforePlayer
+                screen = .browse
                 selectedPlaybackItem = nil
             },
             onNextTrack: { skipToNext() },
@@ -141,7 +171,7 @@ struct ContentView: View {
         .onAppear {
             startPlayback(for: item)
         }
-        .onChange(of: playerVM.playbackEnded) { ended in
+        .onChange(of: playerVM.playbackEnded) { _, ended in
             if ended {
                 handlePlaybackEnded(finishedItem: item)
             }
@@ -150,6 +180,7 @@ struct ContentView: View {
 
     private func handlePlaybackEnded(finishedItem: PlaybackItem) {
         clearResume(for: finishedItem)
+        browseStore.markPlaybackFinished(finishedItem)
 
         if let next = playQueue.advance() {
             playerVM.stop(continuing: true, finished: true)
@@ -159,7 +190,7 @@ struct ContentView: View {
             playerVM.stop(finished: true)
             playQueue.clear()
             pendingPlaybackStart = nil
-            screen = screenBeforePlayer
+            screen = .browse
             selectedPlaybackItem = nil
         }
     }
@@ -175,8 +206,8 @@ struct ContentView: View {
     private func playAllFromSource(_ items: [PlaybackItem]) {
         guard !items.isEmpty else { return }
         playQueue.setQueue(items, startIndex: 0)
+        pendingPlaybackStart = queuePlaybackStart(for: items[0])
         selectedPlaybackItem = items[0]
-        screenBeforePlayer = screen
         screen = .player
     }
 
@@ -195,125 +226,4 @@ struct ContentView: View {
         playerVM.stop(continuing: true)
         transitionToPlayer(item: prev.playbackItem, start: queuePlaybackStart(for: prev.playbackItem))
     }
-
-    // MARK: - tvOS TabView
-
-    #if os(tvOS)
-    private var tvBrowseView: some View {
-        TabView {
-            Tab("Sources", systemImage: "network") {
-                SourceBrowserView(
-                    sourcesVM: sourcesVM,
-                    onSelect: { item in
-                        selectedPlaybackItem = item
-                        screenBeforePlayer = screen
-                        screen = .player
-                    },
-                    onPlayAll: { items in playAllFromSource(items) },
-                    onSettings: {}
-                )
-            }
-
-            Tab("Library", systemImage: "film.stack") {
-                LibraryView(
-                    onSelect: { item in
-                        selectedPlaybackItem = item
-                        screenBeforePlayer = screen
-                        screen = .player
-                    },
-                    onPlayAll: { items in playAllFromSource(items) },
-                    onSettings: {}
-                )
-                .environmentObject(libraryVM)
-            }
-
-            Tab("Settings", systemImage: "gearshape") {
-                SettingsView(onDismiss: {})
-                    .environmentObject(settings)
-                    .environmentObject(libraryVM)
-                    .environmentObject(sourcesVM)
-            }
-        }
-    }
-    #endif
-
-    // MARK: - Desktop/iOS browse view
-
-    #if !os(tvOS)
-    private var desktopBrowseView: some View {
-        Group {
-            switch screen {
-            case .settings:
-                SettingsView(onDismiss: { screen = .library })
-                    .environmentObject(settings)
-                    .environmentObject(libraryVM)
-                    .environmentObject(sourcesVM)
-
-            case .sources:
-                browseContainer {
-                    SourceBrowserView(
-                        sourcesVM: sourcesVM,
-                        onSelect: { item in
-                            selectedPlaybackItem = item
-                            screenBeforePlayer = screen
-                            screen = .player
-                        },
-                        onPlayAll: { items in playAllFromSource(items) },
-                        onSettings: {
-                            screen = .settings
-                        }
-                    )
-                }
-
-            default:
-                browseContainer {
-                    LibraryView(
-                        onSelect: { item in
-                            selectedPlaybackItem = item
-                            screenBeforePlayer = screen
-                            screen = .player
-                        },
-                        onPlayAll: { items in playAllFromSource(items) },
-                        onSettings: {
-                            screen = .settings
-                        }
-                    )
-                    .environmentObject(libraryVM)
-                }
-            }
-        }
-    }
-
-    private func browseContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            // Tab bar
-            HStack(spacing: 0) {
-                tabButton("Library", systemImage: "film.stack", screen: .library)
-                tabButton("Sources", systemImage: "network", screen: .sources)
-            }
-            .padding(.horizontal)
-            .padding(.top, 4)
-
-            content()
-        }
-    }
-
-    private func tabButton(_ title: String, systemImage: String, screen target: Screen) -> some View {
-        Button {
-            screen = target
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.caption)
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(screen == target ? .semibold : .regular)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .foregroundStyle(screen == target ? .primary : .secondary)
-        }
-        .buttonStyle(.plain)
-    }
-    #endif
 }

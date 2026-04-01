@@ -9,6 +9,7 @@ struct LibraryView: View {
     let onSelect: (PlaybackItem) -> Void
     var onPlayAll: ([PlaybackItem]) -> Void = { _ in }
     let onSettings: () -> Void
+    var selectedFolderPath: Binding<String?> = .constant(nil)
 
     #if os(iOS)
     @State private var showFolderPicker = false
@@ -19,6 +20,21 @@ struct LibraryView: View {
         GridItem(.adaptive(minimum: LayoutMetrics.gridMinWidth,
                            maximum: LayoutMetrics.gridMaxWidth), spacing: 16)
     ]
+
+    private var visibleItems: [LibraryItem] {
+        guard let selectedFolder = selectedFolderPath.wrappedValue,
+              !selectedFolder.isEmpty else {
+            return libraryVM.items
+        }
+        return libraryVM.items.filter { item in
+            itemIsInFolder(item.filePath, folderPath: selectedFolder)
+        }
+    }
+
+    private var selectedFolderName: String? {
+        guard let path = selectedFolderPath.wrappedValue, !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,9 +62,9 @@ struct LibraryView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    if !libraryVM.items.isEmpty {
+                    if !visibleItems.isEmpty {
                         Button {
-                            let items = libraryVM.items.map {
+                            let items = visibleItems.map {
                                 PlaybackItem.local(path: $0.filePath, displayName: $0.title)
                             }
                             onPlayAll(items)
@@ -73,20 +89,40 @@ struct LibraryView: View {
                 .padding()
             }
 
-            if libraryVM.items.isEmpty {
+            if let selectedFolderName {
+                HStack(spacing: 10) {
+                    Label("Pinned Folder", systemImage: "pin.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(selectedFolderName)
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Button("Show All") {
+                        selectedFolderPath.wrappedValue = nil
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+            }
+
+            if visibleItems.isEmpty {
                 Spacer()
                 VStack(spacing: 12) {
                     Image(systemName: "film.stack")
                         .font(.system(size: 48))
                         .foregroundStyle(.secondary)
-                    Text("No media files")
+                    Text(selectedFolderPath.wrappedValue == nil ? "No media files" : "No media in this folder")
                         .font(.title2)
                         .foregroundStyle(.secondary)
                     #if os(tvOS)
                     Text("Browse network sources to find media")
                         .foregroundStyle(.tertiary)
                     #else
-                    Text("Add a folder or open a file to get started")
+                    Text(selectedFolderPath.wrappedValue == nil
+                         ? "Add a folder or open a file to get started"
+                         : "This pinned folder does not contain indexed media right now")
                         .foregroundStyle(.tertiary)
                     #endif
                 }
@@ -94,7 +130,7 @@ struct LibraryView: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(libraryVM.items) { item in
+                        ForEach(visibleItems) { item in
                             #if os(tvOS)
                             Button {
                                 onSelect(PlaybackItem.local(path: item.filePath, displayName: item.title))
@@ -166,5 +202,17 @@ struct LibraryView: View {
         #elseif os(iOS)
         showFilePicker = true
         #endif
+    }
+
+    private func itemIsInFolder(_ itemPath: String, folderPath: String) -> Bool {
+        let normalizedFolder = folderPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalizedItem = itemPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedFolder.isEmpty else { return true }
+
+        let folderPrefix = "/" + normalizedFolder + "/"
+        let exactFolder = "/" + normalizedFolder
+        let candidate = normalizedItem.hasPrefix("/") ? normalizedItem : "/" + normalizedItem
+        return candidate == exactFolder || candidate.hasPrefix(folderPrefix)
     }
 }
