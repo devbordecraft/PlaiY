@@ -171,10 +171,19 @@ struct PlayerEngine::Impl {
     std::atomic<bool> waiting_for_first_frame{false};
 
     // Threads
+    std::thread open_thread;
     std::thread demux_thread;
     std::thread video_decode_thread;
     std::thread audio_decode_thread;
     std::atomic<bool> running{false};
+    std::atomic<uint64_t> open_generation{0};
+    std::atomic<bool> pending_play_on_ready{false};
+    std::atomic<bool> pending_seek_on_ready{false};
+
+    // Remote playback buffering
+    RemoteSourceKind remote_source_kind = RemoteSourceKind::None;
+    RemoteBufferMode remote_buffer_mode = RemoteBufferMode::Off;
+    RemoteBufferProfile remote_buffer_profile = RemoteBufferProfile::Balanced;
 
     // Currently presented frame
     std::mutex presented_frame_mutex;
@@ -201,6 +210,9 @@ struct PlayerEngine::Impl {
         if (error_callback) error_callback(err);
     }
 
+    Error open_media_internal(const std::string& path);
+    void apply_pending_open_seek();
+    void reset_open_state();
     void demux_loop();
     void video_decode_loop();
     void audio_decode_loop();
@@ -250,22 +262,128 @@ PlayerEngine::~PlayerEngine() {
 
 Error PlayerEngine::open_file(const std::string& path) {
     stop();
+    impl_->pending_play_on_ready.store(false, std::memory_order_release);
+    impl_->pending_seek_on_ready.store(false, std::memory_order_release);
+
+    impl_->demuxer->set_remote_buffer_config(RemoteBufferConfig{
+        .source_kind = impl_->remote_source_kind,
+        .mode = impl_->remote_buffer_mode,
+        .profile = impl_->remote_buffer_profile,
+    });
+
+    const uint64_t open_generation =
+        impl_->open_generation.fetch_add(1, std::memory_order_acq_rel) + 1;
     impl_->set_state(PlaybackState::Opening);
 
-    Error err = impl_->demuxer->open(path);
+    const bool remote_buffered =
+        impl_->remote_source_kind == RemoteSourceKind::Plex &&
+        impl_->remote_buffer_mode != RemoteBufferMode::Off;
+    if (!remote_buffered) {
+        Error err = impl_->open_media_internal(path);
+        if (err) {
+            impl_->set_state(PlaybackState::Idle);
+            impl_->reset_open_state();
+            return err;
+        }
+
+        // Keep local-file startup on the caller thread. The async open path is
+        // only needed for buffered network playback, and moving decoder/audio
+        // setup off-thread regressed local playback responsiveness.
+        int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
+        if (active_audio_stream >= 0) {
+            setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)]);
+        }
+
+        if (impl_->active_subtitle_stream.load(std::memory_order_acquire) >= 0) {
+            const auto& track = impl_->media_info.tracks[
+                static_cast<size_t>(impl_->active_subtitle_stream.load(std::memory_order_acquire))];
+            impl_->subtitle_manager->set_embedded_track(track);
+        }
+
+        if (!impl_->is_dv_output) {
+            impl_->frame_presenter = std::make_unique<FramePresenter>(
+                impl_->video_frame_queue,
+                impl_->clock,
+                impl_->presented_frame_mutex,
+                impl_->presented_frame,
+                impl_->waiting_for_first_frame,
+                impl_->frames_rendered,
+                impl_->frames_dropped);
+        }
+
+        impl_->apply_pending_open_seek();
+        impl_->set_state(PlaybackState::Ready);
+        return Error::Ok();
+    }
+
+    impl_->open_thread = std::thread([this, path, open_generation] {
+        impl_->set_state(PlaybackState::Buffering);
+
+        Error err = impl_->open_media_internal(path);
+        if (open_generation != impl_->open_generation.load(std::memory_order_acquire)) {
+            return;
+        }
+
+        if (err) {
+            if (err.code != ErrorCode::InvalidState) {
+                impl_->report_error(err);
+                impl_->set_state(PlaybackState::Idle);
+                impl_->reset_open_state();
+            }
+            return;
+        }
+
+        // Open audio decoder + output
+        int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
+        if (active_audio_stream >= 0) {
+            setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)]);
+        }
+
+        // Open subtitle track
+        if (impl_->active_subtitle_stream.load(std::memory_order_acquire) >= 0) {
+            const auto& track = impl_->media_info.tracks[
+                static_cast<size_t>(impl_->active_subtitle_stream.load(std::memory_order_acquire))];
+            impl_->subtitle_manager->set_embedded_track(track);
+        }
+
+        // Create frame presenter for A-V sync (not needed for DV — ASBDL manages timing)
+        if (!impl_->is_dv_output) {
+            impl_->frame_presenter = std::make_unique<FramePresenter>(
+                impl_->video_frame_queue,
+                impl_->clock,
+                impl_->presented_frame_mutex,
+                impl_->presented_frame,
+                impl_->waiting_for_first_frame,
+                impl_->frames_rendered,
+                impl_->frames_dropped);
+        }
+
+        impl_->apply_pending_open_seek();
+        impl_->set_state(PlaybackState::Ready);
+
+        if (impl_->pending_play_on_ready.exchange(false, std::memory_order_acq_rel) &&
+            open_generation == impl_->open_generation.load(std::memory_order_acquire)) {
+            play();
+        }
+    });
+
+    return Error::Ok();
+}
+
+Error PlayerEngine::Impl::open_media_internal(const std::string& path) {
+    Error err = demuxer->open(path);
     if (err) {
-        impl_->set_state(PlaybackState::Idle);
         return err;
     }
 
-    impl_->media_info = impl_->demuxer->media_info();
-    impl_->active_video_stream = impl_->media_info.best_video_index;
-    impl_->active_audio_stream.store(impl_->media_info.best_audio_index, std::memory_order_release);
-    impl_->active_subtitle_stream.store(impl_->media_info.best_subtitle_index, std::memory_order_release);
+    media_info = demuxer->media_info();
+    active_video_stream = media_info.best_video_index;
+    active_audio_stream.store(media_info.best_audio_index, std::memory_order_release);
+    active_subtitle_stream.store(media_info.best_subtitle_index, std::memory_order_release);
 
     // Open video decoder (or DV output for Dolby Vision Profile 5/8/10)
-    if (impl_->active_video_stream >= 0) {
-        const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_video_stream)];
+    if (active_video_stream >= 0) {
+        const auto& track = media_info.tracks[static_cast<size_t>(active_video_stream)];
 
 #ifdef __APPLE__
         if (track.hdr_metadata.type == HDRType::DolbyVision &&
@@ -275,61 +393,98 @@ Error PlayerEngine::open_file(const std::string& path) {
             // Profile 5 (IPTPQc2): ASBDL silently accepts but doesn't render on macOS —
             // use FFmpeg + Metal with RPU metadata extraction instead.
             // Profile 7: dual-layer, not supported — falls through to VT + Metal.
-            impl_->dv_output = std::make_unique<DVVideoOutput>();
-            Error dv_err = impl_->dv_output->open(track);
+            dv_output = std::make_unique<DVVideoOutput>();
+            Error dv_err = dv_output->open(track);
             if (dv_err.ok()) {
-                impl_->is_dv_output = true;
+                is_dv_output = true;
                 PY_LOG_INFO(TAG, "DV Profile %d: using ASBDL output", track.dv_profile);
             } else {
                 PY_LOG_WARN(TAG, "DV output failed: %s, falling back to decoder",
                             dv_err.message.c_str());
-                impl_->dv_output.reset();
-                impl_->is_dv_output = false;
+                dv_output.reset();
+                is_dv_output = false;
             }
         }
 #endif
 
-        if (!impl_->is_dv_output) {
-            impl_->video_decoder = VideoDecoderFactory::create(track, impl_->hw_decode_pref);
-            if (!impl_->video_decoder) {
+        if (!is_dv_output) {
+            video_decoder = VideoDecoderFactory::create(track, hw_decode_pref);
+            if (!video_decoder) {
                 return {ErrorCode::DecoderInitFailed, "No video decoder available"};
             }
         }
-        impl_->subtitle_manager->set_video_size(track.width, track.height);
+        subtitle_manager->set_video_size(track.width, track.height);
     }
 
-    // Open audio decoder + resampler + output
-    int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
-    if (active_audio_stream >= 0) {
-        setup_audio_output(impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)]);
-    }
-
-    // Open subtitle track
-    if (impl_->active_subtitle_stream >= 0) {
-        const auto& track = impl_->media_info.tracks[static_cast<size_t>(impl_->active_subtitle_stream)];
-        impl_->subtitle_manager->set_embedded_track(track);
-    }
-
-    // Create frame presenter for A-V sync (not needed for DV — ASBDL manages timing)
-    if (!impl_->is_dv_output) {
-        impl_->frame_presenter = std::make_unique<FramePresenter>(
-            impl_->video_frame_queue,
-            impl_->clock,
-            impl_->presented_frame_mutex,
-            impl_->presented_frame,
-            impl_->waiting_for_first_frame,
-            impl_->frames_rendered,
-            impl_->frames_dropped);
-    }
-
-    impl_->set_state(PlaybackState::Ready);
-    PY_LOG_INFO(TAG, "File opened: %s (%.1fs)",
-                path.c_str(), static_cast<double>(impl_->media_info.duration_us) / 1e6);
     return Error::Ok();
+}
+
+void PlayerEngine::Impl::apply_pending_open_seek() {
+    if (!pending_seek_on_ready.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    seeking.store(true, std::memory_order_release);
+    const int64_t target = seek_target_us.load(std::memory_order_acquire);
+
+    if (active_video_stream >= 0) {
+        if (is_dv_output) {
+#ifdef __APPLE__
+            if (dv_output) dv_output->set_time(target);
+#endif
+            clock.set_audio_pts(target);
+            waiting_for_first_frame.store(false, std::memory_order_release);
+        } else {
+            waiting_for_first_frame.store(true, std::memory_order_release);
+            clock.seek_to(target);
+        }
+    } else {
+        clock.set_audio_pts(target);
+    }
+
+    subtitle_manager->flush();
+    pending_seek_on_ready.store(false, std::memory_order_release);
+}
+
+void PlayerEngine::Impl::reset_open_state() {
+    if (audio_output) {
+        audio_output->stop();
+        audio_output->close();
+        audio_output.reset();
+    }
+
+    video_decoder.reset();
+    audio_decoder.reset();
+    frame_presenter.reset();
+    audio_pipeline->teardown();
+    subtitle_manager->close();
+    demuxer->close();
+
+#ifdef __APPLE__
+    if (dv_output) {
+        dv_output->close();
+        dv_output.reset();
+    }
+#endif
+    is_dv_output = false;
+
+    {
+        std::lock_guard lock(presented_frame_mutex);
+        presented_frame.reset();
+    }
+
+    media_info = {};
+    active_video_stream = -1;
+    active_audio_stream.store(-1, std::memory_order_release);
+    active_subtitle_stream.store(-1, std::memory_order_release);
 }
 
 void PlayerEngine::play() {
     auto s = impl_->state.load();
+    if (s == PlaybackState::Opening || s == PlaybackState::Buffering) {
+        impl_->pending_play_on_ready.store(true, std::memory_order_release);
+        return;
+    }
     if (s != PlaybackState::Ready && s != PlaybackState::Paused) return;
 
     impl_->pause_requested.store(false, std::memory_order_release);
@@ -373,7 +528,12 @@ void PlayerEngine::play() {
 }
 
 void PlayerEngine::pause() {
-    if (impl_->state.load() != PlaybackState::Playing) return;
+    auto state = impl_->state.load();
+    if (state == PlaybackState::Opening || state == PlaybackState::Buffering) {
+        impl_->pending_play_on_ready.store(false, std::memory_order_release);
+        return;
+    }
+    if (state != PlaybackState::Playing) return;
 
     impl_->pause_requested.store(true, std::memory_order_release);
     impl_->clock.set_paused(true);
@@ -388,6 +548,13 @@ void PlayerEngine::pause() {
 }
 
 void PlayerEngine::seek(int64_t timestamp_us) {
+    auto state = impl_->state.load();
+    if (state == PlaybackState::Opening || state == PlaybackState::Buffering) {
+        impl_->seek_target_us.store(timestamp_us, std::memory_order_release);
+        impl_->pending_seek_on_ready.store(true, std::memory_order_release);
+        return;
+    }
+
     impl_->packet_generation.advance();
     impl_->seek_target_us.store(timestamp_us, std::memory_order_relaxed);
     impl_->seeking.store(true);
@@ -435,12 +602,18 @@ void PlayerEngine::seek(int64_t timestamp_us) {
 }
 
 void PlayerEngine::stop() {
+    impl_->open_generation.fetch_add(1, std::memory_order_acq_rel);
+    impl_->pending_play_on_ready.store(false, std::memory_order_release);
+    impl_->pending_seek_on_ready.store(false, std::memory_order_release);
+    impl_->demuxer->request_abort();
+
     // Stop audio output FIRST so CoreAudio stops pulling samples immediately
     if (impl_->audio_output) {
         impl_->audio_output->stop();
     }
 
     impl_->stop_threads();
+    if (impl_->open_thread.joinable()) impl_->open_thread.join();
     impl_->clock.reset();
     impl_->playback_speed.store(1.0);
     impl_->speed_changed.store(false);
@@ -766,6 +939,18 @@ void PlayerEngine::set_subtitle_font_scale(double scale) {
     impl_->subtitle_manager->set_ass_font_scale(scale);
 }
 
+void PlayerEngine::set_remote_source_kind(RemoteSourceKind kind) {
+    impl_->remote_source_kind = kind;
+}
+
+void PlayerEngine::set_remote_buffer_mode(RemoteBufferMode mode) {
+    impl_->remote_buffer_mode = mode;
+}
+
+void PlayerEngine::set_remote_buffer_profile(RemoteBufferProfile profile) {
+    impl_->remote_buffer_profile = profile;
+}
+
 // Deinterlace
 void PlayerEngine::set_deinterlace_enabled(bool e) { impl_->deinterlace_enabled.store(e, std::memory_order_relaxed); }
 bool PlayerEngine::is_deinterlace_enabled() const { return impl_->deinterlace_enabled.load(std::memory_order_relaxed); }
@@ -954,6 +1139,10 @@ void PlayerEngine::Impl::demux_loop() {
         }
         if (err) {
             if (!packet_generation.matches(read_generation)) continue;
+            if (err.code == ErrorCode::InvalidState &&
+                !running.load(std::memory_order_relaxed)) {
+                break;
+            }
             report_error(err);
             break;
         }

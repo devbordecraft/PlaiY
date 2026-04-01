@@ -13,6 +13,7 @@ namespace py {
 enum class PlaybackState {
     Idle,
     Opening,
+    Buffering,
     Ready,
     Playing,
     Paused,
@@ -44,6 +45,23 @@ enum class HWDecodePreference {
     Auto,            // Try HW, fallback to SW (default)
     ForceHardware,   // Only try HW, fail if unavailable
     ForceSoftware,   // Skip HW entirely, use FFmpeg
+};
+
+enum class RemoteSourceKind {
+    None = 0,
+    Plex,
+};
+
+enum class RemoteBufferMode {
+    Off = 0,
+    Memory,
+    Disk,
+};
+
+enum class RemoteBufferProfile {
+    Fast = 0,
+    Balanced,
+    Conservative,
 };
 
 enum class SubtitleFormat {

@@ -298,6 +298,13 @@ final class PlaybackTransport {
 // ---------------------------------------------------------------------------
 @MainActor
 class PlayerViewModel: ObservableObject {
+    private struct PendingOpenContext {
+        let item: PlaybackItem
+        let settings: AppSettings
+        let onNextTrack: (() -> Void)?
+        let onPreviousTrack: (() -> Void)?
+    }
+
     let bridge: any PlayerBridgeProtocol
     let transport = PlaybackTransport()
     private var playbackState = Int32(PY_STATE_IDLE.rawValue)
@@ -344,6 +351,8 @@ class PlayerViewModel: ObservableObject {
     @Published var openError: String?
     @Published var isDolbyVision = false
     @Published var showSkipIntro = false
+    @Published var isPreparingPlayback = false
+    @Published var prepareStatusText = "Opening media..."
 
     // NOT @Published — ContentView reads this in one-shot closures (onBack, playbackEnded),
     // not in body. Avoiding @Published prevents once-per-second PlayerView rebuilds.
@@ -371,6 +380,11 @@ class PlayerViewModel: ObservableObject {
     private var plexSync: PlexSyncSession?
     private var plexSyncHealthy = false
     private var plexIntroMarker: PlexMarker?
+    private var pendingOpenContext: PendingOpenContext?
+    private var deferredPlayOnReady = false
+    private var openRequestID: UInt64 = 0
+    private var openTask: Task<Void, Never>?
+    private var openBridgeCallPending = false
 
     var shouldPersistLocalResumeFallback: Bool {
         guard currentPlaybackItem?.isPlex == true else { return true }
@@ -383,6 +397,16 @@ class PlayerViewModel: ObservableObject {
         let playing = state == Int32(PY_STATE_PLAYING.rawValue)
         isPlaying = playing
         transport.isPlaying = playing
+        isPreparingPlayback = state == Int32(PY_STATE_OPENING.rawValue) ||
+            state == Int32(PY_STATE_BUFFERING.rawValue)
+
+        if state == Int32(PY_STATE_OPENING.rawValue) {
+            prepareStatusText = "Opening media..."
+        } else if state == Int32(PY_STATE_BUFFERING.rawValue) {
+            prepareStatusText = currentPlaybackItem?.isPlex == true
+                ? currentPlexBufferMode().statusText
+                : "Buffering media..."
+        }
 
         if state != Int32(PY_STATE_STOPPED.rawValue) {
             playbackEnded = false
@@ -390,6 +414,43 @@ class PlayerViewModel: ObservableObject {
         if state == Int32(PY_STATE_STOPPED.rawValue) {
             playbackEnded = true
         }
+
+        if state == Int32(PY_STATE_READY.rawValue) {
+            if openBridgeCallPending { return }
+            finishPendingOpenIfNeeded()
+        } else if state == Int32(PY_STATE_IDLE.rawValue), pendingOpenContext != nil {
+            if openBridgeCallPending { return }
+            failPendingOpen()
+        }
+    }
+
+    private func currentPlexBufferMode() -> PlexBufferMode {
+        guard let settings = pendingOpenContext?.settings else { return .disk }
+        return settings.plexBufferMode
+    }
+
+    private func configureRemoteBuffering(for item: PlaybackItem, settings: AppSettings) {
+        if item.isPlex {
+            bridge.setRemoteSourceKind(Int32(PY_REMOTE_SOURCE_PLEX.rawValue))
+            bridge.setRemoteBufferMode(Int32(settings.plexBufferMode.rawValue))
+            bridge.setRemoteBufferProfile(Int32(settings.plexBufferProfile.rawValue))
+        } else {
+            bridge.setRemoteSourceKind(Int32(PY_REMOTE_SOURCE_NONE.rawValue))
+            bridge.setRemoteBufferMode(Int32(PY_REMOTE_BUFFER_OFF.rawValue))
+            bridge.setRemoteBufferProfile(Int32(PY_REMOTE_BUFFER_BALANCED.rawValue))
+        }
+    }
+
+    private func failPendingOpen() {
+        let fallback = "Could not open: \(pendingOpenContext?.item.displayName ?? mediaTitle)"
+        let message = bridge.lastErrorMessage()
+        openError = message.isEmpty ? fallback : message
+        mediaTitle = ""
+        audioTracks = []
+        subtitleTracks = []
+        pendingOpenContext = nil
+        deferredPlayOnReady = false
+        isPreparingPlayback = false
     }
 
     private func cancelPendingThumbnailRequest() {
@@ -436,14 +497,31 @@ class PlayerViewModel: ObservableObject {
     }
 
     private func updateSkipIntroVisibility(for positionUs: Int64) {
-        guard let marker = plexIntroMarker else {
-            showSkipIntro = false
-            return
+        updateSkipIntroVisibility(for: positionUs, deferPublishedUpdate: false)
+    }
+
+    private func updateSkipIntroVisibility(for positionUs: Int64,
+                                           deferPublishedUpdate: Bool) {
+        let visible: Bool
+        if let marker = plexIntroMarker {
+            let positionMs = max(0, positionUs / 1_000)
+            visible = positionMs >= marker.startTimeOffsetMs &&
+                positionMs < marker.endTimeOffsetMs
+        } else {
+            visible = false
         }
 
-        let positionMs = max(0, positionUs / 1_000)
-        showSkipIntro = positionMs >= marker.startTimeOffsetMs &&
-            positionMs < marker.endTimeOffsetMs
+        guard showSkipIntro != visible else { return }
+
+        if deferPublishedUpdate {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.showSkipIntro != visible else { return }
+                self.showSkipIntro = visible
+            }
+        } else {
+            showSkipIntro = visible
+        }
     }
 
     private func reportPlexTimeline(_ state: PlexTimelineState,
@@ -502,39 +580,16 @@ class PlayerViewModel: ObservableObject {
         }
     }
 
-
-    func open(item: PlaybackItem, settings: AppSettings,
-              onNextTrack: (() -> Void)? = nil,
-              onPreviousTrack: (() -> Void)? = nil) {
-        playbackEnded = false
-        playbackSpeed = 1.0
-        currentPlaybackItem = item
-        resetPlexState()
-
-        bridge.setHWDecodePref(Int32(settings.hwDecodePref))
-        bridge.setSubtitleFontScale(settings.styledSubtitleScale)
-        bridge.setSpatialAudioMode(Int32(settings.spatialAudioMode))
-        bridge.setHeadTracking(settings.headTrackingEnabled)
-        headTrackingEnabled = settings.headTrackingEnabled
-
-        switch bridge.open(path: item.path) {
-        case .success:
-            break
-        case .failure(let err):
-            let fallback = "Could not open: \(item.displayName)"
-            openError = err.message.isEmpty ? fallback : err.message
-            mediaTitle = ""
-            audioTracks = []
-            subtitleTracks = []
-            return
-        }
+    private func finishPendingOpenIfNeeded() {
+        guard let context = pendingOpenContext else { return }
+        _ = bridge.state
+        pendingOpenContext = nil
         openError = nil
-        applyPlaybackState(bridge.state)
+        isPreparingPlayback = false
         transport.duration = bridge.duration
-        isDolbyVision = playerBridge.isDolbyVision
+        isDolbyVision = (bridge as? PlayerBridge)?.isDolbyVision ?? false
 
-        bridge.setAudioPassthrough(settings.audioPassthrough)
-        passthroughEnabled = settings.audioPassthrough
+        passthroughEnabled = context.settings.audioPassthrough
         passthroughCaps = bridge.queryPassthroughSupport()
 
         bridge.setDeviceChangeCallback { [weak self] in
@@ -545,12 +600,9 @@ class PlayerViewModel: ObservableObject {
             }
         }
 
-        volume = Float(settings.volume)
-        bridge.setVolume(volume)
+        mediaTitle = context.item.displayName
 
-        mediaTitle = item.displayName
-
-        loadDisplaySettings(for: item.resumeKey)
+        loadDisplaySettings(for: context.item.resumeKey)
         transport.onCropDetected = { [weak self] crop in
             Task { @MainActor in self?.setCrop(crop) }
         }
@@ -576,17 +628,16 @@ class PlayerViewModel: ObservableObject {
             transport.videoSARDen = 1
         }
 
-        if !settings.preferredAudioLanguage.isEmpty {
-            if let match = audioTracks.first(where: { $0.language == settings.preferredAudioLanguage }) {
-                selectAudioTrack(streamIndex: match.streamIndex)
-            }
+        if !context.settings.preferredAudioLanguage.isEmpty,
+           let match = audioTracks.first(where: { $0.language == context.settings.preferredAudioLanguage }) {
+            selectAudioTrack(streamIndex: match.streamIndex)
         }
 
-        if settings.autoSelectSubtitles && !settings.preferredSubtitleLanguage.isEmpty {
-            if let match = subtitleTracks.first(where: { $0.language == settings.preferredSubtitleLanguage }) {
+        if context.settings.autoSelectSubtitles && !context.settings.preferredSubtitleLanguage.isEmpty {
+            if let match = subtitleTracks.first(where: { $0.language == context.settings.preferredSubtitleLanguage }) {
                 selectSubtitleTrack(streamIndex: match.streamIndex)
             }
-        } else if !settings.autoSelectSubtitles {
+        } else if !context.settings.autoSelectSubtitles {
             disableSubtitles()
         }
 
@@ -597,19 +648,124 @@ class PlayerViewModel: ObservableObject {
             onPlay: { [weak self] in self?.play() },
             onPause: { [weak self] in self?.pause() },
             onTogglePlayPause: { [weak self] in self?.togglePlayPause() },
+            onNextTrack: context.onNextTrack,
+            onPreviousTrack: context.onPreviousTrack
+        )
+
+        configurePlexSync(for: context.item)
+
+        if deferredPlayOnReady {
+            deferredPlayOnReady = false
+            bridge.play()
+            reportPlexTimeline(.playing, positionUs: max(currentPosition, bridge.position))
+        }
+    }
+
+    private func completeOpen(requestID: UInt64,
+                              result: Result<Void, BridgeOperationError>,
+                              fallbackDisplayName: String) {
+        guard requestID == openRequestID else { return }
+
+        openTask = nil
+        openBridgeCallPending = false
+
+        switch result {
+        case .success:
+            applyPlaybackState(bridge.state)
+            if bridge.state == Int32(PY_STATE_READY.rawValue) {
+                finishPendingOpenIfNeeded()
+            } else if bridge.state == Int32(PY_STATE_IDLE.rawValue), pendingOpenContext != nil {
+                failPendingOpen()
+            }
+        case .failure(let err):
+            let fallback = "Could not open: \(fallbackDisplayName)"
+            openError = err.message.isEmpty ? fallback : err.message
+            mediaTitle = ""
+            audioTracks = []
+            subtitleTracks = []
+            pendingOpenContext = nil
+            deferredPlayOnReady = false
+            isPreparingPlayback = false
+        }
+    }
+
+    func open(item: PlaybackItem, settings: AppSettings,
+              onNextTrack: (() -> Void)? = nil,
+              onPreviousTrack: (() -> Void)? = nil) {
+        openTask?.cancel()
+        openRequestID &+= 1
+        let requestID = openRequestID
+        playbackEnded = false
+        playbackSpeed = 1.0
+        currentPlaybackItem = item
+        resetPlexState()
+        pendingOpenContext = PendingOpenContext(
+            item: item,
+            settings: settings,
             onNextTrack: onNextTrack,
             onPreviousTrack: onPreviousTrack
         )
+        deferredPlayOnReady = false
+        openBridgeCallPending = true
+        isPreparingPlayback = true
+        prepareStatusText = item.isPlex ? settings.plexBufferMode.statusText : "Opening media..."
+        mediaTitle = item.displayName
+        audioTracks = []
+        subtitleTracks = []
+        activeAudioStream = -1
+        activeSubtitleStream = -1
+        transport.duration = 0
+        transport.currentPosition = 0
+        currentPosition = 0
+        transport.currentSubtitle = nil
+        transport.seekPreviewImage = nil
+        transport.videoWidth = 0
+        transport.videoHeight = 0
+        transport.videoSARNum = 1
+        transport.videoSARDen = 1
+        isDolbyVision = false
+        openError = nil
 
-        configurePlexSync(for: item)
+        bridge.setHWDecodePref(Int32(settings.hwDecodePref))
+        bridge.setSubtitleFontScale(settings.styledSubtitleScale)
+        bridge.setSpatialAudioMode(Int32(settings.spatialAudioMode))
+        bridge.setHeadTracking(settings.headTrackingEnabled)
+        bridge.setAudioPassthrough(settings.audioPassthrough)
+        passthroughEnabled = settings.audioPassthrough
+        volume = Float(settings.volume)
+        bridge.setVolume(volume)
+        configureRemoteBuffering(for: item, settings: settings)
+        headTrackingEnabled = settings.headTrackingEnabled
+        let path = item.path
+        let displayName = item.displayName
+        let bridge = self.bridge
+
+        openTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard !Task.isCancelled else { return }
+            let result = bridge.open(path: path)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.completeOpen(requestID: requestID,
+                                   result: result,
+                                   fallbackDisplayName: displayName)
+            }
+        }
     }
 
     func play() {
+        if pendingOpenContext != nil {
+            deferredPlayOnReady = true
+            return
+        }
         bridge.play()
         reportPlexTimeline(.playing, positionUs: max(currentPosition, bridge.position))
     }
 
     func pause() {
+        if pendingOpenContext != nil {
+            deferredPlayOnReady = false
+            return
+        }
         bridge.pause()
         reportPlexTimeline(.paused, positionUs: max(currentPosition, bridge.position))
     }
@@ -686,10 +842,17 @@ class PlayerViewModel: ObservableObject {
     }
 
     func stop(continuing: Bool = false, finished: Bool = false) {
+        openTask?.cancel()
+        openTask = nil
+        openRequestID &+= 1
+        openBridgeCallPending = false
         let finalPositionUs = max(currentPosition, bridge.position)
         finalizePlexPlayback(positionUs: finalPositionUs, continuing: continuing, finished: finished)
         cancelPendingThumbnailRequest()
         bridge.cancelSeekThumbnails()
+        pendingOpenContext = nil
+        deferredPlayOnReady = false
+        isPreparingPlayback = false
         bridge.stop()
         playbackState = Int32(PY_STATE_IDLE.rawValue)
         isPlaying = false
@@ -723,7 +886,11 @@ class PlayerViewModel: ObservableObject {
 
         let state = bridge.state
         if state != playbackState {
-            applyPlaybackState(state)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard self.playbackState != state else { return }
+                self.applyPlaybackState(state)
+            }
         }
         guard state == Int32(PY_STATE_PLAYING.rawValue) else { return }
 
@@ -735,7 +902,7 @@ class PlayerViewModel: ObservableObject {
         currentPosition = transport.currentPosition
         transport.passthroughActive = bridge.isPassthroughActive
         transport.spatialActive = bridge.isSpatialActive
-        updateSkipIntroVisibility(for: transport.currentPosition)
+        updateSkipIntroVisibility(for: transport.currentPosition, deferPublishedUpdate: true)
 
         let now = CACurrentMediaTime()
 

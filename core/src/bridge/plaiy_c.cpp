@@ -52,6 +52,7 @@ struct PYPlayer {
     py::PlayerEngine engine;
     std::string media_info_json;
     std::string last_error_msg;
+    std::mutex last_error_mutex;
     py::SeekThumbnailGenerator seek_thumbs;
     std::string video_path;
     PYDeviceChangeCallback device_cb = nullptr;
@@ -61,7 +62,13 @@ struct PYPlayer {
 };
 
 PYPlayer* py_player_create(void) {
-    return new PYPlayer();
+    auto* player = new PYPlayer();
+    player->engine.set_error_callback([player](py::Error err) {
+        int code = map_error(err.code);
+        std::lock_guard lock(player->last_error_mutex);
+        player->last_error_msg = err.message.empty() ? fallback_error_text(code) : err.message;
+    });
+    return player;
 }
 
 void py_player_destroy(PYPlayer* p) {
@@ -79,6 +86,21 @@ void py_player_set_hw_decode_pref(PYPlayer* p, int pref) {
 void py_player_set_subtitle_font_scale(PYPlayer* p, double scale) {
     if (!p) return;
     p->engine.set_subtitle_font_scale(scale);
+}
+
+void py_player_set_remote_source_kind(PYPlayer* p, int kind) {
+    if (!p) return;
+    p->engine.set_remote_source_kind(static_cast<py::RemoteSourceKind>(kind));
+}
+
+void py_player_set_remote_buffer_mode(PYPlayer* p, int mode) {
+    if (!p) return;
+    p->engine.set_remote_buffer_mode(static_cast<py::RemoteBufferMode>(mode));
+}
+
+void py_player_set_remote_buffer_profile(PYPlayer* p, int profile) {
+    if (!p) return;
+    p->engine.set_remote_buffer_profile(static_cast<py::RemoteBufferProfile>(profile));
 }
 
 // ---- Audio filters ----
@@ -132,24 +154,32 @@ int py_player_get_deinterlace_mode(PYPlayer* p) { return p ? p->engine.deinterla
 int py_player_open(PYPlayer* p, const char* path) {
     if (!p) return PY_ERROR_INVALID_ARG;
     if (!path) {
+        std::lock_guard lock(p->last_error_mutex);
         p->last_error_msg = "Path is required";
         return PY_ERROR_INVALID_ARG;
     }
 
+    {
+        std::lock_guard lock(p->last_error_mutex);
+        p->last_error_msg.clear();
+    }
     py::Error err = p->engine.open_file(path);
     if (err) {
         int code = map_error(err.code);
+        std::lock_guard lock(p->last_error_mutex);
         p->last_error_msg = err.message.empty() ? fallback_error_text(code) : err.message;
         return code;
     }
     p->video_path = path;
-    p->last_error_msg.clear();
     return PY_OK;
 }
 
 const char* py_player_get_last_error(PYPlayer* p) {
     if (!p) return "";
-    return p->last_error_msg.c_str();
+    thread_local std::string last_error_cache;
+    std::lock_guard lock(p->last_error_mutex);
+    last_error_cache = p->last_error_msg;
+    return last_error_cache.c_str();
 }
 
 void py_player_play(PYPlayer* p)  { if (p) p->engine.play(); }

@@ -1,12 +1,35 @@
 import Foundation
 
+protocol SourceManagerBridgeProtocol: AnyObject, Sendable {
+    func lastError() -> String
+
+    func addSource(_ config: SourceConfig) -> Result<Void, BridgeOperationError>
+    func removeSource(id: String)
+    var sourceCount: Int32 { get }
+    func configJSON(at index: Int32) -> String
+    func allConfigsJSON() -> String
+    func loadConfigsJSON(_ json: String) -> Bool
+
+    func connect(sourceId: String, password: String) -> Result<Void, BridgeOperationError>
+    func disconnect(sourceId: String)
+    func isConnected(sourceId: String) -> Bool
+
+    func listDirectory(sourceId: String, relativePath: String) -> [SourceEntry]
+    func playablePath(sourceId: String, entryURI: String) -> String
+}
+
 /// Swift wrapper around the C bridge for the SourceManager (plaiy_c.h py_source_* functions)
-final class SourceManagerBridge {
+final class SourceManagerBridge: @unchecked Sendable {
     private let handle: OpaquePointer
+    private let queue = DispatchQueue(label: "com.plaiy.source-manager-bridge")
 
     private static func stringFromCString(_ ptr: UnsafePointer<CChar>?) -> String {
         guard let ptr else { return "" }
         return String(cString: ptr)
+    }
+
+    private func lastErrorLocked() -> String {
+        Self.stringFromCString(py_source_get_last_error(handle))
     }
 
     init() {
@@ -14,11 +37,15 @@ final class SourceManagerBridge {
     }
 
     deinit {
-        py_source_manager_destroy(handle)
+        queue.sync {
+            py_source_manager_destroy(handle)
+        }
     }
 
     func lastError() -> String {
-        Self.stringFromCString(py_source_get_last_error(handle))
+        queue.sync {
+            lastErrorLocked()
+        }
     }
 
     // MARK: - Source CRUD
@@ -35,36 +62,46 @@ final class SourceManagerBridge {
             )
         }
 
-        let code = py_source_add(handle, jsonStr)
-        if code == Int32(PY_OK.rawValue) {
-            return .success(())
-        }
+        return queue.sync {
+            let code = py_source_add(handle, jsonStr)
+            if code == Int32(PY_OK.rawValue) {
+                return .success(())
+            }
 
-        return .failure(
-            BridgeOperationError(
-                operation: "addSource",
-                code: code,
-                message: lastError()
+            return .failure(
+                BridgeOperationError(
+                    operation: "addSource",
+                    code: code,
+                    message: lastErrorLocked()
+                )
             )
-        )
+        }
     }
 
     func removeSource(id: String) {
-        py_source_remove(handle, id)
+        _ = queue.sync {
+            py_source_remove(handle, id)
+        }
     }
 
     var sourceCount: Int32 {
-        py_source_count(handle)
+        queue.sync {
+            py_source_count(handle)
+        }
     }
 
     func configJSON(at index: Int32) -> String {
-        guard let cStr = py_source_get_config_json(handle, index) else { return "{}" }
-        return String(cString: cStr)
+        queue.sync {
+            guard let cStr = py_source_get_config_json(handle, index) else { return "{}" }
+            return String(cString: cStr)
+        }
     }
 
     func allConfigsJSON() -> String {
-        guard let cStr = py_source_all_configs_json(handle) else { return "[]" }
-        return String(cString: cStr)
+        queue.sync {
+            guard let cStr = py_source_all_configs_json(handle) else { return "[]" }
+            return String(cString: cStr)
+        }
     }
 
     static func isSourceTypeSupported(_ type: SourceType) -> Bool {
@@ -72,39 +109,49 @@ final class SourceManagerBridge {
     }
 
     func loadConfigsJSON(_ json: String) -> Bool {
-        py_source_load_configs_json(handle, json) == Int32(PY_OK.rawValue)
+        queue.sync {
+            py_source_load_configs_json(handle, json) == Int32(PY_OK.rawValue)
+        }
     }
 
     // MARK: - Connection
 
     func connect(sourceId: String, password: String) -> Result<Void, BridgeOperationError> {
-        let code = py_source_connect(handle, sourceId, password)
-        if code == Int32(PY_OK.rawValue) {
-            return .success(())
-        }
+        queue.sync {
+            let code = py_source_connect(handle, sourceId, password)
+            if code == Int32(PY_OK.rawValue) {
+                return .success(())
+            }
 
-        return .failure(
-            BridgeOperationError(
-                operation: "connect",
-                code: code,
-                message: lastError()
+            return .failure(
+                BridgeOperationError(
+                    operation: "connect",
+                    code: code,
+                    message: lastErrorLocked()
+                )
             )
-        )
+        }
     }
 
     func disconnect(sourceId: String) {
-        py_source_disconnect(handle, sourceId)
+        queue.sync {
+            py_source_disconnect(handle, sourceId)
+        }
     }
 
     func isConnected(sourceId: String) -> Bool {
-        py_source_is_connected(handle, sourceId)
+        queue.sync {
+            py_source_is_connected(handle, sourceId)
+        }
     }
 
     // MARK: - Browsing
 
     func listDirectory(sourceId: String, relativePath: String) -> [SourceEntry] {
-        guard let cStr = py_source_list_directory(handle, sourceId, relativePath) else { return [] }
-        let jsonStr = String(cString: cStr)
+        let jsonStr = queue.sync {
+            guard let cStr = py_source_list_directory(handle, sourceId, relativePath) else { return "[]" }
+            return String(cString: cStr)
+        }
         guard let data = jsonStr.data(using: .utf8) else { return [] }
 
         struct RawEntry: Decodable {
@@ -128,7 +175,11 @@ final class SourceManagerBridge {
     }
 
     func playablePath(sourceId: String, entryURI: String) -> String {
-        guard let cStr = py_source_playable_path(handle, sourceId, entryURI) else { return "" }
-        return String(cString: cStr)
+        queue.sync {
+            guard let cStr = py_source_playable_path(handle, sourceId, entryURI) else { return "" }
+            return String(cString: cStr)
+        }
     }
 }
+
+extension SourceManagerBridge: SourceManagerBridgeProtocol {}

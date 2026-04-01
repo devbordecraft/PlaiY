@@ -24,10 +24,11 @@ enum PYError {
 enum PYPlaybackState {
     PY_STATE_IDLE = 0,
     PY_STATE_OPENING = 1,
-    PY_STATE_READY = 2,
-    PY_STATE_PLAYING = 3,
-    PY_STATE_PAUSED = 4,
-    PY_STATE_STOPPED = 5,
+    PY_STATE_BUFFERING = 2,
+    PY_STATE_READY = 3,
+    PY_STATE_PLAYING = 4,
+    PY_STATE_PAUSED = 5,
+    PY_STATE_STOPPED = 6,
 };
 
 // ---- HDR type ----
@@ -44,6 +45,24 @@ enum PYHWDecodePref {
     PY_HW_DECODE_AUTO = 0,
     PY_HW_DECODE_FORCE_HW = 1,
     PY_HW_DECODE_FORCE_SW = 2,
+};
+
+// ---- Remote playback buffering ----
+enum PYRemoteSourceKind {
+    PY_REMOTE_SOURCE_NONE = 0,
+    PY_REMOTE_SOURCE_PLEX = 1,
+};
+
+enum PYRemoteBufferMode {
+    PY_REMOTE_BUFFER_OFF = 0,
+    PY_REMOTE_BUFFER_MEMORY = 1,
+    PY_REMOTE_BUFFER_DISK = 2,
+};
+
+enum PYRemoteBufferProfile {
+    PY_REMOTE_BUFFER_FAST = 0,
+    PY_REMOTE_BUFFER_BALANCED = 1,
+    PY_REMOTE_BUFFER_CONSERVATIVE = 2,
 };
 
 // ---- Opaque handles ----
@@ -69,6 +88,9 @@ void        py_player_stop(PYPlayer* p);
 // ---- Player configuration (call before py_player_open) ----
 void        py_player_set_hw_decode_pref(PYPlayer* p, int pref);
 void        py_player_set_subtitle_font_scale(PYPlayer* p, double scale);
+void        py_player_set_remote_source_kind(PYPlayer* p, int kind);
+void        py_player_set_remote_buffer_mode(PYPlayer* p, int mode);
+void        py_player_set_remote_buffer_profile(PYPlayer* p, int profile);
 
 // ---- Audio filters ----
 // Equalizer (10-band)

@@ -197,6 +197,20 @@ struct PlayerView: View {
                 )
             }
 
+            if viewModel.isPreparingPlayback {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .controlSize(.large)
+                    Text(viewModel.prepareStatusText)
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white)
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 22)
+                .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18))
+            }
+
             if viewModel.showSkipIntro {
                 VStack {
                     Spacer()

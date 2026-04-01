@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import QuartzCore
 @testable import PlaiY
 
 @MainActor
@@ -14,12 +15,52 @@ final class PlayerViewModelTests: XCTestCase {
         vm = PlayerViewModel(bridge: mock)
     }
 
+    private func waitUntil(timeout: TimeInterval = 1.0,
+                           pollIntervalNs: UInt64 = 10_000_000,
+                           _ condition: @escaping @MainActor () -> Bool) async {
+        let deadline = CACurrentMediaTime() + timeout
+        while CACurrentMediaTime() < deadline {
+            if condition() { return }
+            try? await Task.sleep(nanoseconds: pollIntervalNs)
+        }
+        XCTFail("Timed out waiting for condition")
+    }
+
     // MARK: - Play / Pause
 
     func testPlay() {
         vm.play()
         XCTAssertTrue(mock.playCalled)
         XCTAssertFalse(vm.isPlaying)
+    }
+
+    func testPlayWhilePreparingDefersBridgePlayUntilReady() async {
+        let settings = AppSettings()
+        mock.stubState = Int32(PY_STATE_OPENING.rawValue)
+        mock.stubMediaInfoJSON = #"{"tracks":[]}"#
+
+        vm.open(item: .local(path: "/tmp/test-video.mkv"), settings: settings)
+        vm.play()
+
+        XCTAssertFalse(mock.playCalled)
+
+        mock.emitState(Int32(PY_STATE_READY.rawValue))
+        await waitUntil { self.mock.playCalled }
+
+        XCTAssertTrue(mock.playCalled)
+    }
+
+    func testOpenRunsOffMainActor() async {
+        let settings = AppSettings()
+        mock.openDelay = 0.2
+
+        let start = CACurrentMediaTime()
+        vm.open(item: .local(path: "/tmp/test-video.mkv"), settings: settings)
+        let elapsed = CACurrentMediaTime() - start
+
+        XCTAssertLessThan(elapsed, 0.05)
+        XCTAssertTrue(vm.isPreparingPlayback)
+        await waitUntil { self.mock.openCallCount == 1 }
     }
 
     func testStateCallbackMarksPlaybackAsPlaying() {
@@ -241,7 +282,7 @@ final class PlayerViewModelTests: XCTestCase {
         XCTAssertEqual(vm.playbackSpeed, 1.0)
     }
 
-    func testOpenFailureSurfacesBridgeMessage() {
+    func testOpenFailureSurfacesBridgeMessage() async {
         mock.openResult = .failure(
             BridgeOperationError(
                 operation: "open",
@@ -252,11 +293,72 @@ final class PlayerViewModelTests: XCTestCase {
         let settings = AppSettings()
 
         vm.open(item: .local(path: "/tmp/test-video.mkv"), settings: settings)
+        await waitUntil { self.vm.openError != nil }
 
         XCTAssertEqual(vm.openError, "Failed to open media stream")
         XCTAssertEqual(vm.mediaTitle, "")
         XCTAssertTrue(vm.audioTracks.isEmpty)
         XCTAssertTrue(vm.subtitleTracks.isEmpty)
+    }
+
+    func testOpenPlexConfiguresBufferingAndFinishesOnReady() async {
+        let settings = AppSettings()
+        settings.plexBufferModeValue = PlexBufferMode.memory.rawValue
+        settings.plexBufferProfileValue = PlexBufferProfile.conservative.rawValue
+        mock.stubState = Int32(PY_STATE_OPENING.rawValue)
+        mock.stubDuration = 123_000_000
+        mock.stubMediaInfoJSON = """
+        {"tracks":[{"type":1,"width":1920,"height":1080,"sar_num":1,"sar_den":1}]}
+        """
+
+        let item = PlaybackItem(
+            path: "http://plex.example/library/parts/1/file?token=abc",
+            displayName: "Big Movie",
+            resumeKey: "plex:test:1",
+            plexContext: PlexPlaybackContext(
+                sourceId: "plex-source",
+                serverBaseURL: "http://plex.example",
+                ratingKey: "1",
+                key: "/library/metadata/1",
+                type: "movie",
+                initialViewOffsetMs: 0,
+                initialViewCount: 0
+            )
+        )
+
+        vm.open(item: item, settings: settings)
+
+        XCTAssertTrue(vm.isPreparingPlayback)
+        XCTAssertEqual(mock.lastRemoteSourceKind, Int32(PY_REMOTE_SOURCE_PLEX.rawValue))
+        XCTAssertEqual(mock.lastRemoteBufferMode, Int32(PY_REMOTE_BUFFER_MEMORY.rawValue))
+        XCTAssertEqual(mock.lastRemoteBufferProfile, Int32(PY_REMOTE_BUFFER_CONSERVATIVE.rawValue))
+
+        mock.emitState(Int32(PY_STATE_READY.rawValue))
+        await waitUntil {
+            self.vm.duration == 123_000_000 &&
+            self.vm.transport.videoWidth == 1920 &&
+            self.vm.transport.videoHeight == 1080
+        }
+
+        XCTAssertFalse(vm.isPreparingPlayback)
+        XCTAssertEqual(vm.mediaTitle, "Big Movie")
+        XCTAssertEqual(vm.duration, 123_000_000)
+        XCTAssertEqual(vm.transport.videoWidth, 1920)
+        XCTAssertEqual(vm.transport.videoHeight, 1080)
+    }
+
+    func testAsyncOpenFailureUsesLastErrorMessage() async {
+        let settings = AppSettings()
+        mock.stubState = Int32(PY_STATE_OPENING.rawValue)
+
+        vm.open(item: .local(path: "/tmp/test-video.mkv"), settings: settings)
+
+        mock.stubLastErrorMessage = "Network timeout"
+        mock.emitState(Int32(PY_STATE_IDLE.rawValue))
+        await waitUntil { self.vm.openError != nil }
+
+        XCTAssertEqual(vm.openError, "Network timeout")
+        XCTAssertFalse(vm.isPreparingPlayback)
     }
 
     func testTimelineLabelsUseLivePlaybackWhenInactive() {

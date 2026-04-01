@@ -17,8 +17,93 @@ private func stateChangeTrampoline(_ state: Int32, _ userdata: UnsafeMutableRawP
     cb(state)
 }
 
+private final class PlayerThreadExecutor {
+    private final class WorkItem: NSObject {
+        let operation: () -> Void
+
+        init(operation: @escaping () -> Void) {
+            self.operation = operation
+        }
+
+        @objc func run() {
+            operation()
+        }
+    }
+
+    private final class Runner: NSObject {
+        let readySemaphore = DispatchSemaphore(value: 0)
+        private let keepAlivePort = Port()
+
+        @objc func threadMain() {
+            let runLoop = RunLoop.current
+            runLoop.add(keepAlivePort, forMode: .default)
+            readySemaphore.signal()
+
+            while !Thread.current.isCancelled {
+                autoreleasepool {
+                    _ = runLoop.run(mode: .default, before: .distantFuture)
+                }
+            }
+        }
+
+        @objc func execute(_ workItem: WorkItem) {
+            workItem.run()
+        }
+
+        @objc func stopRunLoop() {
+            CFRunLoopStop(CFRunLoopGetCurrent())
+        }
+    }
+
+    private let runner = Runner()
+    private let thread: Thread
+
+    init(name: String) {
+        thread = Thread(target: runner, selector: #selector(Runner.threadMain), object: nil)
+        thread.name = name
+        thread.qualityOfService = .userInitiated
+        thread.start()
+        runner.readySemaphore.wait()
+    }
+
+    func sync<T>(_ operation: @escaping () -> T) -> T {
+        if Thread.current == thread {
+            return operation()
+        }
+
+        var result: T?
+        let workItem = WorkItem {
+            result = operation()
+        }
+        runner.perform(#selector(Runner.execute(_:)), on: thread, with: workItem, waitUntilDone: true)
+        return result!
+    }
+
+    func async(_ operation: @escaping () -> Void) {
+        if Thread.current == thread {
+            operation()
+            return
+        }
+
+        let workItem = WorkItem(operation: operation)
+        runner.perform(#selector(Runner.execute(_:)), on: thread, with: workItem, waitUntilDone: false)
+    }
+
+    func shutdown() {
+        if Thread.current == thread {
+            Thread.current.cancel()
+            CFRunLoopStop(CFRunLoopGetCurrent())
+            return
+        }
+
+        runner.perform(#selector(Runner.stopRunLoop), on: thread, with: nil, waitUntilDone: false)
+        thread.cancel()
+    }
+}
+
 /// Swift wrapper around the C bridge API (plaiy_c.h)
 final class PlayerBridge: @unchecked Sendable {
+    private let executor: PlayerThreadExecutor
     private let handle: OpaquePointer
     private var deviceCallbackContext: UnsafeMutableRawPointer?
     private var stateCallbackContext: UnsafeMutableRawPointer?
@@ -28,182 +113,462 @@ final class PlayerBridge: @unchecked Sendable {
         return String(cString: ptr)
     }
 
+    private func sync<T>(_ operation: @escaping (OpaquePointer) -> T) -> T {
+        executor.sync { operation(self.handle) }
+    }
+
+    private func async(_ operation: @escaping (OpaquePointer) -> Void) {
+        executor.async { operation(self.handle) }
+    }
+
     init() {
-        handle = py_player_create()
+        let executor = PlayerThreadExecutor(name: "com.plaiy.player-bridge")
+        self.executor = executor
+        self.handle = executor.sync {
+            py_player_create()
+        }
     }
 
     deinit {
-        if let ctx = deviceCallbackContext {
-            Unmanaged<AnyObject>.fromOpaque(ctx).release()
+        let deviceCallbackContext = deviceCallbackContext
+        let stateCallbackContext = stateCallbackContext
+
+        sync { handle in
+            py_player_set_device_change_callback(handle, nil, nil)
+            py_player_set_state_callback(handle, nil, nil)
+            if let deviceCallbackContext {
+                Unmanaged<AnyObject>.fromOpaque(deviceCallbackContext).release()
+            }
+            if let stateCallbackContext {
+                Unmanaged<AnyObject>.fromOpaque(stateCallbackContext).release()
+            }
+            py_player_destroy(handle)
         }
-        if let ctx = stateCallbackContext {
-            Unmanaged<AnyObject>.fromOpaque(ctx).release()
-        }
-        py_player_destroy(handle)
+
+        executor.shutdown()
     }
 
     func open(path: String) -> Result<Void, BridgeOperationError> {
-        let code = py_player_open(handle, path)
-        if code == Int32(PY_OK.rawValue) {
-            return .success(())
-        }
+        sync { handle in
+            let code = py_player_open(handle, path)
+            if code == Int32(PY_OK.rawValue) {
+                return .success(())
+            }
 
-        let message = Self.stringFromCString(py_player_get_last_error(handle))
-        return .failure(
-            BridgeOperationError(
-                operation: "open",
-                code: code,
-                message: message
+            let message = Self.stringFromCString(py_player_get_last_error(handle))
+            return .failure(
+                BridgeOperationError(
+                    operation: "open",
+                    code: code,
+                    message: message
+                )
             )
-        )
+        }
+    }
+
+    func lastErrorMessage() -> String {
+        sync { handle in
+            Self.stringFromCString(py_player_get_last_error(handle))
+        }
     }
 
     var isDolbyVision: Bool {
-        py_player_is_dolby_vision(handle)
+        sync { handle in
+            py_player_is_dolby_vision(handle)
+        }
     }
 
     func setDVDisplayLayer(_ layer: AVSampleBufferDisplayLayer) {
         let ptr = Unmanaged.passUnretained(layer).toOpaque()
-        py_player_set_dv_display_layer(handle, ptr)
+        async { handle in
+            py_player_set_dv_display_layer(handle, ptr)
+        }
     }
 
     func play() {
-        py_player_play(handle)
+        async { handle in
+            py_player_play(handle)
+        }
     }
 
     func pause() {
-        py_player_pause(handle)
+        async { handle in
+            py_player_pause(handle)
+        }
     }
 
     func seek(to microseconds: Int64) {
-        py_player_seek(handle, microseconds)
+        async { handle in
+            py_player_seek(handle, microseconds)
+        }
     }
 
     func stop() {
-        py_player_stop(handle)
+        async { handle in
+            py_player_stop(handle)
+        }
     }
 
     var state: Int32 {
-        py_player_get_state(handle)
+        sync { handle in
+            py_player_get_state(handle)
+        }
     }
 
     var position: Int64 {
-        py_player_get_position(handle)
+        sync { handle in
+            py_player_get_position(handle)
+        }
     }
 
     var duration: Int64 {
-        py_player_get_duration(handle)
+        sync { handle in
+            py_player_get_duration(handle)
+        }
     }
 
     var audioTrackCount: Int32 {
-        py_player_get_audio_track_count(handle)
+        sync { handle in
+            py_player_get_audio_track_count(handle)
+        }
     }
 
     var subtitleTrackCount: Int32 {
-        py_player_get_subtitle_track_count(handle)
+        sync { handle in
+            py_player_get_subtitle_track_count(handle)
+        }
     }
 
     func selectAudioTrack(_ index: Int32) {
-        py_player_select_audio_track(handle, index)
+        async { handle in
+            py_player_select_audio_track(handle, index)
+        }
     }
 
     func selectSubtitleTrack(_ index: Int32) {
-        py_player_select_subtitle_track(handle, index)
+        async { handle in
+            py_player_select_subtitle_track(handle, index)
+        }
     }
 
     var activeAudioStream: Int32 {
-        py_player_get_active_audio_stream(handle)
+        sync { handle in
+            py_player_get_active_audio_stream(handle)
+        }
     }
 
     var activeSubtitleStream: Int32 {
-        py_player_get_active_subtitle_stream(handle)
+        sync { handle in
+            py_player_get_active_subtitle_stream(handle)
+        }
     }
 
     func setHWDecodePref(_ pref: Int32) {
-        py_player_set_hw_decode_pref(handle, pref)
+        async { handle in
+            py_player_set_hw_decode_pref(handle, pref)
+        }
     }
 
     func setSubtitleFontScale(_ scale: Double) {
-        py_player_set_subtitle_font_scale(handle, scale)
+        async { handle in
+            py_player_set_subtitle_font_scale(handle, scale)
+        }
+    }
+
+    func setRemoteSourceKind(_ kind: Int32) {
+        async { handle in
+            py_player_set_remote_source_kind(handle, kind)
+        }
+    }
+
+    func setRemoteBufferMode(_ mode: Int32) {
+        async { handle in
+            py_player_set_remote_buffer_mode(handle, mode)
+        }
+    }
+
+    func setRemoteBufferProfile(_ profile: Int32) {
+        async { handle in
+            py_player_set_remote_buffer_profile(handle, profile)
+        }
     }
 
     // MARK: - Audio Filters
 
     // Equalizer
-    func setEQEnabled(_ enabled: Bool) { py_player_set_eq_enabled(handle, enabled) }
-    var isEQEnabled: Bool { py_player_is_eq_enabled(handle) }
-    func setEQBand(_ band: Int32, gain: Float) { py_player_set_eq_band(handle, band, gain) }
-    func eqBand(_ band: Int32) -> Float { py_player_get_eq_band(handle, band) }
-    func setEQPreset(_ preset: Int32) { py_player_set_eq_preset(handle, preset) }
-    var eqPreset: Int32 { py_player_get_eq_preset(handle) }
+    func setEQEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_eq_enabled(handle, enabled)
+        }
+    }
+
+    var isEQEnabled: Bool {
+        sync { handle in
+            py_player_is_eq_enabled(handle)
+        }
+    }
+
+    func setEQBand(_ band: Int32, gain: Float) {
+        async { handle in
+            py_player_set_eq_band(handle, band, gain)
+        }
+    }
+
+    func eqBand(_ band: Int32) -> Float {
+        sync { handle in
+            py_player_get_eq_band(handle, band)
+        }
+    }
+
+    func setEQPreset(_ preset: Int32) {
+        async { handle in
+            py_player_set_eq_preset(handle, preset)
+        }
+    }
+
+    var eqPreset: Int32 {
+        sync { handle in
+            py_player_get_eq_preset(handle)
+        }
+    }
 
     // Compressor
-    func setCompressorEnabled(_ enabled: Bool) { py_player_set_compressor_enabled(handle, enabled) }
-    var isCompressorEnabled: Bool { py_player_is_compressor_enabled(handle) }
-    func setCompressorThreshold(_ db: Float) { py_player_set_compressor_threshold(handle, db) }
-    func setCompressorRatio(_ ratio: Float) { py_player_set_compressor_ratio(handle, ratio) }
-    func setCompressorAttack(_ ms: Float) { py_player_set_compressor_attack(handle, ms) }
-    func setCompressorRelease(_ ms: Float) { py_player_set_compressor_release(handle, ms) }
-    func setCompressorMakeup(_ db: Float) { py_player_set_compressor_makeup(handle, db) }
+    func setCompressorEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_compressor_enabled(handle, enabled)
+        }
+    }
+
+    var isCompressorEnabled: Bool {
+        sync { handle in
+            py_player_is_compressor_enabled(handle)
+        }
+    }
+
+    func setCompressorThreshold(_ db: Float) {
+        async { handle in
+            py_player_set_compressor_threshold(handle, db)
+        }
+    }
+
+    func setCompressorRatio(_ ratio: Float) {
+        async { handle in
+            py_player_set_compressor_ratio(handle, ratio)
+        }
+    }
+
+    func setCompressorAttack(_ ms: Float) {
+        async { handle in
+            py_player_set_compressor_attack(handle, ms)
+        }
+    }
+
+    func setCompressorRelease(_ ms: Float) {
+        async { handle in
+            py_player_set_compressor_release(handle, ms)
+        }
+    }
+
+    func setCompressorMakeup(_ db: Float) {
+        async { handle in
+            py_player_set_compressor_makeup(handle, db)
+        }
+    }
 
     // Dialogue Boost
-    func setDialogueBoostEnabled(_ enabled: Bool) { py_player_set_dialogue_boost_enabled(handle, enabled) }
-    var isDialogueBoostEnabled: Bool { py_player_is_dialogue_boost_enabled(handle) }
-    func setDialogueBoostAmount(_ amount: Float) { py_player_set_dialogue_boost_amount(handle, amount) }
-    var dialogueBoostAmount: Float { py_player_get_dialogue_boost_amount(handle) }
+    func setDialogueBoostEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_dialogue_boost_enabled(handle, enabled)
+        }
+    }
+
+    var isDialogueBoostEnabled: Bool {
+        sync { handle in
+            py_player_is_dialogue_boost_enabled(handle)
+        }
+    }
+
+    func setDialogueBoostAmount(_ amount: Float) {
+        async { handle in
+            py_player_set_dialogue_boost_amount(handle, amount)
+        }
+    }
+
+    var dialogueBoostAmount: Float {
+        sync { handle in
+            py_player_get_dialogue_boost_amount(handle)
+        }
+    }
 
     // MARK: - Video Filters (GPU)
 
-    func setBrightness(_ value: Float) { py_player_set_brightness(handle, value) }
-    var brightness: Float { py_player_get_brightness(handle) }
+    func setBrightness(_ value: Float) {
+        async { handle in
+            py_player_set_brightness(handle, value)
+        }
+    }
 
-    func setContrast(_ value: Float) { py_player_set_contrast(handle, value) }
-    var contrast: Float { py_player_get_contrast(handle) }
+    var brightness: Float {
+        sync { handle in
+            py_player_get_brightness(handle)
+        }
+    }
 
-    func setSaturation(_ value: Float) { py_player_set_saturation(handle, value) }
-    var saturation: Float { py_player_get_saturation(handle) }
+    func setContrast(_ value: Float) {
+        async { handle in
+            py_player_set_contrast(handle, value)
+        }
+    }
 
-    func setSharpness(_ value: Float) { py_player_set_sharpness(handle, value) }
-    var sharpness: Float { py_player_get_sharpness(handle) }
+    var contrast: Float {
+        sync { handle in
+            py_player_get_contrast(handle)
+        }
+    }
 
-    func setDebandEnabled(_ enabled: Bool) { py_player_set_deband_enabled(handle, enabled) }
-    var isDebandEnabled: Bool { py_player_is_deband_enabled(handle) }
+    func setSaturation(_ value: Float) {
+        async { handle in
+            py_player_set_saturation(handle, value)
+        }
+    }
 
-    func setLanczosUpscaling(_ enabled: Bool) { py_player_set_lanczos_upscaling(handle, enabled) }
-    var isLanczosUpscaling: Bool { py_player_is_lanczos_upscaling(handle) }
+    var saturation: Float {
+        sync { handle in
+            py_player_get_saturation(handle)
+        }
+    }
 
-    func setFilmGrainEnabled(_ enabled: Bool) { py_player_set_film_grain_enabled(handle, enabled) }
-    var isFilmGrainEnabled: Bool { py_player_is_film_grain_enabled(handle) }
+    func setSharpness(_ value: Float) {
+        async { handle in
+            py_player_set_sharpness(handle, value)
+        }
+    }
 
-    func resetVideoAdjustments() { py_player_reset_video_adjustments(handle) }
+    var sharpness: Float {
+        sync { handle in
+            py_player_get_sharpness(handle)
+        }
+    }
+
+    func setDebandEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_deband_enabled(handle, enabled)
+        }
+    }
+
+    var isDebandEnabled: Bool {
+        sync { handle in
+            py_player_is_deband_enabled(handle)
+        }
+    }
+
+    func setLanczosUpscaling(_ enabled: Bool) {
+        async { handle in
+            py_player_set_lanczos_upscaling(handle, enabled)
+        }
+    }
+
+    var isLanczosUpscaling: Bool {
+        sync { handle in
+            py_player_is_lanczos_upscaling(handle)
+        }
+    }
+
+    func setFilmGrainEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_film_grain_enabled(handle, enabled)
+        }
+    }
+
+    var isFilmGrainEnabled: Bool {
+        sync { handle in
+            py_player_is_film_grain_enabled(handle)
+        }
+    }
+
+    func resetVideoAdjustments() {
+        async { handle in
+            py_player_reset_video_adjustments(handle)
+        }
+    }
 
     // MARK: - Video Filters (CPU: Deinterlace)
 
-    func setDeinterlaceEnabled(_ enabled: Bool) { py_player_set_deinterlace_enabled(handle, enabled) }
-    var isDeinterlaceEnabled: Bool { py_player_is_deinterlace_enabled(handle) }
-    func setDeinterlaceMode(_ mode: Int32) { py_player_set_deinterlace_mode(handle, mode) }
-    var deinterlaceMode: Int32 { py_player_get_deinterlace_mode(handle) }
+    func setDeinterlaceEnabled(_ enabled: Bool) {
+        async { handle in
+            py_player_set_deinterlace_enabled(handle, enabled)
+        }
+    }
+
+    var isDeinterlaceEnabled: Bool {
+        sync { handle in
+            py_player_is_deinterlace_enabled(handle)
+        }
+    }
+
+    func setDeinterlaceMode(_ mode: Int32) {
+        async { handle in
+            py_player_set_deinterlace_mode(handle, mode)
+        }
+    }
+
+    var deinterlaceMode: Int32 {
+        sync { handle in
+            py_player_get_deinterlace_mode(handle)
+        }
+    }
 
     func setAudioPassthrough(_ enabled: Bool) {
-        py_player_set_audio_passthrough(handle, enabled)
+        async { handle in
+            py_player_set_audio_passthrough(handle, enabled)
+        }
     }
 
     var isPassthroughActive: Bool {
-        py_player_is_passthrough_active(handle)
+        sync { handle in
+            py_player_is_passthrough_active(handle)
+        }
     }
 
     func queryPassthroughSupport() -> PYPassthroughCapabilities {
-        py_player_query_passthrough_support(handle)
+        sync { handle in
+            py_player_query_passthrough_support(handle)
+        }
+    }
+
+    func setVolume(_ volume: Float) {
+        async { handle in
+            py_player_set_volume(handle, volume)
+        }
+    }
+
+    var volume: Float {
+        sync { handle in
+            py_player_get_volume(handle)
+        }
+    }
+
+    func setMuted(_ muted: Bool) {
+        async { handle in
+            py_player_set_muted(handle, muted)
+        }
+    }
+
+    var isMuted: Bool {
+        sync { handle in
+            py_player_is_muted(handle)
+        }
     }
 
     func setDeviceChangeCallback(_ callback: @escaping () -> Void) {
-        // Release previously retained callback to avoid memory leak
         if let prev = deviceCallbackContext {
             Unmanaged<AnyObject>.fromOpaque(prev).release()
         }
         let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
         deviceCallbackContext = context
-        py_player_set_device_change_callback(handle, deviceChangeTrampoline, context)
+        sync { handle in
+            py_player_set_device_change_callback(handle, deviceChangeTrampoline, context)
+        }
     }
 
     func setStateCallback(_ callback: @escaping (Int32) -> Void) {
@@ -212,70 +577,74 @@ final class PlayerBridge: @unchecked Sendable {
         }
         let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
         stateCallbackContext = context
-        py_player_set_state_callback(handle, stateChangeTrampoline, context)
+        sync { handle in
+            py_player_set_state_callback(handle, stateChangeTrampoline, context)
+        }
     }
 
     // MARK: - Spatial audio
 
-func setSpatialAudioMode(_ mode: Int32) {
-        py_player_set_spatial_audio_mode(handle, mode)
+    func setSpatialAudioMode(_ mode: Int32) {
+        async { handle in
+            py_player_set_spatial_audio_mode(handle, mode)
+        }
     }
 
-var spatialAudioMode: Int32 {
-        py_player_get_spatial_audio_mode(handle)
+    var spatialAudioMode: Int32 {
+        sync { handle in
+            py_player_get_spatial_audio_mode(handle)
+        }
     }
 
-var isSpatialActive: Bool {
-        py_player_is_spatial_active(handle)
+    var isSpatialActive: Bool {
+        sync { handle in
+            py_player_is_spatial_active(handle)
+        }
     }
 
-func setHeadTracking(_ enabled: Bool) {
-        py_player_set_head_tracking(handle, enabled)
+    func setHeadTracking(_ enabled: Bool) {
+        async { handle in
+            py_player_set_head_tracking(handle, enabled)
+        }
     }
 
-var isHeadTracking: Bool {
-        py_player_is_head_tracking(handle)
+    var isHeadTracking: Bool {
+        sync { handle in
+            py_player_is_head_tracking(handle)
+        }
     }
 
-func setMuted(_ muted: Bool) {
-        py_player_set_muted(handle, muted)
+    func setPlaybackSpeed(_ speed: Double) {
+        async { handle in
+            py_player_set_playback_speed(handle, speed)
+        }
     }
 
-var isMuted: Bool {
-        py_player_is_muted(handle)
+    var playbackSpeed: Double {
+        sync { handle in
+            py_player_get_playback_speed(handle)
+        }
     }
 
-func setVolume(_ volume: Float) {
-        py_player_set_volume(handle, volume)
-    }
-
-var volume: Float {
-        py_player_get_volume(handle)
-    }
-
-func setPlaybackSpeed(_ speed: Double) {
-        py_player_set_playback_speed(handle, speed)
-    }
-
-var playbackSpeed: Double {
-        py_player_get_playback_speed(handle)
-    }
-
-func getPlaybackStats() -> PYPlaybackStats {
-        py_player_get_playback_stats(handle)
+    func getPlaybackStats() -> PYPlaybackStats {
+        sync { handle in
+            py_player_get_playback_stats(handle)
+        }
     }
 
     func mediaInfoJSON() -> String {
-        guard let cStr = py_player_get_media_info_json(handle) else { return "{}" }
-        return String(cString: cStr)
+        sync { handle in
+            guard let cStr = py_player_get_media_info_json(handle) else { return "{}" }
+            return String(cString: cStr)
+        }
     }
 
     // Video frame acquisition for Metal rendering
-func acquireVideoFrame(targetPts: Int64) -> UnsafeMutableRawPointer? {
+    func acquireVideoFrame(targetPts: Int64) -> UnsafeMutableRawPointer? {
         py_player_acquire_video_frame(handle, targetPts)
     }
 
-func releaseVideoFrame(_ frame: UnsafeMutableRawPointer) {
+    func releaseVideoFrame(_ frame: UnsafeMutableRawPointer) {
         py_player_release_video_frame(handle, frame)
     }
 
@@ -455,74 +824,83 @@ static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
     }
 
     // Seek preview thumbnails
-func startSeekThumbnails(interval: Int32 = 10) {
-        py_player_start_seek_thumbnails(handle, interval)
+    func startSeekThumbnails(interval: Int32 = 10) {
+        async { handle in
+            py_player_start_seek_thumbnails(handle, interval)
+        }
     }
 
-func cancelSeekThumbnails() {
-        py_player_cancel_seek_thumbnails(handle)
+    func cancelSeekThumbnails() {
+        async { handle in
+            py_player_cancel_seek_thumbnails(handle)
+        }
     }
 
     func seekThumbnail(at timestampUs: Int64) -> CGImage? {
-        var dataPtr: UnsafePointer<UInt8>?
-        var width: Int32 = 0
-        var height: Int32 = 0
-        let result = py_player_get_seek_thumbnail(handle, timestampUs, &dataPtr, &width, &height)
-        guard result == Int32(PY_OK.rawValue),
-              let data = dataPtr,
-              width > 0, height > 0 else { return nil }
+        sync { handle in
+            var dataPtr: UnsafePointer<UInt8>?
+            var width: Int32 = 0
+            var height: Int32 = 0
+            let result = py_player_get_seek_thumbnail(handle, timestampUs, &dataPtr, &width, &height)
+            guard result == Int32(PY_OK.rawValue),
+                  let data = dataPtr,
+                  width > 0, height > 0 else { return nil }
 
-        let bytesPerRow = Int(width) * 4
-        let totalBytes = bytesPerRow * Int(height)
-        let cfData = Data(bytes: data, count: totalBytes) as CFData
-        guard let provider = CGDataProvider(data: cfData) else { return nil }
+            let bytesPerRow = Int(width) * 4
+            let totalBytes = bytesPerRow * Int(height)
+            let cfData = Data(bytes: data, count: totalBytes) as CFData
+            guard let provider = CGDataProvider(data: cfData) else { return nil }
 
-        return CGImage(width: Int(width), height: Int(height),
-                       bitsPerComponent: 8, bitsPerPixel: 32,
-                       bytesPerRow: bytesPerRow,
-                       space: CGColorSpaceCreateDeviceRGB(),
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
-                       provider: provider,
-                       decode: nil, shouldInterpolate: true,
-                       intent: .defaultIntent)
+            return CGImage(width: Int(width), height: Int(height),
+                           bitsPerComponent: 8, bitsPerPixel: 32,
+                           bytesPerRow: bytesPerRow,
+                           space: CGColorSpaceCreateDeviceRGB(),
+                           bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                           provider: provider,
+                           decode: nil, shouldInterpolate: true,
+                           intent: .defaultIntent)
+        }
     }
 
-var seekThumbnailProgress: Int32 {
-        py_player_get_seek_thumbnail_progress(handle)
+    var seekThumbnailProgress: Int32 {
+        sync { handle in
+            py_player_get_seek_thumbnail_progress(handle)
+        }
     }
 
     // Subtitle
     func getSubtitle(at timestamp: Int64) -> SubtitleData? {
-        guard let sf = py_player_get_subtitle(handle, timestamp) else { return nil }
-        defer { py_subtitle_free(sf) }
+        sync { handle in
+            guard let sf = py_player_get_subtitle(handle, timestamp) else { return nil }
+            defer { py_subtitle_free(sf) }
 
-        let pointed = sf.pointee
-        if let text = pointed.text {
-            return SubtitleData.text(String(cString: text))
-        } else if let regions = pointed.regions, pointed.region_count > 0 {
-            let count = Int(pointed.region_count)
-            let buffer = UnsafeBufferPointer(start: regions, count: count)
-            let decoded = buffer.compactMap { regionPtr -> SubtitleBitmapRegion? in
-                let region = regionPtr
-                guard let rgba = region.rgba_data,
-                      region.width > 0,
-                      region.height > 0 else { return nil }
-                let size = Int(region.width) * Int(region.height) * 4
-                return SubtitleBitmapRegion(
-                    data: Data(bytes: rgba, count: size),
-                    width: Int(region.width),
-                    height: Int(region.height),
-                    x: Int(region.x),
-                    y: Int(region.y)
-                )
+            let pointed = sf.pointee
+            if let text = pointed.text {
+                return SubtitleData.text(String(cString: text))
+            } else if let regions = pointed.regions, pointed.region_count > 0 {
+                let count = Int(pointed.region_count)
+                let buffer = UnsafeBufferPointer(start: regions, count: count)
+                let decoded = buffer.compactMap { regionPtr -> SubtitleBitmapRegion? in
+                    let region = regionPtr
+                    guard let rgba = region.rgba_data,
+                          region.width > 0,
+                          region.height > 0 else { return nil }
+                    let size = Int(region.width) * Int(region.height) * 4
+                    return SubtitleBitmapRegion(
+                        data: Data(bytes: rgba, count: size),
+                        width: Int(region.width),
+                        height: Int(region.height),
+                        x: Int(region.x),
+                        y: Int(region.y)
+                    )
+                }
+                if !decoded.isEmpty {
+                    return SubtitleData.bitmap(regions: decoded)
+                }
             }
-            if !decoded.isEmpty {
-                return SubtitleData.bitmap(regions: decoded)
-            }
+            return nil
         }
-        return nil
     }
-
 }
 
 struct SubtitleBitmapRegion: Sendable {

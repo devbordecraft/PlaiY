@@ -6,17 +6,15 @@
 static constexpr const char* TAG = "HttpClient";
 
 // Delegate that accepts self-signed certificates (common for Plex servers)
-@interface PYURLSessionDelegate : NSObject <NSURLSessionDelegate>
+@interface PYURLSessionDelegate : NSObject <NSURLSessionDelegate, NSURLSessionTaskDelegate>
 @end
 
-@implementation PYURLSessionDelegate
-
-- (void)URLSession:(NSURLSession*)session
-    didReceiveChallenge:(NSURLAuthenticationChallenge*)challenge
-      completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
-                                  NSURLCredential* _Nullable))completionHandler {
-    if ([challenge.protectionSpace.authenticationMethod
-            isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+static void PYHandleAuthChallenge(NSURLAuthenticationChallenge* challenge,
+                                  void (^completionHandler)(
+                                      NSURLSessionAuthChallengeDisposition,
+                                      NSURLCredential* _Nullable)) {
+    NSString* method = challenge.protectionSpace.authenticationMethod;
+    if ([method isEqualToString:NSURLAuthenticationMethodServerTrust]) {
         SecTrustRef trust = challenge.protectionSpace.serverTrust;
         if (trust) {
             NSURLCredential* credential = [NSURLCredential credentialForTrust:trust];
@@ -24,7 +22,36 @@ static constexpr const char* TAG = "HttpClient";
             return;
         }
     }
-    completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+
+    if ([method isEqualToString:NSURLAuthenticationMethodHTTPBasic] ||
+        [method isEqualToString:NSURLAuthenticationMethodHTTPDigest] ||
+        [method isEqualToString:NSURLAuthenticationMethodNTLM] ||
+        [method isEqualToString:NSURLAuthenticationMethodNegotiate] ||
+        [method isEqualToString:NSURLAuthenticationMethodDefault]) {
+        PY_LOG_WARN(TAG, "Rejecting unexpected auth challenge: %s", [method UTF8String]);
+        completionHandler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
+        return;
+    }
+
+    PY_LOG_WARN(TAG, "Cancelling unsupported auth challenge: %s", [method UTF8String]);
+    completionHandler(NSURLSessionAuthChallengeCancelAuthenticationChallenge, nil);
+}
+
+@implementation PYURLSessionDelegate
+
+- (void)URLSession:(NSURLSession*)session
+    didReceiveChallenge:(NSURLAuthenticationChallenge*)challenge
+      completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
+                                  NSURLCredential* _Nullable))completionHandler {
+    PYHandleAuthChallenge(challenge, completionHandler);
+}
+
+- (void)URLSession:(NSURLSession*)session
+              task:(NSURLSessionTask*)task
+didReceiveChallenge:(NSURLAuthenticationChallenge*)challenge
+ completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
+                             NSURLCredential* _Nullable))completionHandler {
+    PYHandleAuthChallenge(challenge, completionHandler);
 }
 
 @end
@@ -37,6 +64,7 @@ NSHttpClient::NSHttpClient() {
         delegate_ = (__bridge_retained void*)del;
 
         NSURLSessionConfiguration* config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.URLCredentialStorage = nil;
         NSURLSession* session = [NSURLSession sessionWithConfiguration:config
                                                               delegate:del
                                                          delegateQueue:nil];

@@ -194,6 +194,9 @@ class PlexAuth: ObservableObject {
                 let relay = conn["relay"] as? Bool ?? false
                 return PlexConnection(uri: uri, local: local, relay: relay)
             }
+            .sorted { lhs, rhs in
+                connectionScore(lhs) > connectionScore(rhs)
+            }
 
             if !connections.isEmpty {
                 servers.append(PlexServer(id: clientId, name: name, accessToken: accessToken, connections: connections))
@@ -211,6 +214,20 @@ class PlexAuth: ObservableObject {
         request.setValue("PlaiY", forHTTPHeaderField: "X-Plex-Product")
         request.setValue("1.0", forHTTPHeaderField: "X-Plex-Version")
         request.setValue(platformName, forHTTPHeaderField: "X-Plex-Platform")
+    }
+
+    private func connectionScore(_ connection: PlexConnection) -> Int {
+        var score = 0
+        if connection.local {
+            score += 4
+        }
+        if !connection.relay {
+            score += 2
+        }
+        if connection.uri.lowercased().hasPrefix("http://") {
+            score += 1
+        }
+        return score
     }
 
     private var platformName: String {

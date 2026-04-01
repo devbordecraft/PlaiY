@@ -4,6 +4,8 @@ class AppSettings: ObservableObject {
     // MARK: - General
     @AppStorage("resumePlayback") var resumePlayback: Bool = true
     @AppStorage("autoplayOnOpen") var autoplayOnOpen: Bool = true
+    @AppStorage("plexBufferMode") var plexBufferModeValue: Int = PlexBufferMode.disk.rawValue
+    @AppStorage("plexBufferProfile") var plexBufferProfileValue: Int = PlexBufferProfile.balanced.rawValue
 
     // MARK: - Video
     // 0 = Auto, 1 = Force HW, 2 = Force SW
@@ -49,5 +51,15 @@ class AppSettings: ObservableObject {
         case 2: return .black.opacity(0.9)
         default: return .black.opacity(0.6)
         }
+    }
+
+    var plexBufferMode: PlexBufferMode {
+        get { PlexBufferMode(rawValue: plexBufferModeValue) ?? .disk }
+        set { plexBufferModeValue = newValue.rawValue }
+    }
+
+    var plexBufferProfile: PlexBufferProfile {
+        get { PlexBufferProfile(rawValue: plexBufferProfileValue) ?? .balanced }
+        set { plexBufferProfileValue = newValue.rawValue }
     }
 }

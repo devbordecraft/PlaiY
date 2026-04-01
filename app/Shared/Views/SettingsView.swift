@@ -58,6 +58,18 @@ struct SettingsView: View {
         Section("General") {
             Toggle("Resume Playback", isOn: $settings.resumePlayback)
             Toggle("Autoplay on Open", isOn: $settings.autoplayOnOpen)
+
+            Picker("Plex Buffer", selection: $settings.plexBufferModeValue) {
+                ForEach(PlexBufferMode.allCases, id: \.rawValue) { mode in
+                    Text(mode.title).tag(mode.rawValue)
+                }
+            }
+
+            Picker("Plex Buffer Profile", selection: $settings.plexBufferProfileValue) {
+                ForEach(PlexBufferProfile.allCases, id: \.rawValue) { profile in
+                    Text(profile.title).tag(profile.rawValue)
+                }
+            }
         }
     }
 

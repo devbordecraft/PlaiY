@@ -1,9 +1,12 @@
 #include "ff_demuxer.h"
 #include "plaiy/logger.h"
+#include <array>
+#include <string>
 
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/error.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/mastering_display_metadata.h>
 #include <libavutil/dovi_meta.h>
@@ -13,6 +16,52 @@ static constexpr const char* TAG = "FFDemuxer";
 
 namespace py {
 
+namespace {
+
+bool has_http_scheme(const std::string& path) {
+    return path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0;
+}
+
+std::string ffmpeg_error_string(int ret) {
+    std::array<char, AV_ERROR_MAX_STRING_SIZE> errbuf{};
+    av_strerror(ret, errbuf.data(), errbuf.size());
+    return std::string(errbuf.data());
+}
+
+void apply_remote_buffer_options(const RemoteBufferConfig& config,
+                                 AVDictionary** opts) {
+    if (config.mode == RemoteBufferMode::Off) {
+        return;
+    }
+
+    switch (config.profile) {
+    case RemoteBufferProfile::Fast:
+        av_dict_set(opts, "probesize", "1048576", 0);
+        av_dict_set(opts, "analyzeduration", "1000000", 0);
+        av_dict_set(opts, "fflags", "nobuffer", 0);
+        if (config.mode == RemoteBufferMode::Disk) {
+            av_dict_set(opts, "read_ahead_limit", "4194304", 0);
+        }
+        break;
+    case RemoteBufferProfile::Balanced:
+        av_dict_set(opts, "probesize", "4194304", 0);
+        av_dict_set(opts, "analyzeduration", "3000000", 0);
+        if (config.mode == RemoteBufferMode::Disk) {
+            av_dict_set(opts, "read_ahead_limit", "16777216", 0);
+        }
+        break;
+    case RemoteBufferProfile::Conservative:
+        av_dict_set(opts, "probesize", "16777216", 0);
+        av_dict_set(opts, "analyzeduration", "7000000", 0);
+        if (config.mode == RemoteBufferMode::Disk) {
+            av_dict_set(opts, "read_ahead_limit", "-1", 0);
+        }
+        break;
+    }
+}
+
+} // namespace
+
 FFDemuxer::FFDemuxer() = default;
 
 FFDemuxer::~FFDemuxer() {
@@ -21,29 +70,54 @@ FFDemuxer::~FFDemuxer() {
 
 Error FFDemuxer::open(const std::string& path) {
     close();
+    abort_requested_.store(false, std::memory_order_release);
 
-    int ret = avformat_open_input(&fmt_ctx_, path.c_str(), nullptr, nullptr);
+    fmt_ctx_ = avformat_alloc_context();
+    if (!fmt_ctx_) {
+        return {ErrorCode::OutOfMemory, "Failed to allocate format context"};
+    }
+    fmt_ctx_->interrupt_callback = AVIOInterruptCB{
+        .callback = &FFDemuxer::interrupt_callback,
+        .opaque = this,
+    };
+
+    std::string open_path = buffered_open_path_for(path);
+    AVDictionary* opts = nullptr;
+    apply_remote_buffer_options(remote_buffer_config_, &opts);
+    int ret = avformat_open_input(&fmt_ctx_, open_path.c_str(), nullptr, &opts);
+    av_dict_free(&opts);
     if (ret < 0) {
-        char errbuf[256];
-        av_strerror(ret, errbuf, sizeof(errbuf));
-        return {ErrorCode::FileNotFound, std::string("Cannot open file: ") + errbuf};
+        if (fmt_ctx_) {
+            avformat_free_context(fmt_ctx_);
+            fmt_ctx_ = nullptr;
+        }
+        info_ = {};
+        if (abort_requested_.load(std::memory_order_acquire)) {
+            return {ErrorCode::InvalidState, "Open cancelled"};
+        }
+        return {has_http_scheme(path) ? ErrorCode::NetworkError : ErrorCode::FileNotFound,
+                std::string("Cannot open file: ") + ffmpeg_error_string(ret)};
     }
 
     ret = avformat_find_stream_info(fmt_ctx_, nullptr);
     if (ret < 0) {
         close();
+        if (abort_requested_.load(std::memory_order_acquire)) {
+            return {ErrorCode::InvalidState, "Open cancelled"};
+        }
         return {ErrorCode::DemuxerError, "Failed to find stream info"};
     }
 
     populate_media_info();
     PY_LOG_INFO(TAG, "Opened: %s (%s), duration=%.2fs, %zu tracks",
-                path.c_str(), info_.container_format.c_str(),
+                open_path.c_str(), info_.container_format.c_str(),
                 static_cast<double>(info_.duration_us) / 1e6, info_.tracks.size());
 
     return Error::Ok();
 }
 
 void FFDemuxer::close() {
+    abort_requested_.store(true, std::memory_order_release);
     if (reuse_pkt_) {
         av_packet_free(&reuse_pkt_);
         reuse_pkt_ = nullptr;
@@ -71,7 +145,10 @@ Error FFDemuxer::read_packet(Packet& out) {
     int ret = av_read_frame(fmt_ctx_, reuse_pkt_);
     if (ret < 0) {
         if (ret == AVERROR_EOF) return {ErrorCode::EndOfFile};
-        return {ErrorCode::DemuxerError, "Error reading packet"};
+        if (abort_requested_.load(std::memory_order_acquire)) {
+            return {ErrorCode::InvalidState, "Read cancelled"};
+        }
+        return {ErrorCode::DemuxerError, "Error reading packet: " + ffmpeg_error_string(ret)};
     }
 
     out.stream_index = reuse_pkt_->stream_index;
@@ -110,10 +187,41 @@ Error FFDemuxer::seek(int64_t timestamp_us) {
                                   INT64_MIN, ts, INT64_MAX,
                                   0);
     if (ret < 0) {
-        return {ErrorCode::DemuxerError, "Seek failed"};
+        if (abort_requested_.load(std::memory_order_acquire)) {
+            return {ErrorCode::InvalidState, "Seek cancelled"};
+        }
+        return {ErrorCode::DemuxerError, "Seek failed: " + ffmpeg_error_string(ret)};
     }
 
     return Error::Ok();
+}
+
+void FFDemuxer::set_remote_buffer_config(RemoteBufferConfig config) {
+    remote_buffer_config_ = config;
+}
+
+void FFDemuxer::request_abort() {
+    abort_requested_.store(true, std::memory_order_release);
+}
+
+int FFDemuxer::interrupt_callback(void* opaque) {
+    auto* self = static_cast<FFDemuxer*>(opaque);
+    if (!self) return 0;
+    return self->abort_requested_.load(std::memory_order_acquire) ? 1 : 0;
+}
+
+std::string FFDemuxer::buffered_open_path_for(const std::string& path) const {
+    if (remote_buffer_config_.source_kind != RemoteSourceKind::Plex ||
+        remote_buffer_config_.mode == RemoteBufferMode::Off ||
+        !has_http_scheme(path)) {
+        return path;
+    }
+
+    if (remote_buffer_config_.mode == RemoteBufferMode::Disk) {
+        return "async:cache:" + path;
+    }
+
+    return "async:" + path;
 }
 
 void FFDemuxer::populate_media_info() {

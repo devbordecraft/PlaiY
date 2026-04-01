@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include "plaiy_c.h"
 
+#include <chrono>
 #include <string>
+#include <thread>
 
 TEST_CASE("py_player_open stores last error message for invalid path argument") {
     PYPlayer* player = py_player_create();
@@ -22,7 +24,19 @@ TEST_CASE("py_player_open stores detailed open failure message") {
     REQUIRE(player != nullptr);
 
     int rc = py_player_open(player, "/tmp/this-file-does-not-exist.mkv");
-    REQUIRE(rc != PY_OK);
+    REQUIRE((rc == PY_OK || rc == PY_ERROR_FILE_NOT_FOUND));
+
+    if (rc == PY_OK) {
+        bool reached_idle = false;
+        for (int i = 0; i < 100; i++) {
+            if (py_player_get_state(player) == PY_STATE_IDLE) {
+                reached_idle = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        REQUIRE(reached_idle);
+    }
     const char* msg = py_player_get_last_error(player);
     REQUIRE(msg != nullptr);
     REQUIRE_FALSE(std::string(msg).empty());

@@ -69,12 +69,17 @@ class SourcesViewModel: ObservableObject {
     @Published var isConnecting = false
     @Published var error: String?
 
-    let bridge: SourceManagerBridge
+    let bridge: any SourceManagerBridgeProtocol
     private let configStore: any SourceConfigStore
     private let credentialStore: any SourceCredentialStore
+    private var connectTask: Task<Void, Never>?
+    private var browseTask: Task<Void, Never>?
+    private var requestGeneration = 0
+    private var sessionPasswords: [String: String] = [:]
+    private var pendingConnectionSourceId: String?
 
     init(
-        bridge: SourceManagerBridge = SourceManagerBridge(),
+        bridge: any SourceManagerBridgeProtocol = SourceManagerBridge(),
         configStore: any SourceConfigStore = UserDefaultsSourceConfigStore(),
         credentialStore: any SourceCredentialStore = KeychainCredentialStore()
     ) {
@@ -113,6 +118,39 @@ class SourcesViewModel: ObservableObject {
         err.message.isEmpty ? fallback : err.message
     }
 
+    private func nextRequestGeneration() -> Int {
+        requestGeneration += 1
+        return requestGeneration
+    }
+
+    private func invalidatePendingRequests() {
+        requestGeneration += 1
+        pendingConnectionSourceId = nil
+        connectTask?.cancel()
+        connectTask = nil
+        browseTask?.cancel()
+        browseTask = nil
+    }
+
+    private func resolvedPassword(for sourceId: String, override: String?) -> String {
+        if let override {
+            if !override.isEmpty {
+                sessionPasswords[sourceId] = override
+            }
+            return override
+        }
+
+        if let cached = sessionPasswords[sourceId] {
+            return cached
+        }
+
+        let password = credentialStore.password(for: sourceId) ?? ""
+        if !password.isEmpty {
+            sessionPasswords[sourceId] = password
+        }
+        return password
+    }
+
     // MARK: - Source CRUD
 
     @discardableResult
@@ -127,6 +165,7 @@ class SourcesViewModel: ObservableObject {
 
         if !password.isEmpty {
             _ = credentialStore.save(password: password, for: config.id)
+            sessionPasswords[config.id] = password
         }
         refreshSourceList()
         saveSources()
@@ -136,18 +175,25 @@ class SourcesViewModel: ObservableObject {
     func addSourceAndConnect(_ config: SourceConfig, password: String) {
         let sourceId = config.id
         if addSource(config, password: password) {
-            connect(sourceId: sourceId)
+            connect(sourceId: sourceId, passwordOverride: password)
         }
     }
 
     func removeSource(id: String) {
+        let needsReset = currentSourceId == id || pendingConnectionSourceId == id
+        if needsReset {
+            invalidatePendingRequests()
+            isConnecting = false
+            isLoading = false
+        }
         bridge.disconnect(sourceId: id)
         bridge.removeSource(id: id)
         credentialStore.delete(for: id)
+        sessionPasswords.removeValue(forKey: id)
         refreshSourceList()
         saveSources()
 
-        if currentSourceId == id {
+        if needsReset {
             currentSourceId = nil
             currentEntries = []
             navigationPath = []
@@ -158,27 +204,57 @@ class SourcesViewModel: ObservableObject {
     // MARK: - Connection
 
     func connect(sourceId: String) {
+        connect(sourceId: sourceId, passwordOverride: nil)
+    }
+
+    func connect(sourceId: String, passwordOverride: String?) {
+        invalidatePendingRequests()
         isConnecting = true
+        isLoading = false
         error = nil
 
-        let password = credentialStore.password(for: sourceId) ?? ""
-        let result = bridge.connect(sourceId: sourceId, password: password)
+        let password = resolvedPassword(for: sourceId, override: passwordOverride)
+        let generation = nextRequestGeneration()
+        pendingConnectionSourceId = sourceId
+        let bridge = bridge
 
-        isConnecting = false
-        switch result {
-        case .success:
-            currentSourceId = sourceId
-            navigationPath = []
-            navigationDisplayNames = []
-            browse(sourceId: sourceId, relativePath: "")
-        case .failure(let err):
-            error = message(err, fallback: "Connection failed — check address and credentials")
+        connectTask = Task { [bridge] in
+            let result = await Task.detached(priority: .userInitiated) {
+                bridge.connect(sourceId: sourceId, password: password)
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard generation == self.requestGeneration else { return }
+                self.pendingConnectionSourceId = nil
+                self.isConnecting = false
+
+                switch result {
+                case .success:
+                    self.currentSourceId = sourceId
+                    self.navigationPath = []
+                    self.navigationDisplayNames = []
+                    self.browse(sourceId: sourceId, relativePath: "")
+                case .failure(let err):
+                    self.error = self.message(
+                        err,
+                        fallback: "Connection failed — check address and credentials"
+                    )
+                }
+            }
         }
     }
 
     func disconnect(sourceId: String) {
+        let needsReset = currentSourceId == sourceId || pendingConnectionSourceId == sourceId
+        if needsReset {
+            invalidatePendingRequests()
+            isConnecting = false
+            isLoading = false
+        }
         bridge.disconnect(sourceId: sourceId)
-        if currentSourceId == sourceId {
+        if needsReset {
             currentSourceId = nil
             currentEntries = []
             navigationPath = []
@@ -193,17 +269,32 @@ class SourcesViewModel: ObservableObject {
     // MARK: - Browsing
 
     func browse(sourceId: String, relativePath: String) {
+        browseTask?.cancel()
         isLoading = true
         error = nil
+        let generation = nextRequestGeneration()
+        let bridge = bridge
 
-        let entries = bridge.listDirectory(sourceId: sourceId, relativePath: relativePath)
-        isLoading = false
-        currentEntries = entries
+        browseTask = Task { [bridge] in
+            let entries = await Task.detached(priority: .userInitiated) {
+                bridge.listDirectory(sourceId: sourceId, relativePath: relativePath)
+            }.value
+            let bridgeError = entries.isEmpty
+                ? await Task.detached(priority: .userInitiated) {
+                    bridge.lastError()
+                }.value
+                : ""
 
-        if entries.isEmpty {
-            let bridgeError = bridge.lastError()
-            if !bridgeError.isEmpty {
-                error = bridgeError
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard generation == self.requestGeneration else { return }
+                self.isLoading = false
+                self.currentEntries = entries
+
+                if !bridgeError.isEmpty {
+                    self.error = bridgeError
+                }
             }
         }
     }

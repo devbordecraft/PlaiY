@@ -66,6 +66,9 @@ public:
 
     void set_hw_decode_preference(HWDecodePreference pref);
     void set_subtitle_font_scale(double scale);
+    void set_remote_source_kind(RemoteSourceKind kind);
+    void set_remote_buffer_mode(RemoteBufferMode mode);
+    void set_remote_buffer_profile(RemoteBufferProfile profile);
 
     // Audio filters
     // Note: Audio filters are created per decode loop. These methods set

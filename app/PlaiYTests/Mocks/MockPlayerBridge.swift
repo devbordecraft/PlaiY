@@ -6,6 +6,7 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     // MARK: - Stub return values
 
     var openResult: Result<Void, BridgeOperationError> = .success(())
+    var stubLastErrorMessage = ""
     var stubState: Int32 = 0
     var stubPosition: Int64 = 0
     var stubDuration: Int64 = 10_000_000 // 10 seconds
@@ -25,9 +26,11 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var stubMediaInfoJSON = "{\"tracks\":[]}"
     var stubSeekThumbnailProgress: Int32 = 0
     var seekThumbnailHandler: ((Int64) -> CGImage?)?
+    var openDelay: TimeInterval = 0
 
     // MARK: - Call tracking
 
+    var openCallCount = 0
     var playCalled = false
     var pauseCalled = false
     var stopCalled = false
@@ -43,10 +46,20 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var startSeekThumbnailsCalled = false
     var cancelSeekThumbnailsCalled = false
     var seekThumbnailCallCount = 0
+    var lastRemoteSourceKind: Int32?
+    var lastRemoteBufferMode: Int32?
+    var lastRemoteBufferProfile: Int32?
 
     // MARK: - PlayerBridgeProtocol
 
-    func open(path: String) -> Result<Void, BridgeOperationError> { openResult }
+    func open(path: String) -> Result<Void, BridgeOperationError> {
+        openCallCount += 1
+        if openDelay > 0 {
+            Thread.sleep(forTimeInterval: openDelay)
+        }
+        return openResult
+    }
+    func lastErrorMessage() -> String { stubLastErrorMessage }
     func play() { playCalled = true }
     func pause() { pauseCalled = true }
     func seek(to microseconds: Int64) { lastSeekTarget = microseconds }
@@ -67,6 +80,9 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
 
     func setHWDecodePref(_ pref: Int32) {}
     func setSubtitleFontScale(_ scale: Double) {}
+    func setRemoteSourceKind(_ kind: Int32) { lastRemoteSourceKind = kind }
+    func setRemoteBufferMode(_ mode: Int32) { lastRemoteBufferMode = mode }
+    func setRemoteBufferProfile(_ profile: Int32) { lastRemoteBufferProfile = profile }
 
     func setAudioPassthrough(_ enabled: Bool) { lastSetPassthrough = enabled }
     var isPassthroughActive: Bool { stubIsPassthroughActive }

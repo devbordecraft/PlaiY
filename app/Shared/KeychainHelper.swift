@@ -5,9 +5,6 @@ enum KeychainHelper {
     private static let defaultService = "com.plaiy.sources"
 
     static func save(password: String, for sourceId: String, service: String? = nil) -> Bool {
-        // Delete existing entry first
-        delete(for: sourceId, service: service)
-
         guard let data = password.data(using: .utf8) else { return false }
         let serviceName = service ?? defaultService
 
@@ -15,11 +12,24 @@ enum KeychainHelper {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: sourceId,
+        ]
+
+        let attributesToUpdate: [String: Any] = [
             kSecValueData as String: data,
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
-        return status == errSecSuccess
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributesToUpdate as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return true
+        }
+        if updateStatus != errSecItemNotFound {
+            return false
+        }
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        return addStatus == errSecSuccess
     }
 
     static func password(for sourceId: String, service: String? = nil) -> String? {

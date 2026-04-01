@@ -6,6 +6,7 @@ import CoreGraphics
 protocol PlayerBridgeProtocol: AnyObject, Sendable {
     // Lifecycle
     func open(path: String) -> Result<Void, BridgeOperationError>
+    func lastErrorMessage() -> String
     func play()
     func pause()
     func seek(to microseconds: Int64)
@@ -27,6 +28,9 @@ protocol PlayerBridgeProtocol: AnyObject, Sendable {
     // Configuration
     func setHWDecodePref(_ pref: Int32)
     func setSubtitleFontScale(_ scale: Double)
+    func setRemoteSourceKind(_ kind: Int32)
+    func setRemoteBufferMode(_ mode: Int32)
+    func setRemoteBufferProfile(_ profile: Int32)
 
     // Audio
     func setAudioPassthrough(_ enabled: Bool)
