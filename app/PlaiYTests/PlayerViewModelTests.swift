@@ -318,6 +318,7 @@ final class PlayerViewModelTests: XCTestCase {
             plexContext: PlexPlaybackContext(
                 sourceId: "plex-source",
                 serverBaseURL: "http://plex.example",
+                authToken: "plex-token",
                 ratingKey: "1",
                 key: "/library/metadata/1",
                 type: "movie",

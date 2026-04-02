@@ -14,6 +14,7 @@ TEST_CASE("SourceConfig default values") {
     REQUIRE(cfg.type == MediaSourceType::Local);
     REQUIRE(cfg.base_uri.empty());
     REQUIRE(cfg.username.empty());
+    REQUIRE(cfg.auth_token.empty());
     REQUIRE(cfg.password.empty());
 }
 
@@ -222,6 +223,21 @@ TEST_CASE("SourceManager load_configs_json roundtrips HTTP and NFS direct source
     REQUIRE(mgr.source_by_id("http-1")->type() == MediaSourceType::HTTP);
     REQUIRE(mgr.source_by_id("nfs-1") != nullptr);
     REQUIRE(mgr.source_by_id("nfs-1")->type() == MediaSourceType::NFS);
+}
+
+TEST_CASE("SourceManager load_configs_json preserves Plex auth token") {
+    SourceManager mgr;
+    Error err = mgr.load_configs_json(R"([
+        {"source_id":"plex-1","display_name":"Plex","type":"plex","base_uri":"http://127.0.0.1:32400","username":"","auth_token":"plex-token"}
+    ])");
+
+    REQUIRE(err.ok());
+    REQUIRE(mgr.source_count() == 1);
+
+    auto* src = mgr.source_by_id("plex-1");
+    REQUIRE(src != nullptr);
+    REQUIRE(src->type() == MediaSourceType::Plex);
+    REQUIRE(src->config().auth_token == "plex-token");
 }
 
 TEST_CASE("SourceManager load_configs_json rejects invalid JSON") {

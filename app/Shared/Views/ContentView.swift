@@ -129,7 +129,10 @@ struct ContentView: View {
             item: item,
             settings: settings,
             onNextTrack: playQueue.hasNext ? { [self] in skipToNext() } : nil,
-            onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil
+            onPreviousTrack: playQueue.hasPrevious ? { [self] in skipToPrevious() } : nil,
+            onPlexAuthInvalid: { sourceId in
+                sourcesVM.handlePlexAuthFailure(sourceId: sourceId)
+            }
         )
         if playerVM.openError != nil { return }
 

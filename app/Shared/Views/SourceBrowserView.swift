@@ -9,6 +9,7 @@ struct SourceBrowserView: View {
     var selectedSourceToken: UUID? = nil
 
     @State private var showAddSource = false
+    @State private var reconnectSource: SourceConfig?
 
     private let columns = [
         GridItem(.adaptive(minimum: LayoutMetrics.gridMinWidth,
@@ -20,6 +21,16 @@ struct SourceBrowserView: View {
             toolbar
             sourceSelector
             content
+        }
+        .sheet(isPresented: $showAddSource) {
+            AddSourceView(sourcesVM: sourcesVM) { showAddSource = false }
+                .frame(minWidth: 450, minHeight: 350)
+        }
+        .sheet(item: $reconnectSource) { source in
+            AddSourceView(sourcesVM: sourcesVM, reconnectSource: source) {
+                reconnectSource = nil
+            }
+            .frame(minWidth: 450, minHeight: 350)
         }
         .onAppear {
             applyPinnedSourceSelection()
@@ -78,9 +89,14 @@ struct SourceBrowserView: View {
     private func sourceChip(_ source: SourceConfig) -> some View {
         let isSelected = sourcesVM.currentSourceId == source.id
         let connected = sourcesVM.isConnected(sourceId: source.id)
+        let needsReconnect = sourcesVM.needsReconnect(sourceId: source.id)
 
         return Button {
-            sourcesVM.openSourceRoot(sourceId: source.id)
+            if source.type == .plex && needsReconnect {
+                reconnectSource = source
+            } else {
+                sourcesVM.openSourceRoot(sourceId: source.id)
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: source.type.systemImage)
@@ -89,8 +105,13 @@ struct SourceBrowserView: View {
                     .font(.subheadline)
                     .fontWeight(isSelected ? .semibold : .regular)
                 Circle()
-                    .fill(connected ? .green : .gray)
+                    .fill(needsReconnect ? .orange : (connected ? .green : .gray))
                     .frame(width: 6, height: 6)
+                if needsReconnect {
+                    Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -101,11 +122,17 @@ struct SourceBrowserView: View {
         #else
         .buttonStyle(.plain)
         .contextMenu {
-            Button(connected ? "Disconnect" : "Connect") {
-                if connected {
-                    sourcesVM.disconnect(sourceId: source.id)
-                } else {
-                    sourcesVM.connect(sourceId: source.id)
+            if source.type == .plex && needsReconnect {
+                Button("Reconnect") {
+                    reconnectSource = source
+                }
+            } else {
+                Button(connected ? "Disconnect" : "Connect") {
+                    if connected {
+                        sourcesVM.disconnect(sourceId: source.id)
+                    } else {
+                        sourcesVM.connect(sourceId: source.id)
+                    }
                 }
             }
             Button("Remove", role: .destructive) {
@@ -145,10 +172,6 @@ struct SourceBrowserView: View {
                 .buttonStyle(.borderedProminent)
             Spacer()
         }
-        .sheet(isPresented: $showAddSource) {
-            AddSourceView(sourcesVM: sourcesVM) { showAddSource = false }
-                .frame(minWidth: 450, minHeight: 350)
-        }
     }
 
     private var noSourceSelected: some View {
@@ -160,10 +183,6 @@ struct SourceBrowserView: View {
             Text("Select a source above to browse")
                 .foregroundStyle(.secondary)
             Spacer()
-        }
-        .sheet(isPresented: $showAddSource) {
-            AddSourceView(sourcesVM: sourcesVM) { showAddSource = false }
-                .frame(minWidth: 450, minHeight: 350)
         }
     }
 
@@ -249,6 +268,15 @@ struct SourceBrowserView: View {
                     Image(systemName: "exclamationmark.triangle")
                     Text(error)
                     Spacer()
+                    if let currentSourceId = sourcesVM.currentSourceId,
+                       let source = sourcesVM.sources.first(where: { $0.id == currentSourceId }),
+                       source.type == .plex,
+                       sourcesVM.needsReconnect(sourceId: currentSourceId) {
+                        Button("Reconnect") {
+                            reconnectSource = source
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     Button("Dismiss") { sourcesVM.error = nil }
                 }
                 .font(.caption)
@@ -285,10 +313,6 @@ struct SourceBrowserView: View {
                     .padding()
                 }
             }
-        }
-        .sheet(isPresented: $showAddSource) {
-            AddSourceView(sourcesVM: sourcesVM) { showAddSource = false }
-                .frame(minWidth: 450, minHeight: 350)
         }
     }
 

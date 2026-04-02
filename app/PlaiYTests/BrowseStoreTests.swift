@@ -286,6 +286,7 @@ final class BrowseStoreTests: XCTestCase {
             plexContext: PlexPlaybackContext(
                 sourceId: "plex-test",
                 serverBaseURL: "http://127.0.0.1:32400",
+                authToken: "plex-token",
                 ratingKey: "\(season)-\(episode)",
                 key: "/library/metadata/\(season)-\(episode)",
                 type: "episode",

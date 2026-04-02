@@ -233,6 +233,7 @@ struct TestFixture {
         cfg.type = MediaSourceType::Plex;
         cfg.base_uri = base_uri;
         cfg.username = username;
+        cfg.auth_token = token;
         cfg.password = token;
 
         source = std::make_unique<PlexMediaSource>(std::move(cfg), std::move(http));
@@ -294,37 +295,6 @@ TEST_CASE("PlexMediaSource connect already connected is no-op") {
     REQUIRE(f.mock->request_count == 1);
 }
 
-TEST_CASE("PlexMediaSource plex.tv login exchanges credentials for token") {
-    TestFixture f("http://192.168.1.50:32400", "mypassword", "user@example.com");
-
-    // First request: plex.tv auth
-    f.mock->enqueue(200, PLEX_TV_AUTH_JSON);
-    // Second request: resources lookup for the PMS token
-    f.mock->enqueue(200, PLEX_RESOURCES_JSON);
-    // Third request: validate token via /identity
-    f.mock->enqueue(200, IDENTITY_JSON);
-
-    Error err = f.source->connect();
-    REQUIRE(err.ok());
-    REQUIRE(f.source->is_connected());
-    REQUIRE(f.mock->request_count == 3);
-
-    REQUIRE(f.mock->last_request.url.find("X-Plex-Token=pms-token-xyz") != std::string::npos);
-}
-
-TEST_CASE("PlexMediaSource plex.tv login encodes form fields") {
-    TestFixture f("http://192.168.1.50:32400", "p@ss w+rd&=", "user+name@example.com");
-    f.mock->enqueue(200, PLEX_TV_AUTH_JSON);
-    f.mock->enqueue(200, PLEX_RESOURCES_JSON);
-    f.mock->enqueue(200, IDENTITY_JSON);
-
-    Error err = f.source->connect();
-    REQUIRE(err.ok());
-    REQUIRE(f.mock->requests.size() >= 1);
-    REQUIRE(f.mock->requests[0].body.find("user[login]=user%2Bname%40example.com") != std::string::npos);
-    REQUIRE(f.mock->requests[0].body.find("user[password]=p%40ss+w%2Brd%26%3D") != std::string::npos);
-}
-
 TEST_CASE("PlexMediaSource connect encodes token query parameter") {
     TestFixture f("http://192.168.1.50:32400", "tok+/%?=&");
     f.mock->enqueue(200, IDENTITY_JSON);
@@ -334,14 +304,13 @@ TEST_CASE("PlexMediaSource connect encodes token query parameter") {
     REQUIRE(f.mock->last_request.url.find("X-Plex-Token=tok%2B%2F%25%3F%3D%26") != std::string::npos);
 }
 
-TEST_CASE("PlexMediaSource plex.tv login with wrong credentials") {
-    TestFixture f("http://192.168.1.50:32400", "wrong", "user@example.com");
-    f.mock->enqueue(401, "");
+TEST_CASE("PlexMediaSource connect with missing token requests reconnect") {
+    TestFixture f("http://192.168.1.50:32400", "", "user@example.com");
 
     Error err = f.source->connect();
     REQUIRE(err);
-    REQUIRE(err.code == ErrorCode::NetworkError);
-    REQUIRE(err.message.find("Authentication failed") != std::string::npos);
+    REQUIRE(err.code == ErrorCode::InvalidArgument);
+    REQUIRE(err.message.find("reconnect the source") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------

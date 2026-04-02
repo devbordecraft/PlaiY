@@ -47,6 +47,7 @@ private final class MockSourceManagerBridge: SourceManagerBridgeProtocol, @unche
     private(set) var connectCallCount = 0
     private(set) var listDirectoryCallCount = 0
     private(set) var disconnectedSourceIds: [String] = []
+    private(set) var lastConnectPassword: String?
 
     func lastError() -> String {
         lastErrorMessage
@@ -102,6 +103,7 @@ private final class MockSourceManagerBridge: SourceManagerBridgeProtocol, @unche
 
     func connect(sourceId: String, password: String) -> Result<Void, BridgeOperationError> {
         connectCallCount += 1
+        lastConnectPassword = password
         if connectDelay > 0 {
             Thread.sleep(forTimeInterval: connectDelay)
         }
@@ -222,6 +224,86 @@ final class SourcesViewModelTests: XCTestCase {
         XCTAssertTrue(vm.addSource(newConfig, password: "secret"))
         XCTAssertNotNil(store.storedJSON)
         XCTAssertEqual(creds.password(for: "seed-2"), "secret")
+    }
+
+    func testLoadSavedPlexWithoutAuthTokenMarksReconnect() {
+        let seeded = """
+        [{"source_id":"plex-1","display_name":"Plex","type":"plex","base_uri":"http://127.0.0.1:32400","username":""}]
+        """
+        let store = InMemorySourceConfigStore(storedJSON: seeded)
+        let vm = SourcesViewModel(
+            bridge: MockSourceManagerBridge(),
+            configStore: store,
+            credentialStore: InMemoryCredentialStore()
+        )
+
+        vm.loadSavedSources()
+
+        XCTAssertEqual(vm.sources.count, 1)
+        XCTAssertTrue(vm.needsReconnect(sourceId: "plex-1"))
+    }
+
+    func testPlexConnectUsesStoredTokenWithoutCredentialLookup() async {
+        let store = InMemorySourceConfigStore()
+        let creds = InMemoryCredentialStore()
+        let bridge = MockSourceManagerBridge()
+        let vm = SourcesViewModel(
+            bridge: bridge,
+            configStore: store,
+            credentialStore: creds
+        )
+        let config = SourceConfig(
+            id: "plex-source",
+            displayName: "Plex",
+            type: .plex,
+            baseURI: "http://127.0.0.1:32400",
+            authToken: "plex-token"
+        )
+
+        XCTAssertTrue(vm.addSource(config, password: "plex-token"))
+        vm.connect(sourceId: config.id)
+        await waitUntil {
+            !vm.isConnecting
+        }
+
+        XCTAssertEqual(creds.passwordReadCount, 0)
+        XCTAssertNil(creds.passwords[config.id])
+        XCTAssertEqual(bridge.lastConnectPassword, "plex-token")
+        XCTAssertFalse(vm.needsReconnect(sourceId: config.id))
+    }
+
+    func testConnectFailureMarksPlexForReconnect() async {
+        let store = InMemorySourceConfigStore()
+        let creds = InMemoryCredentialStore()
+        let bridge = MockSourceManagerBridge()
+        bridge.connectResult = .failure(
+            BridgeOperationError(
+                operation: "connect",
+                code: Int32(PY_ERROR_NETWORK.rawValue),
+                message: "Authentication expired — reconnect the source"
+            )
+        )
+        let vm = SourcesViewModel(
+            bridge: bridge,
+            configStore: store,
+            credentialStore: creds
+        )
+        let config = SourceConfig(
+            id: "plex-source",
+            displayName: "Plex",
+            type: .plex,
+            baseURI: "http://127.0.0.1:32400",
+            authToken: "plex-token"
+        )
+
+        XCTAssertTrue(vm.addSource(config, password: ""))
+        vm.connect(sourceId: config.id)
+        await waitUntil {
+            !vm.isConnecting
+        }
+
+        XCTAssertTrue(vm.needsReconnect(sourceId: config.id))
+        XCTAssertEqual(creds.passwordReadCount, 0)
     }
 
     func testRemoveSourceCancelsPendingConnectBeforeBrowseStarts() async {

@@ -49,6 +49,7 @@ struct SourceConfig {
     MediaSourceType type = MediaSourceType::Local;
     std::string base_uri;       // e.g. "smb://192.168.1.50/media", "/Users/foo/Movies"
     std::string username;
+    std::string auth_token;     // persisted for Plex sources
     std::string password;       // only in-memory; persisted in Keychain on Swift side
 };
 

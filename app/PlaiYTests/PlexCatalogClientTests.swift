@@ -33,19 +33,18 @@ private final class MockPlexURLProtocol: URLProtocol {
 
 final class PlexCatalogClientTests: XCTestCase {
     private var sourceID: String!
+    private var token: String!
 
     override func setUp() {
         super.setUp()
         sourceID = "plex-test-\(UUID().uuidString)"
-        XCTAssertTrue(KeychainHelper.save(password: "test-token", for: sourceID))
+        token = "test-token"
     }
 
     override func tearDown() {
-        if let sourceID {
-            KeychainHelper.delete(for: sourceID)
-        }
         MockPlexURLProtocol.handler = nil
         sourceID = nil
+        token = nil
         super.tearDown()
     }
 
@@ -101,7 +100,7 @@ final class PlexCatalogClientTests: XCTestCase {
             }
         }
 
-        let snapshot = await client.fetchSnapshot(sources: [source])
+        let snapshot = await client.fetchSnapshot(sources: [source]).snapshot
 
         XCTAssertEqual(snapshot.movies.count, 121)
         XCTAssertEqual(snapshot.movies.first?.title, "Movie 1")
@@ -147,7 +146,7 @@ final class PlexCatalogClientTests: XCTestCase {
             }
         }
 
-        let snapshot = await client.fetchSnapshot(sources: [source])
+        let snapshot = await client.fetchSnapshot(sources: [source]).snapshot
         let alpha = try? XCTUnwrap(snapshot.shows.first(where: { $0.title == "Alpha" }))
         let zulu = try? XCTUnwrap(snapshot.shows.first(where: { $0.title == "Zulu" }))
 
@@ -204,7 +203,7 @@ final class PlexCatalogClientTests: XCTestCase {
             }
         }
 
-        let snapshot = await client.fetchSnapshot(sources: [source])
+        let snapshot = await client.fetchSnapshot(sources: [source]).snapshot
         let item = try XCTUnwrap(snapshot.movies.first)
         let poster = try XCTUnwrap(item.artwork.posterURL)
         let backdrop = try XCTUnwrap(item.artwork.backdropURL)
@@ -269,7 +268,7 @@ final class PlexCatalogClientTests: XCTestCase {
             }
         }
 
-        let snapshot = await client.fetchSnapshot(sources: [source])
+        let snapshot = await client.fetchSnapshot(sources: [source]).snapshot
         let item = try XCTUnwrap(snapshot.movies.first)
         let poster = try XCTUnwrap(item.artwork.posterURL)
         let backdrop = try XCTUnwrap(item.artwork.backdropURL)
@@ -294,7 +293,8 @@ final class PlexCatalogClientTests: XCTestCase {
             id: sourceID,
             displayName: "Plex Test",
             type: .plex,
-            baseURI: "http://127.0.0.1:32400"
+            baseURI: "http://127.0.0.1:32400",
+            authToken: token
         )
     }
 
@@ -311,8 +311,7 @@ final class PlexCatalogClientTests: XCTestCase {
     }
 
     private func resetToken(_ token: String) throws {
-        KeychainHelper.delete(for: sourceID)
-        XCTAssertTrue(KeychainHelper.save(password: token, for: sourceID))
+        self.token = token
     }
 
     private static func movieMetadata(ratingKey: Int,

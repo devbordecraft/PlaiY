@@ -15,7 +15,24 @@ private struct PlexMetadataSnapshot: Sendable {
     let introMarker: PlexMarker?
 }
 
+private enum PlexMetadataRefreshResult: Sendable {
+    case success(PlexMetadataSnapshot)
+    case unauthorized
+    case failure
+}
+
+private enum PlexSyncRequestStatus: Sendable {
+    case success
+    case unauthorized
+    case failure
+}
+
 private actor PlexSyncSession {
+    private enum PlexSyncError: Error {
+        case unauthorized
+        case badResponse
+    }
+
     private let context: PlexPlaybackContext
     private let token: String
     private let clientIdentifier: String
@@ -23,13 +40,12 @@ private actor PlexSyncSession {
     private let session: URLSession
 
     init?(context: PlexPlaybackContext) {
-        guard let token = KeychainHelper.password(for: context.sourceId),
-              !token.isEmpty else {
+        guard !context.authToken.isEmpty else {
             return nil
         }
 
         self.context = context
-        self.token = token
+        self.token = context.authToken
         self.clientIdentifier = Self.sharedClientIdentifier()
 
         let config = URLSessionConfiguration.default
@@ -37,19 +53,24 @@ private actor PlexSyncSession {
         self.session = URLSession(configuration: config)
     }
 
-    func refreshMetadata() async -> PlexMetadataSnapshot? {
-        guard let json = try? await requestJSON(
-            path: context.key,
-            method: "GET",
-            queryItems: []
-        ) else {
-            return nil
+    func refreshMetadata() async -> PlexMetadataRefreshResult {
+        let json: [String: Any]
+        do {
+            json = try await requestJSON(
+                path: context.key,
+                method: "GET",
+                queryItems: []
+            )
+        } catch PlexSyncError.unauthorized {
+            return .unauthorized
+        } catch {
+            return .failure
         }
 
         guard let mediaContainer = json["MediaContainer"] as? [String: Any],
               let metadata = mediaContainer["Metadata"] as? [[String: Any]],
               let item = metadata.first else {
-            return nil
+            return .failure
         }
 
         let viewOffsetMs = Self.int64Value(item["viewOffset"])
@@ -57,17 +78,17 @@ private actor PlexSyncSession {
         let introMarker = parseMarkers(item: item, mediaContainer: mediaContainer)
             .first(where: { $0.type.caseInsensitiveCompare("intro") == .orderedSame })
 
-        return PlexMetadataSnapshot(
+        return .success(PlexMetadataSnapshot(
             viewOffsetMs: viewOffsetMs,
             viewCount: viewCount,
             introMarker: introMarker
-        )
+        ))
     }
 
     func reportTimeline(state: PlexTimelineState,
                         positionUs: Int64,
                         durationUs: Int64,
-                        continuing: Bool = false) async -> Bool {
+                        continuing: Bool = false) async -> PlexSyncRequestStatus {
         let queryItems = [
             URLQueryItem(name: "key", value: context.key),
             URLQueryItem(name: "ratingKey", value: context.ratingKey),
@@ -79,25 +100,46 @@ private actor PlexSyncSession {
             URLQueryItem(name: "continuing", value: continuing ? "1" : "0")
         ]
 
-        return (try? await send(path: "/:/timeline", method: "POST", queryItems: queryItems)) ?? false
+        do {
+            try await send(path: "/:/timeline", method: "POST", queryItems: queryItems)
+            return .success
+        } catch PlexSyncError.unauthorized {
+            return .unauthorized
+        } catch {
+            return .failure
+        }
     }
 
-    func scrobble() async -> Bool {
+    func scrobble() async -> PlexSyncRequestStatus {
         let queryItems = [
             URLQueryItem(name: "identifier", value: "com.plexapp.plugins.library"),
             URLQueryItem(name: "key", value: context.ratingKey)
         ]
 
-        return (try? await send(path: "/:/scrobble", method: "PUT", queryItems: queryItems)) ?? false
+        do {
+            try await send(path: "/:/scrobble", method: "PUT", queryItems: queryItems)
+            return .success
+        } catch PlexSyncError.unauthorized {
+            return .unauthorized
+        } catch {
+            return .failure
+        }
     }
 
     private func send(path: String,
                       method: String,
-                      queryItems: [URLQueryItem]) async throws -> Bool {
+                      queryItems: [URLQueryItem]) async throws {
         let request = try makeRequest(path: path, method: method, queryItems: queryItems)
         let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { return false }
-        return (200 ... 299).contains(http.statusCode)
+        guard let http = response as? HTTPURLResponse else {
+            throw PlexSyncError.badResponse
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PlexSyncError.unauthorized
+        }
+        guard (200 ... 299).contains(http.statusCode) else {
+            throw PlexSyncError.badResponse
+        }
     }
 
     private func requestJSON(path: String,
@@ -105,9 +147,14 @@ private actor PlexSyncSession {
                              queryItems: [URLQueryItem]) async throws -> [String: Any] {
         let request = try makeRequest(path: path, method: method, queryItems: queryItems)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200 ... 299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        guard let http = response as? HTTPURLResponse else {
+            throw PlexSyncError.badResponse
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PlexSyncError.unauthorized
+        }
+        guard (200 ... 299).contains(http.statusCode) else {
+            throw PlexSyncError.badResponse
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -380,6 +427,7 @@ class PlayerViewModel: ObservableObject {
     private var plexSync: PlexSyncSession?
     private var plexSyncHealthy = false
     private var plexIntroMarker: PlexMarker?
+    private var onPlexAuthInvalid: ((String) -> Void)?
     private var pendingOpenContext: PendingOpenContext?
     private var deferredPlayOnReady = false
     private var openRequestID: UInt64 = 0
@@ -473,6 +521,9 @@ class PlayerViewModel: ObservableObject {
 
         guard let context = item.plexContext,
               let session = PlexSyncSession(context: context) else {
+            if let context = item.plexContext, context.authToken.isEmpty {
+                onPlexAuthInvalid?(context.sourceId)
+            }
             return
         }
 
@@ -481,17 +532,20 @@ class PlayerViewModel: ObservableObject {
 
         Task { [weak self] in
             guard let self else { return }
-            let snapshot = await session.refreshMetadata()
+            let snapshotResult = await session.refreshMetadata()
             await MainActor.run {
                 guard self.currentPlaybackItem?.id == item.id else { return }
-                guard let snapshot else {
+                switch snapshotResult {
+                case .success(let snapshot):
+                    self.plexSyncHealthy = true
+                    self.plexIntroMarker = snapshot.introMarker
+                    self.updateSkipIntroVisibility(for: self.currentPosition)
+                case .unauthorized:
                     self.plexSyncHealthy = false
-                    return
+                    self.onPlexAuthInvalid?(context.sourceId)
+                case .failure:
+                    self.plexSyncHealthy = false
                 }
-
-                self.plexSyncHealthy = true
-                self.plexIntroMarker = snapshot.introMarker
-                self.updateSkipIntroVisibility(for: self.currentPosition)
             }
         }
     }
@@ -528,19 +582,23 @@ class PlayerViewModel: ObservableObject {
                                     positionUs: Int64,
                                     continuing: Bool = false) {
         guard let plexSync else { return }
+        let sourceId = currentPlaybackItem?.plexContext?.sourceId
 
         lastPlexTimelineUpdate = CACurrentMediaTime()
         let durationUs = transport.duration
 
         Task { [weak self] in
-            let ok = await plexSync.reportTimeline(
+            let status = await plexSync.reportTimeline(
                 state: state,
                 positionUs: positionUs,
                 durationUs: durationUs,
                 continuing: continuing
             )
             await MainActor.run {
-                self?.plexSyncHealthy = ok
+                self?.plexSyncHealthy = status == .success
+                if status == .unauthorized, let sourceId {
+                    self?.onPlexAuthInvalid?(sourceId)
+                }
             }
         }
     }
@@ -549,20 +607,25 @@ class PlayerViewModel: ObservableObject {
                                       continuing: Bool,
                                       finished: Bool) {
         guard let plexSync else { return }
+        let sourceId = currentPlaybackItem?.plexContext?.sourceId
 
         lastPlexTimelineUpdate = CACurrentMediaTime()
         let durationUs = transport.duration
 
         Task { [weak self] in
-            let timelineOK = await plexSync.reportTimeline(
+            let timelineStatus = await plexSync.reportTimeline(
                 state: .stopped,
                 positionUs: positionUs,
                 durationUs: durationUs,
                 continuing: continuing
             )
-            let scrobbleOK = finished ? await plexSync.scrobble() : true
+            let scrobbleStatus = finished ? await plexSync.scrobble() : .success
             await MainActor.run {
-                self?.plexSyncHealthy = timelineOK && scrobbleOK
+                self?.plexSyncHealthy = timelineStatus == .success && scrobbleStatus == .success
+                if (timelineStatus == .unauthorized || scrobbleStatus == .unauthorized),
+                   let sourceId {
+                    self?.onPlexAuthInvalid?(sourceId)
+                }
             }
         }
     }
@@ -691,13 +754,15 @@ class PlayerViewModel: ObservableObject {
 
     func open(item: PlaybackItem, settings: AppSettings,
               onNextTrack: (() -> Void)? = nil,
-              onPreviousTrack: (() -> Void)? = nil) {
+              onPreviousTrack: (() -> Void)? = nil,
+              onPlexAuthInvalid: ((String) -> Void)? = nil) {
         openTask?.cancel()
         openRequestID &+= 1
         let requestID = openRequestID
         playbackEnded = false
         playbackSpeed = 1.0
         currentPlaybackItem = item
+        self.onPlexAuthInvalid = onPlexAuthInvalid
         resetPlexState()
         pendingOpenContext = PendingOpenContext(
             item: item,

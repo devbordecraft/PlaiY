@@ -59,6 +59,7 @@ final class SourceConfigTests: XCTestCase {
         XCTAssertEqual(config.type, .smb)
         XCTAssertEqual(config.baseURI, "smb://192.168.1.50/media")
         XCTAssertEqual(config.username, "admin")
+        XCTAssertNil(config.authToken)
     }
 
     func testSourceConfigDefaultUsername() {
@@ -83,6 +84,23 @@ final class SourceConfigTests: XCTestCase {
         XCTAssertEqual(decoded.type, .smb)
         XCTAssertEqual(decoded.baseURI, "smb://10.0.0.1/videos")
         XCTAssertEqual(decoded.username, "user1")
+        XCTAssertNil(decoded.authToken)
+    }
+
+    func testPlexSourceConfigRoundtripPreservesAuthToken() throws {
+        let original = SourceConfig(
+            id: "plex-source",
+            displayName: "Plex",
+            type: .plex,
+            baseURI: "http://127.0.0.1:32400",
+            authToken: "plex-token"
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(SourceConfig.self, from: data)
+
+        XCTAssertEqual(decoded.type, .plex)
+        XCTAssertEqual(decoded.authToken, "plex-token")
     }
 
     func testSourceConfigJSONKeys() throws {

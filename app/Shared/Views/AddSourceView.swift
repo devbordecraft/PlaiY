@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AddSourceView: View {
     @ObservedObject var sourcesVM: SourcesViewModel
+    let reconnectSource: SourceConfig?
     let onDismiss: () -> Void
 
     @State private var sourceType: SourceType = .smb
@@ -21,10 +22,20 @@ struct AddSourceView: View {
         case displayName, address, username, password
     }
 
+    init(sourcesVM: SourcesViewModel,
+         reconnectSource: SourceConfig? = nil,
+         onDismiss: @escaping () -> Void) {
+        self.sourcesVM = sourcesVM
+        self.reconnectSource = reconnectSource
+        self.onDismiss = onDismiss
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             header
-            typePicker
+            if !isReconnectFlow {
+                typePicker
+            }
 
             if sourceType == .plex && !showManualPlex {
                 plexOAuthFlow
@@ -35,14 +46,14 @@ struct AddSourceView: View {
             Spacer()
             actionButtons
         }
-        .onAppear { focusedField = .displayName }
+        .onAppear { configureInitialState() }
     }
 
     // MARK: - Header
 
     private var header: some View {
         HStack {
-            Text("Add Source")
+            Text(isReconnectFlow ? "Reconnect Plex" : "Add Source")
                 .font(.title2)
                 .fontWeight(.bold)
             Spacer()
@@ -164,7 +175,7 @@ struct AddSourceView: View {
                         displayName = server.name
                         address = server.bestURI ?? ""
                         password = server.accessToken
-                        username = "" // Token auth, no username
+                        username = ""
                     } label: {
                         HStack {
                             Image(systemName: "server.rack")
@@ -241,13 +252,12 @@ struct AddSourceView: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($focusedField, equals: .address)
                 }
-                if showsCredentialsFields {
+                if showsUsernameField {
                     GridRow {
-                        Text(sourceType == .plex ? "Email" : "Username")
+                        Text("Username")
                             .foregroundStyle(.secondary)
                             .frame(width: 80, alignment: .trailing)
-                        TextField(sourceType == .plex ? "Leave empty for token auth" : "Optional",
-                                  text: $username)
+                        TextField("Optional", text: $username)
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .username)
                     }
@@ -257,7 +267,7 @@ struct AddSourceView: View {
                         Text(sourceType == .plex ? "Token" : "Password")
                             .foregroundStyle(.secondary)
                             .frame(width: 80, alignment: .trailing)
-                        SecureField(sourceType == .plex ? "X-Plex-Token or password" : "Optional",
+                        SecureField(sourceType == .plex ? "X-Plex-Token" : "Optional",
                                     text: $password)
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .password)
@@ -267,7 +277,7 @@ struct AddSourceView: View {
                     GridRow {
                         Spacer()
                             .frame(width: 80)
-                        Text("Enter your X-Plex-Token for direct auth, or email + password for plex.tv login")
+                        Text("Enter your Plex server URL and X-Plex-Token.")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
@@ -310,7 +320,7 @@ struct AddSourceView: View {
 
             Spacer()
 
-            Button("Save") {
+            Button(isReconnectFlow ? "Reconnect" : "Save") {
                 saveSource()
             }
             .buttonStyle(.borderedProminent)
@@ -323,6 +333,9 @@ struct AddSourceView: View {
         if sourceType == .plex && !showManualPlex {
             return selectedServer != nil
         }
+        if sourceType == .plex {
+            return !address.isEmpty && !displayName.isEmpty && persistedAuthToken != nil
+        }
         return !address.isEmpty && !displayName.isEmpty
     }
 
@@ -333,6 +346,14 @@ struct AddSourceView: View {
             return showManualPlex
         }
         return sourceType != .http && sourceType != .nfs
+    }
+
+    private var showsUsernameField: Bool {
+        showsCredentialsFields && sourceType != .plex
+    }
+
+    private var isReconnectFlow: Bool {
+        reconnectSource != nil
     }
 
     private var addressPlaceholder: String {
@@ -349,14 +370,11 @@ struct AddSourceView: View {
         isTesting = true
         testResult = nil
 
-        let config = SourceConfig(
-            displayName: displayName,
-            type: sourceType,
-            baseURI: normalizedAddress,
-            username: persistedUsername
-        )
+        let config = makeSourceConfig()
 
         let tempId = config.id
+        let bridge = sourcesVM.bridge
+        let connectPassword = connectionPassword
         switch sourcesVM.bridge.addSource(config) {
         case .success:
             break
@@ -367,8 +385,8 @@ struct AddSourceView: View {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let connectResult = sourcesVM.bridge.connect(sourceId: tempId, password: persistedPassword)
-            let connected = (try? connectResult.get()) != nil && sourcesVM.bridge.isConnected(sourceId: tempId)
+            let connectResult = bridge.connect(sourceId: tempId, password: connectPassword)
+            let connected = (try? connectResult.get()) != nil && bridge.isConnected(sourceId: tempId)
             let failureMessage: String
             if case .failure(let err) = connectResult {
                 failureMessage = err.message
@@ -377,9 +395,9 @@ struct AddSourceView: View {
             }
 
             if connected {
-                sourcesVM.bridge.disconnect(sourceId: tempId)
+                bridge.disconnect(sourceId: tempId)
             }
-            sourcesVM.bridge.removeSource(id: tempId)
+            bridge.removeSource(id: tempId)
 
             DispatchQueue.main.async {
                 isTesting = false
@@ -393,15 +411,12 @@ struct AddSourceView: View {
     }
 
     private func saveSource() {
-        let config = SourceConfig(
-            displayName: displayName,
-            type: sourceType,
-            baseURI: normalizedAddress,
-            username: persistedUsername
-        )
+        let config = makeSourceConfig()
 
         let autoConnect = sourceType == .plex && !showManualPlex && selectedServer != nil
-        if autoConnect {
+        if isReconnectFlow {
+            sourcesVM.reconnectPlexSource(config)
+        } else if autoConnect {
             sourcesVM.addSourceAndConnect(config, password: persistedPassword)
         } else {
             sourcesVM.addSource(config, password: persistedPassword)
@@ -432,16 +447,51 @@ struct AddSourceView: View {
     }
 
     private var persistedUsername: String {
-        if sourceType == .http || sourceType == .nfs {
+        if sourceType == .http || sourceType == .nfs || sourceType == .plex {
             return ""
         }
         return username
     }
 
+    private var persistedAuthToken: String? {
+        guard sourceType == .plex else { return nil }
+        let token = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        return token.isEmpty ? nil : token
+    }
+
     private var persistedPassword: String {
-        if sourceType == .http || sourceType == .nfs {
+        if sourceType == .http || sourceType == .nfs || sourceType == .plex {
             return ""
         }
         return password
+    }
+
+    private var connectionPassword: String {
+        sourceType == .plex ? "" : persistedPassword
+    }
+
+    private func makeSourceConfig() -> SourceConfig {
+        SourceConfig(
+            id: reconnectSource?.id ?? UUID().uuidString,
+            displayName: displayName,
+            type: sourceType,
+            baseURI: normalizedAddress,
+            username: persistedUsername,
+            authToken: persistedAuthToken
+        )
+    }
+
+    private func configureInitialState() {
+        focusedField = .displayName
+
+        guard let reconnectSource else { return }
+
+        sourceType = .plex
+        displayName = reconnectSource.displayName
+        address = reconnectSource.baseURI
+        username = ""
+        password = ""
+        showManualPlex = false
+        focusedField = .address
     }
 }

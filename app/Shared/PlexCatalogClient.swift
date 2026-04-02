@@ -23,6 +23,11 @@ struct PlexDetailPayload: Sendable {
     let sections: [BrowseDetailSection]
 }
 
+struct PlexCatalogRefreshResult: Sendable {
+    let snapshot: PlexCatalogSnapshot
+    let invalidAuthSourceIDs: Set<String>
+}
+
 actor PlexCatalogClient {
     private struct PlexContext: Sendable {
         let config: SourceConfig
@@ -35,6 +40,17 @@ actor PlexCatalogClient {
         let type: String
     }
 
+    private struct CatalogFetchResult: Sendable {
+        let sourceID: String
+        let items: [BrowseItem]
+        let invalidAuth: Bool
+    }
+
+    private enum PlexRequestError: Error {
+        case unauthorized
+        case badResponse
+    }
+
     private let session: URLSession
 
     init(session: URLSession = {
@@ -45,15 +61,18 @@ actor PlexCatalogClient {
         self.session = session
     }
 
-    func fetchSnapshot(sources: [SourceConfig]) async -> PlexCatalogSnapshot {
+    func fetchSnapshot(sources: [SourceConfig]) async -> PlexCatalogRefreshResult {
         let contexts = sources.compactMap(Self.context(for:))
         guard !contexts.isEmpty else {
-            return PlexCatalogSnapshot(
-                movies: [],
-                shows: [],
-                continueWatching: [],
-                recentlyAdded: [],
-                itemsByID: [:]
+            return PlexCatalogRefreshResult(
+                snapshot: PlexCatalogSnapshot(
+                    movies: [],
+                    shows: [],
+                    continueWatching: [],
+                    recentlyAdded: [],
+                    itemsByID: [:]
+                ),
+                invalidAuthSourceIDs: []
             )
         }
 
@@ -61,17 +80,29 @@ actor PlexCatalogClient {
         var shows: [BrowseItem] = []
         var continueWatching: [BrowseItem] = []
         var itemsByID: [String: BrowseItem] = [:]
+        var invalidAuthSourceIDs: Set<String> = []
 
-        await withTaskGroup(of: [BrowseItem].self) { group in
+        await withTaskGroup(of: CatalogFetchResult.self) { group in
             for context in contexts {
                 group.addTask { [weak self] in
-                    guard let self else { return [] }
-                    return await self.fetchCatalogItems(for: context)
+                    guard let self else {
+                        return CatalogFetchResult(
+                            sourceID: context.config.id,
+                            items: [],
+                            invalidAuth: false
+                        )
+                    }
+                    return await self.fetchCatalogItemsResult(for: context)
                 }
             }
 
-            for await catalog in group {
-                for item in catalog {
+            for await result in group {
+                if result.invalidAuth {
+                    invalidAuthSourceIDs.insert(result.sourceID)
+                    continue
+                }
+
+                for item in result.items {
                     itemsByID[item.id] = item
                     switch item.kind {
                     case .movie:
@@ -99,12 +130,15 @@ actor PlexCatalogClient {
         let recentlyAdded = (movies + shows)
             .sorted(by: Self.recencySort)
 
-        return PlexCatalogSnapshot(
-            movies: movies.sorted(by: Self.titleSort),
-            shows: shows.sorted(by: Self.titleSort),
-            continueWatching: continueWatching.sorted(by: Self.recencySort),
-            recentlyAdded: recentlyAdded,
-            itemsByID: itemsByID
+        return PlexCatalogRefreshResult(
+            snapshot: PlexCatalogSnapshot(
+                movies: movies.sorted(by: Self.titleSort),
+                shows: shows.sorted(by: Self.titleSort),
+                continueWatching: continueWatching.sorted(by: Self.recencySort),
+                recentlyAdded: recentlyAdded,
+                itemsByID: itemsByID
+            ),
+            invalidAuthSourceIDs: invalidAuthSourceIDs
         )
     }
 
@@ -134,10 +168,10 @@ actor PlexCatalogClient {
             .sorted(by: Self.titleSort)
     }
 
-    func fetchDetail(for item: BrowseItem) async -> PlexDetailPayload? {
+    func fetchDetail(for item: BrowseItem, sources: [SourceConfig]) async -> PlexDetailPayload? {
         guard item.source == .plex,
               let sourceID = item.sourceID,
-              let source = SourceConfigStoreResolver.shared.sourceConfig(sourceID: sourceID),
+              let source = sources.first(where: { $0.id == sourceID }),
               let context = Self.context(for: source),
               let plexKey = item.plexKey ?? item.ratingKey.map({ "/library/metadata/\($0)" }) else {
             return nil
@@ -211,10 +245,19 @@ actor PlexCatalogClient {
         )
     }
 
-    private func fetchCatalogItems(for context: PlexContext) async -> [BrowseItem] {
-        guard let sectionsResponse = try? await requestJSON(path: "/library/sections", context: context) else {
-            return []
+    private func fetchCatalogItemsResult(for context: PlexContext) async -> CatalogFetchResult {
+        do {
+            let items = try await fetchCatalogItems(for: context)
+            return CatalogFetchResult(sourceID: context.config.id, items: items, invalidAuth: false)
+        } catch PlexRequestError.unauthorized {
+            return CatalogFetchResult(sourceID: context.config.id, items: [], invalidAuth: true)
+        } catch {
+            return CatalogFetchResult(sourceID: context.config.id, items: [], invalidAuth: false)
         }
+    }
+
+    private func fetchCatalogItems(for context: PlexContext) async throws -> [BrowseItem] {
+        let sectionsResponse = try await requestJSON(path: "/library/sections", context: context)
 
         let sections = directoryArray(from: sectionsResponse).compactMap { directory -> PlexSection? in
             guard let key = string(directory["key"]),
@@ -227,20 +270,27 @@ actor PlexCatalogClient {
 
         var items: [BrowseItem] = []
         for section in sections {
-            items.append(contentsOf: await fetchSectionItems(section: section, context: context))
+            items.append(contentsOf: try await fetchSectionItems(section: section, context: context))
         }
 
         return items
     }
 
-    private func fetchSectionItems(section: PlexSection, context: PlexContext) async -> [BrowseItem] {
+    private func fetchSectionItems(section: PlexSection, context: PlexContext) async throws -> [BrowseItem] {
         let pageSize = 120
         var start = 0
         var items: [BrowseItem] = []
 
         while true {
             let path = "/library/sections/\(section.key)/all?X-Plex-Container-Start=\(start)&X-Plex-Container-Size=\(pageSize)"
-            guard let response = try? await requestJSON(path: path, context: context) else { break }
+            let response: [String: Any]
+            do {
+                response = try await requestJSON(path: path, context: context)
+            } catch PlexRequestError.unauthorized {
+                throw PlexRequestError.unauthorized
+            } catch {
+                break
+            }
 
             let metadata = metadataArray(from: response)
             guard !metadata.isEmpty else { break }
@@ -283,10 +333,15 @@ actor PlexCatalogClient {
     private func requestJSON(path: String, context: PlexContext) async throws -> [String: Any] {
         let request = try makeRequest(path: path, context: context)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200 ... 299).contains(http.statusCode),
+        guard let http = response as? HTTPURLResponse else {
+            throw PlexRequestError.badResponse
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw PlexRequestError.unauthorized
+        }
+        guard (200 ... 299).contains(http.statusCode),
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw URLError(.badServerResponse)
+            throw PlexRequestError.badResponse
         }
         return json
     }
@@ -344,6 +399,7 @@ actor PlexCatalogClient {
                 plexContext: PlexPlaybackContext(
                     sourceId: context.config.id,
                     serverBaseURL: context.config.baseURI,
+                    authToken: context.token,
                     ratingKey: ratingKey ?? "",
                     key: detailKey ?? "",
                     type: type,
@@ -604,7 +660,7 @@ actor PlexCatalogClient {
 
     private static func context(for config: SourceConfig) -> PlexContext? {
         guard config.type == .plex,
-              let token = KeychainHelper.password(for: config.id),
+              let token = config.authToken,
               !token.isEmpty else {
             return nil
         }
@@ -657,24 +713,6 @@ actor PlexCatalogClient {
             return (lhs.episodeNumber ?? 0) < (rhs.episodeNumber ?? 0)
         }
         return titleSort(lhs: lhs, rhs: rhs)
-    }
-}
-
-private enum SourceConfigStoreResolver {
-    static let shared = SourceConfigLookup()
-}
-
-private final class SourceConfigLookup: @unchecked Sendable {
-    private let defaults = UserDefaults.standard
-    private let key = "savedSourceConfigs"
-
-    func sourceConfig(sourceID: String) -> SourceConfig? {
-        guard let json = defaults.string(forKey: key),
-              let data = json.data(using: .utf8),
-              let sources = try? JSONDecoder().decode([SourceConfig].self, from: data) else {
-            return nil
-        }
-        return sources.first(where: { $0.id == sourceID })
     }
 }
 

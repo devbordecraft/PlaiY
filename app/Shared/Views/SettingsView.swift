@@ -13,6 +13,7 @@ struct SettingsView: View {
     #if os(iOS)
     @State private var showFolderPicker = false
     #endif
+    @State private var reconnectSource: SourceConfig?
 
     private static let languageCodes = ["", "eng", "jpn", "fra", "deu", "spa", "ita", "por",
                                         "rus", "kor", "zho", "ara", "hin", "tha", "pol", "tur",
@@ -38,6 +39,11 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
             .padding(.vertical, 28)
+        }
+        .sheet(item: $reconnectSource) { source in
+            AddSourceView(sourcesVM: sourcesVM, reconnectSource: source) {
+                reconnectSource = nil
+            }
         }
         #if os(iOS)
         .fileImporter(isPresented: $showFolderPicker,
@@ -284,6 +290,7 @@ struct SettingsView: View {
                 }
             } else {
                 ForEach(Array(sourcesVM.sources.enumerated()), id: \.element.id) { index, source in
+                    let needsReconnect = sourcesVM.needsReconnect(sourceId: source.id)
                     if index > 0 {
                         BrowseDivider()
                     }
@@ -299,9 +306,21 @@ struct SettingsView: View {
                                     .foregroundStyle(BrowseTheme.tertiaryText)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
+                                if needsReconnect {
+                                    Text(sourcesVM.reconnectMessage(sourceId: source.id) ?? "Reconnect required")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
                             }
 
                             Spacer()
+
+                            if source.type == .plex && needsReconnect {
+                                Button("Reconnect") {
+                                    reconnectSource = source
+                                }
+                                .buttonStyle(.bordered)
+                            }
 
                             Button {
                                 sourcesVM.removeSource(id: source.id)

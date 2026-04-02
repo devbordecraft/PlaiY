@@ -46,7 +46,7 @@ static MediaSourceType source_type_from_string(const std::string& s) {
 }
 
 static json config_to_json(const SourceConfig& cfg) {
-    return {
+    json j = {
         {"source_id", cfg.source_id},
         {"display_name", cfg.display_name},
         {"type", source_type_to_string(cfg.type)},
@@ -54,6 +54,10 @@ static json config_to_json(const SourceConfig& cfg) {
         {"username", cfg.username},
         // password intentionally excluded from serialization
     };
+    if (!cfg.auth_token.empty()) {
+        j["auth_token"] = cfg.auth_token;
+    }
+    return j;
 }
 
 static SourceConfig config_from_json(const json& j) {
@@ -63,6 +67,7 @@ static SourceConfig config_from_json(const json& j) {
     cfg.type = source_type_from_string(j.value("type", "local"));
     cfg.base_uri = j.value("base_uri", "");
     cfg.username = j.value("username", "");
+    cfg.auth_token = j.value("auth_token", "");
     return cfg;
 }
 

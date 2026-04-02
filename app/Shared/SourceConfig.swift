@@ -59,6 +59,7 @@ struct SourceConfig: Identifiable, Codable, Sendable {
     var type: SourceType
     var baseURI: String
     var username: String
+    var authToken: String?
 
     enum CodingKeys: String, CodingKey {
         case id = "source_id"
@@ -66,18 +67,21 @@ struct SourceConfig: Identifiable, Codable, Sendable {
         case type
         case baseURI = "base_uri"
         case username
+        case authToken = "auth_token"
     }
 
     init(id: String = UUID().uuidString,
          displayName: String,
          type: SourceType,
          baseURI: String,
-         username: String = "") {
+         username: String = "",
+         authToken: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.type = type
         self.baseURI = baseURI
         self.username = username
+        self.authToken = authToken?.isEmpty == true ? nil : authToken
     }
 
     // Encode type as string ("plex") not integer (4) — the C++ bridge expects strings
@@ -88,6 +92,8 @@ struct SourceConfig: Identifiable, Codable, Sendable {
         try container.encode(type.jsonString, forKey: .type)
         try container.encode(baseURI, forKey: .baseURI)
         try container.encode(username, forKey: .username)
+        try container.encodeIfPresent(authToken?.isEmpty == true ? nil : authToken,
+                                      forKey: .authToken)
     }
 
     // Decode type from either string or integer for backwards compatibility
@@ -97,6 +103,10 @@ struct SourceConfig: Identifiable, Codable, Sendable {
         displayName = try container.decode(String.self, forKey: .displayName)
         baseURI = try container.decode(String.self, forKey: .baseURI)
         username = try container.decode(String.self, forKey: .username)
+        authToken = try container.decodeIfPresent(String.self, forKey: .authToken)
+        if authToken?.isEmpty == true {
+            authToken = nil
+        }
 
         if let typeStr = try? container.decode(String.self, forKey: .type) {
             type = SourceType.allCases.first { $0.jsonString == typeStr } ?? .local
@@ -153,6 +163,7 @@ struct PlexEntryMetadata: Codable, Sendable, Equatable {
 struct PlexPlaybackContext: Sendable, Equatable, Hashable {
     let sourceId: String
     let serverBaseURL: String
+    let authToken: String
     let ratingKey: String
     let key: String
     let type: String
@@ -199,6 +210,7 @@ struct PlaybackItem: Identifiable, Sendable, Equatable, Hashable {
             plexContext: PlexPlaybackContext(
                 sourceId: plexContext.sourceId,
                 serverBaseURL: plexContext.serverBaseURL,
+                authToken: plexContext.authToken,
                 ratingKey: plexContext.ratingKey,
                 key: plexContext.key,
                 type: plexContext.type,

@@ -403,7 +403,8 @@ void             py_source_manager_destroy(PYSourceManager* sm);
 // the next bridge call on the same handle or py_source_manager_destroy().
 const char*      py_source_get_last_error(PYSourceManager* sm);
 
-// Add a source from JSON config: {"source_id","display_name","type","base_uri","username"}
+// Add a source from JSON config:
+// {"source_id","display_name","type","base_uri","username","auth_token?"}
 int              py_source_add(PYSourceManager* sm, const char* config_json);
 int              py_source_remove(PYSourceManager* sm, const char* source_id);
 int              py_source_count(PYSourceManager* sm);

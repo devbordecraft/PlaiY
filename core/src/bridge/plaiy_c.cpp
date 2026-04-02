@@ -986,6 +986,7 @@ int py_source_add(PYSourceManager* sm, const char* config_json) {
         cfg.display_name = j.value("display_name", "");
         cfg.base_uri = j.value("base_uri", "");
         cfg.username = j.value("username", "");
+        cfg.auth_token = j.value("auth_token", "");
 
         std::string type_str = j.value("type", "local");
         if (type_str == "smb") cfg.type = py::MediaSourceType::SMB;
@@ -1035,6 +1036,9 @@ const char* py_source_get_config_json(PYSourceManager* sm, int index) {
     j["display_name"] = cfg.display_name;
     j["base_uri"] = cfg.base_uri;
     j["username"] = cfg.username;
+    if (!cfg.auth_token.empty()) {
+        j["auth_token"] = cfg.auth_token;
+    }
 
     switch (cfg.type) {
         case py::MediaSourceType::SMB:  j["type"] = "smb"; break;
@@ -1093,9 +1097,15 @@ int py_source_connect(PYSourceManager* sm, const char* source_id, const char* pa
                            std::string("Source not found: ") + source_id);
     }
 
-    // Inject password into config (it's not serialized)
+    // Inject secrets into the in-memory config.
     auto& cfg = const_cast<py::SourceConfig&>(src->config());
-    if (password) cfg.password = password;
+    if (src->type() == py::MediaSourceType::Plex) {
+        if (password && *password) {
+            cfg.auth_token = password;
+        }
+    } else if (password) {
+        cfg.password = password;
+    }
 
     py::Error err = src->connect();
     if (err) {

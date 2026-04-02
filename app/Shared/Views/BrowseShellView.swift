@@ -19,7 +19,7 @@ struct BrowseShellView: View {
             }.joined(separator: "|"),
             libraryVM.folders.joined(separator: "|"),
             sourcesVM.sources.map {
-                "\($0.id):\($0.displayName):\($0.type.rawValue):\($0.baseURI):\($0.username)"
+                "\($0.id):\($0.displayName):\($0.type.rawValue):\($0.baseURI):\($0.username):\($0.authToken ?? "")"
             }.joined(separator: "|")
         ].joined(separator: "||")
     }
@@ -39,7 +39,10 @@ struct BrowseShellView: View {
             browseStore.refresh(
                 libraryItems: libraryVM.items,
                 folders: libraryVM.folders,
-                sources: sourcesVM.sources
+                sources: sourcesVM.sources,
+                onPlexAuthInvalid: { sourceIds in
+                    sourcesVM.handlePlexAuthFailures(sourceIds)
+                }
             )
         }
         .sheet(isPresented: $showCustomizeHome) {
@@ -922,50 +925,24 @@ private struct BrowseItemDetailView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Synopsis")
                                 .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .fixedSize(horizontal: false, vertical: true)
                             Text(summary)
                                 .foregroundStyle(BrowseTheme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     ForEach(detailModel.sections, id: \.id) { section in
                         VStack(alignment: .leading, spacing: 12) {
                             Text(section.title)
                                 .font(.system(size: 22, weight: .bold, design: .rounded))
+                                .fixedSize(horizontal: false, vertical: true)
                             VStack(spacing: 10) {
                                 ForEach(section.items, id: \.id) { sectionItem in
-                                    Button {
+                                    BrowseDetailSectionRow(item: sectionItem) {
                                         onOpenItem(sectionItem)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            BrowseArtworkView(item: sectionItem, aspectRatio: 1.4)
-                                                .frame(width: 150)
-
-                                            VStack(alignment: .leading, spacing: 6) {
-                                                Text(sectionItem.title)
-                                                    .font(.headline)
-                                                    .multilineTextAlignment(.leading)
-                                                if let subtitle = sectionItem.subtitle {
-                                                    Text(subtitle)
-                                                        .font(.subheadline)
-                                                        .foregroundStyle(BrowseTheme.secondaryText)
-                                                }
-                                                if let metadata = sectionItem.metadataLine {
-                                                    Text(metadata)
-                                                        .font(.caption)
-                                                        .foregroundStyle(BrowseTheme.tertiaryText)
-                                                }
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .foregroundStyle(BrowseTheme.tertiaryText)
-                                        }
-                                        .padding(12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                                .fill(BrowseTheme.subduedFill)
-                                        )
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -994,53 +971,20 @@ private struct BrowseItemDetailView: View {
     private func hero(for model: BrowseDetailModel) -> some View {
         let heroShape = RoundedRectangle(cornerRadius: 30, style: .continuous)
 
-        return ZStack(alignment: .bottomLeading) {
-            if let backdropPath = model.item.artwork.backdropPath,
-               let image = platformImage(at: backdropPath) {
-                platformImageView(image)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-            } else if let backdropURL = model.item.artwork.backdropURL,
-                      let url = URL(string: backdropURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        BrowseBackdrop()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-            } else {
-                BrowseBackdrop()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
-
-            HStack(alignment: .bottom, spacing: 18) {
-                BrowseArtworkView(item: model.item, aspectRatio: 0.68)
-                    .frame(width: 180)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(model.heroTitle)
-                        .font(.system(size: 34, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
-                    if let subtitle = model.heroSubtitle {
-                        Text(subtitle)
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.86))
-                    }
-                }
-                Spacer()
-            }
-            .padding(24)
+        return ViewThatFits(in: .horizontal) {
+            heroHorizontalContent(for: model)
+            heroVerticalContent(for: model)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 320)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .bottomLeading)
+        .frame(minHeight: 320, alignment: .bottomLeading)
+        .background {
+            ZStack {
+                heroBackground(for: model)
+                LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            }
+        }
         .clipShape(heroShape)
     }
 
@@ -1051,6 +995,7 @@ private struct BrowseItemDetailView: View {
                     Text(line)
                         .font(.footnote)
                         .fontWeight(.semibold)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(BrowseTheme.elevatedFill, in: Capsule())
@@ -1060,44 +1005,16 @@ private struct BrowseItemDetailView: View {
     }
 
     private func actionRow(for model: BrowseDetailModel) -> some View {
-        let playback = browseStore.playbackItem(for: model.item, sections: model.sections)
-
-        return HStack(spacing: 12) {
-            if model.actions.contains(.resume),
-               let playback {
-                Button {
-                    onResume(playback)
-                } label: {
-                    Label(browseStore.resumeLabel(for: model.item) ?? "Resume", systemImage: "play.fill")
-                }
-                .buttonStyle(.borderedProminent)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                actionButtons(for: model)
             }
 
-            if model.actions.contains(.play),
-               let playback {
-                Button {
-                    let playback = playback.startingFromBeginning()
-                    if !playback.isPlex {
-                        browseStore.markPlaybackRestarted(playback)
-                        ResumeStore.clear(path: playback.resumeKey)
-                    }
-                    onPlay(playback)
-                } label: {
-                    Label("Play", systemImage: "play.circle.fill")
-                }
-                .buttonStyle(.bordered)
+            VStack(alignment: .leading, spacing: 12) {
+                actionButtons(for: model)
             }
-
-            Button {
-                browseStore.toggleFavorite(model.item)
-            } label: {
-                Label(
-                    browseStore.isFavorite(model.item) ? "Favorited" : "Favorite",
-                    systemImage: browseStore.isFavorite(model.item) ? "heart.fill" : "heart"
-                )
-            }
-            .buttonStyle(.bordered)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func platformImage(at path: String) -> PlatformImage? {
@@ -1119,6 +1036,227 @@ private struct BrowseItemDetailView: View {
             .resizable()
             .aspectRatio(contentMode: .fill)
         #endif
+    }
+
+    @ViewBuilder
+    private func heroBackground(for model: BrowseDetailModel) -> some View {
+        if let backdropPath = model.item.artwork.backdropPath,
+           let image = platformImage(at: backdropPath) {
+            platformImageView(image)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        } else if let backdropURL = model.item.artwork.backdropURL,
+                  let url = URL(string: backdropURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                default:
+                    BrowseBackdrop()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+        } else {
+            BrowseBackdrop()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func heroHorizontalContent(for model: BrowseDetailModel) -> some View {
+        HStack(alignment: .center, spacing: 24) {
+            heroPosterPanel(for: model)
+
+            heroTextPanel(for: model)
+                .layoutPriority(1)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func heroVerticalContent(for model: BrowseDetailModel) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            heroPosterPanel(for: model, width: 160)
+
+            heroTextPanel(for: model)
+        }
+    }
+
+    private func heroTextBlock(for model: BrowseDetailModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(model.heroTitle)
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle = model.heroSubtitle {
+                Text(subtitle)
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.86))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func heroPosterPanel(for model: BrowseDetailModel, width: CGFloat = 180) -> some View {
+        BrowseArtworkView(item: model.item, aspectRatio: 0.68)
+            .frame(width: width)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
+    }
+
+    private func heroTextPanel(for model: BrowseDetailModel) -> some View {
+        heroTextBlock(for: model)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.black.opacity(0.24))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private func actionButtons(for model: BrowseDetailModel) -> some View {
+        let playback = browseStore.playbackItem(for: model.item, sections: model.sections)
+
+        if model.actions.contains(.resume),
+           let playback {
+            Button {
+                onResume(playback)
+            } label: {
+                Label(browseStore.resumeLabel(for: model.item) ?? "Resume", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+
+        if model.actions.contains(.play),
+           let playback {
+            Button {
+                let playback = playback.startingFromBeginning()
+                if !playback.isPlex {
+                    browseStore.markPlaybackRestarted(playback)
+                    ResumeStore.clear(path: playback.resumeKey)
+                }
+                onPlay(playback)
+            } label: {
+                Label("Play", systemImage: "play.circle.fill")
+            }
+            .buttonStyle(.bordered)
+        }
+
+        Button {
+            browseStore.toggleFavorite(model.item)
+        } label: {
+            Label(
+                browseStore.isFavorite(model.item) ? "Favorited" : "Favorite",
+                systemImage: browseStore.isFavorite(model.item) ? "heart.fill" : "heart"
+            )
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
+private struct BrowseDetailSectionRow: View {
+    let item: BrowseItem
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ViewThatFits(in: .horizontal) {
+                horizontalLayout
+                verticalLayout
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 26)
+            .padding(.trailing, 20)
+            .padding(.vertical, 14)
+            .background(BrowseCardBackground(cornerRadius: 18))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var horizontalLayout: some View {
+        HStack(alignment: .center, spacing: 30) {
+            thumbnailContent(width: 150)
+
+            HStack(alignment: .center, spacing: 0) {
+                textBlock
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
+
+                Spacer(minLength: 20)
+
+                chevron
+            }
+            .padding(.vertical, 10)
+        }
+        .frame(minHeight: 122)
+    }
+
+    private var verticalLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            thumbnailContent(width: 150)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            textBlock
+                .padding(.horizontal, 4)
+
+            HStack {
+                Spacer(minLength: 0)
+                chevron
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var textBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.title)
+                .font(.headline)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle = item.subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(BrowseTheme.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let metadata = item.metadataLine {
+                Text(metadata)
+                    .font(.caption)
+                    .foregroundStyle(BrowseTheme.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    private func thumbnailContent(width: CGFloat) -> some View {
+        BrowseArtworkView(item: item, aspectRatio: 1.4)
+            .frame(width: width)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(.white.opacity(0.05), lineWidth: 1)
+            )
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .foregroundStyle(BrowseTheme.tertiaryText)
     }
 }
 

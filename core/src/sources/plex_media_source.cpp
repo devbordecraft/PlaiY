@@ -206,16 +206,11 @@ Error PlexMediaSource::connect() {
 
     playable_items_.clear();
 
-    if (!config_.username.empty()) {
-        Error err = authenticate_plex_tv();
-        if (err) return err;
-    } else {
-        auth_token_ = config_.password;
-    }
+    auth_token_ = !config_.auth_token.empty() ? config_.auth_token : config_.password;
 
     if (auth_token_.empty()) {
         return {ErrorCode::InvalidArgument,
-                "No authentication token — provide a Plex token or plex.tv credentials"};
+                "Plex token missing — reconnect the source"};
     }
 
     std::string body;
@@ -403,7 +398,7 @@ Error PlexMediaSource::fetch_json(const std::string& api_path, std::string& body
         return {ErrorCode::NetworkError,
                 "Server not reachable — " + resp.error_message};
     }
-    if (resp.status_code == 401) {
+    if (resp.status_code == 401 || resp.status_code == 403) {
         connected_ = false;
         return {ErrorCode::NetworkError,
                 "Authentication expired — reconnect the source"};

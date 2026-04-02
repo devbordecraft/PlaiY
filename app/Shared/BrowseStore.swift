@@ -68,7 +68,10 @@ final class BrowseStore: ObservableObject {
         searchTask?.cancel()
     }
 
-    func refresh(libraryItems: [LibraryItem], folders: [String], sources: [SourceConfig]) {
+    func refresh(libraryItems: [LibraryItem],
+                 folders: [String],
+                 sources: [SourceConfig],
+                 onPlexAuthInvalid: (@MainActor (Set<String>) -> Void)? = nil) {
         currentLibraryItems = libraryItems
         currentFolders = folders
         currentSources = sources
@@ -78,11 +81,12 @@ final class BrowseStore: ObservableObject {
         refreshTask?.cancel()
         refreshTask = Task { [sources] in
             await MainActor.run { self.isRefreshingPlex = true }
-            let snapshot = await plexClient.fetchSnapshot(sources: sources)
+            let result = await plexClient.fetchSnapshot(sources: sources)
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                self.plexSnapshot = snapshot
+                self.plexSnapshot = result.snapshot
                 self.isRefreshingPlex = false
+                onPlexAuthInvalid?(result.invalidAuthSourceIDs)
                 if !self.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.performSearch()
                 }
@@ -330,7 +334,7 @@ final class BrowseStore: ObservableObject {
         var model = buildBaseDetail(for: item)
         guard item.source == .plex else { return model }
 
-        if let payload = await plexClient.fetchDetail(for: item) {
+        if let payload = await plexClient.fetchDetail(for: item, sources: currentSources) {
             let resolvedItem = payload.refreshedItem ?? item
             let resolvedPlayback = playbackItem(for: resolvedItem, sections: payload.sections)
             var actions: [BrowseDetailAction] = [.favorite]

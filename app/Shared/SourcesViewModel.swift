@@ -68,6 +68,7 @@ class SourcesViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isConnecting = false
     @Published var error: String?
+    @Published private(set) var plexReconnectReasons: [String: String] = [:]
 
     let bridge: any SourceManagerBridgeProtocol
     private let configStore: any SourceConfigStore
@@ -77,6 +78,7 @@ class SourcesViewModel: ObservableObject {
     private var requestGeneration = 0
     private var sessionPasswords: [String: String] = [:]
     private var pendingConnectionSourceId: String?
+    private let missingPlexTokenMessage = "Plex token missing — reconnect the source"
 
     init(
         bridge: any SourceManagerBridgeProtocol = SourceManagerBridge(),
@@ -108,6 +110,7 @@ class SourcesViewModel: ObservableObject {
         let json = bridge.allConfigsJSON()
         guard let data = json.data(using: .utf8) else { return }
         sources = (try? JSONDecoder().decode([SourceConfig].self, from: data)) ?? []
+        syncPlexReconnectState()
     }
 
     private func sourceConfig(for sourceId: String) -> SourceConfig? {
@@ -116,6 +119,17 @@ class SourcesViewModel: ObservableObject {
 
     private func message(_ err: BridgeOperationError, fallback: String) -> String {
         err.message.isEmpty ? fallback : err.message
+    }
+
+    private func syncPlexReconnectState() {
+        let plexSourceIDs = Set(sources.filter { $0.type == .plex }.map(\.id))
+        plexReconnectReasons = plexReconnectReasons.filter { plexSourceIDs.contains($0.key) }
+
+        for source in sources where isMissingPlexToken(source) {
+            if plexReconnectReasons[source.id] == nil {
+                plexReconnectReasons[source.id] = missingPlexTokenMessage
+            }
+        }
     }
 
     private func nextRequestGeneration() -> Int {
@@ -132,7 +146,18 @@ class SourcesViewModel: ObservableObject {
         browseTask = nil
     }
 
-    private func resolvedPassword(for sourceId: String, override: String?) -> String {
+    private func resolvedCredential(for sourceId: String, override: String?) -> String {
+        guard let config = sourceConfig(for: sourceId) else {
+            return override ?? ""
+        }
+
+        if config.type == .plex {
+            if let override, !override.isEmpty {
+                return override
+            }
+            return config.authToken ?? ""
+        }
+
         if let override {
             if !override.isEmpty {
                 sessionPasswords[sourceId] = override
@@ -151,6 +176,41 @@ class SourcesViewModel: ObservableObject {
         return password
     }
 
+    private func isMissingPlexToken(_ config: SourceConfig) -> Bool {
+        config.type == .plex && (config.authToken?.isEmpty ?? true)
+    }
+
+    private func markPlexReconnectRequired(sourceId: String, reason: String? = nil) {
+        if let config = sourceConfig(for: sourceId), config.type != .plex {
+            return
+        }
+        plexReconnectReasons[sourceId] = reason?.isEmpty == false ? reason : missingPlexTokenMessage
+    }
+
+    private func clearPlexReconnectRequired(sourceId: String) {
+        plexReconnectReasons.removeValue(forKey: sourceId)
+    }
+
+    private func isPlexReconnectError(sourceId: String, message: String) -> Bool {
+        guard let config = sourceConfig(for: sourceId), config.type == .plex else { return false }
+        let lowered = message.lowercased()
+        return lowered.contains("reconnect the source") ||
+            lowered.contains("authentication expired") ||
+            lowered.contains("plex token missing")
+    }
+
+    private func persistCredential(for config: SourceConfig, password: String) {
+        if config.type == .plex {
+            credentialStore.delete(for: config.id)
+            sessionPasswords.removeValue(forKey: config.id)
+            return
+        }
+
+        guard !password.isEmpty else { return }
+        _ = credentialStore.save(password: password, for: config.id)
+        sessionPasswords[config.id] = password
+    }
+
     // MARK: - Source CRUD
 
     @discardableResult
@@ -163,9 +223,11 @@ class SourcesViewModel: ObservableObject {
             return false
         }
 
-        if !password.isEmpty {
-            _ = credentialStore.save(password: password, for: config.id)
-            sessionPasswords[config.id] = password
+        persistCredential(for: config, password: password)
+        if isMissingPlexToken(config) {
+            markPlexReconnectRequired(sourceId: config.id)
+        } else {
+            clearPlexReconnectRequired(sourceId: config.id)
         }
         refreshSourceList()
         saveSources()
@@ -175,7 +237,38 @@ class SourcesViewModel: ObservableObject {
     func addSourceAndConnect(_ config: SourceConfig, password: String) {
         let sourceId = config.id
         if addSource(config, password: password) {
-            connect(sourceId: sourceId, passwordOverride: password)
+            connect(
+                sourceId: sourceId,
+                passwordOverride: config.type == .plex ? nil : password
+            )
+        }
+    }
+
+    func reconnectPlexSource(_ config: SourceConfig) {
+        let needsReset = currentSourceId == config.id || pendingConnectionSourceId == config.id
+        if needsReset {
+            invalidatePendingRequests()
+            isConnecting = false
+            isLoading = false
+            currentSourceId = nil
+            currentEntries = []
+            navigationPath = []
+            navigationDisplayNames = []
+        }
+
+        bridge.disconnect(sourceId: config.id)
+        bridge.removeSource(id: config.id)
+
+        switch bridge.addSource(config) {
+        case .success:
+            persistCredential(for: config, password: "")
+            clearPlexReconnectRequired(sourceId: config.id)
+            refreshSourceList()
+            saveSources()
+            connect(sourceId: config.id, passwordOverride: nil)
+        case .failure(let err):
+            markPlexReconnectRequired(sourceId: config.id, reason: message(err, fallback: missingPlexTokenMessage))
+            error = message(err, fallback: "Failed to reconnect Plex source")
         }
     }
 
@@ -190,6 +283,7 @@ class SourcesViewModel: ObservableObject {
         bridge.removeSource(id: id)
         credentialStore.delete(for: id)
         sessionPasswords.removeValue(forKey: id)
+        clearPlexReconnectRequired(sourceId: id)
         refreshSourceList()
         saveSources()
 
@@ -208,6 +302,11 @@ class SourcesViewModel: ObservableObject {
     }
 
     func openSourceRoot(sourceId: String) {
+        if needsReconnect(sourceId: sourceId) {
+            error = reconnectMessage(sourceId: sourceId) ?? missingPlexTokenMessage
+            return
+        }
+
         if isConnected(sourceId: sourceId) {
             currentSourceId = sourceId
             navigationPath = []
@@ -220,18 +319,27 @@ class SourcesViewModel: ObservableObject {
 
     func connect(sourceId: String, passwordOverride: String?) {
         invalidatePendingRequests()
+
+        if let config = sourceConfig(for: sourceId), isMissingPlexToken(config) {
+            markPlexReconnectRequired(sourceId: sourceId)
+            isConnecting = false
+            isLoading = false
+            error = missingPlexTokenMessage
+            return
+        }
+
         isConnecting = true
         isLoading = false
         error = nil
 
-        let password = resolvedPassword(for: sourceId, override: passwordOverride)
+        let credential = resolvedCredential(for: sourceId, override: passwordOverride)
         let generation = nextRequestGeneration()
         pendingConnectionSourceId = sourceId
         let bridge = bridge
 
         connectTask = Task { [bridge] in
             let result = await Task.detached(priority: .userInitiated) {
-                bridge.connect(sourceId: sourceId, password: password)
+                bridge.connect(sourceId: sourceId, password: credential)
             }.value
 
             guard !Task.isCancelled else { return }
@@ -243,11 +351,19 @@ class SourcesViewModel: ObservableObject {
 
                 switch result {
                 case .success:
+                    self.clearPlexReconnectRequired(sourceId: sourceId)
                     self.currentSourceId = sourceId
                     self.navigationPath = []
                     self.navigationDisplayNames = []
                     self.browse(sourceId: sourceId, relativePath: "")
                 case .failure(let err):
+                    let errorMessage = self.message(
+                        err,
+                        fallback: "Connection failed — check address and credentials"
+                    )
+                    if self.isPlexReconnectError(sourceId: sourceId, message: errorMessage) {
+                        self.markPlexReconnectRequired(sourceId: sourceId, reason: errorMessage)
+                    }
                     self.error = self.message(
                         err,
                         fallback: "Connection failed — check address and credentials"
@@ -304,6 +420,9 @@ class SourcesViewModel: ObservableObject {
                 self.currentEntries = entries
 
                 if !bridgeError.isEmpty {
+                    if self.isPlexReconnectError(sourceId: sourceId, message: bridgeError) {
+                        self.markPlexReconnectRequired(sourceId: sourceId, reason: bridgeError)
+                    }
                     self.error = bridgeError
                 }
             }
@@ -375,6 +494,7 @@ class SourcesViewModel: ObservableObject {
             plexContext: PlexPlaybackContext(
                 sourceId: sourceId,
                 serverBaseURL: config.baseURI,
+                authToken: config.authToken ?? "",
                 ratingKey: plex.ratingKey,
                 key: plex.key,
                 type: plex.type,
@@ -382,6 +502,25 @@ class SourcesViewModel: ObservableObject {
                 initialViewCount: plex.viewCount
             )
         )
+    }
+
+    func needsReconnect(sourceId: String) -> Bool {
+        plexReconnectReasons[sourceId] != nil
+    }
+
+    func reconnectMessage(sourceId: String) -> String? {
+        plexReconnectReasons[sourceId]
+    }
+
+    func handlePlexAuthFailures(_ sourceIds: Set<String>) {
+        for sourceId in sourceIds {
+            markPlexReconnectRequired(sourceId: sourceId,
+                                      reason: "Authentication expired — reconnect the source")
+        }
+    }
+
+    func handlePlexAuthFailure(sourceId: String) {
+        handlePlexAuthFailures(Set([sourceId]))
     }
 
     func currentPlaybackItems() -> [PlaybackItem] {
