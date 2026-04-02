@@ -25,7 +25,14 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var stubPlaybackStats = PYPlaybackStats()
     var stubMediaInfoJSON = "{\"tracks\":[]}"
     var stubSeekThumbnailProgress: Int32 = 0
+    var stubSubtitleRevision: UInt64 = 0
+    var stubTransportState: Int32?
+    var stubTransportPosition: Int64?
+    var stubTransportIsPassthroughActive: Bool?
+    var stubTransportIsSpatialActive: Bool?
+    var stubTransportSubtitleRevision: UInt64?
     var seekThumbnailHandler: ((Int64) -> CGImage?)?
+    var subtitleFrameHandler: ((Int64) -> ResolvedSubtitle?)?
     var openDelay: TimeInterval = 0
 
     // MARK: - Call tracking
@@ -46,6 +53,9 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var startSeekThumbnailsCalled = false
     var cancelSeekThumbnailsCalled = false
     var seekThumbnailCallCount = 0
+    var transportSnapshotCallCount = 0
+    var subtitleFrameCallCount = 0
+    var lastSubtitleFrameTimestamp: Int64?
     var lastRemoteSourceKind: Int32?
     var lastRemoteBufferMode: Int32?
     var lastRemoteBufferProfile: Int32?
@@ -68,6 +78,16 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     var state: Int32 { stubState }
     var position: Int64 { stubPosition }
     var duration: Int64 { stubDuration }
+    func getTransportSnapshot() -> PlayerTransportSnapshot {
+        transportSnapshotCallCount += 1
+        PlayerTransportSnapshot(
+            state: stubTransportState ?? stubState,
+            positionUs: stubTransportPosition ?? stubPosition,
+            isPassthroughActive: stubTransportIsPassthroughActive ?? stubIsPassthroughActive,
+            isSpatialActive: stubTransportIsSpatialActive ?? stubIsSpatialActive,
+            subtitleRevision: stubTransportSubtitleRevision ?? stubSubtitleRevision
+        )
+    }
 
     var audioTrackCount: Int32 { stubAudioTrackCount }
     var subtitleTrackCount: Int32 { stubSubtitleTrackCount }
@@ -122,5 +142,9 @@ final class MockPlayerBridge: PlayerBridgeProtocol, @unchecked Sendable {
     }
     var seekThumbnailProgress: Int32 { stubSeekThumbnailProgress }
 
-    func getSubtitle(at timestamp: Int64) -> SubtitleData? { nil }
+    func getSubtitleFrame(at timestamp: Int64) -> ResolvedSubtitle? {
+        subtitleFrameCallCount += 1
+        lastSubtitleFrameTimestamp = timestamp
+        subtitleFrameHandler?(timestamp)
+    }
 }

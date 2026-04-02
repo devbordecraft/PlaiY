@@ -20,14 +20,20 @@ struct LocalCatalogSnapshot: Sendable {
 
 enum LocalCatalogBuilder {
     static func build(items: [LibraryItem],
-                      watchedIDs: Set<String>) -> LocalCatalogSnapshot {
+                      watchedIDs: Set<String>,
+                      resumePositions: [String: Int64]? = nil) -> LocalCatalogSnapshot {
+        let resolvedResumePositions = resumePositions ?? ResumeStore.snapshot()
         var movies: [BrowseItem] = []
         var showsByID: [String: LocalShowGroup] = [:]
         var continueWatching: [BrowseItem] = []
         var itemsByID: [String: BrowseItem] = [:]
 
         for item in items {
-            let parsed = LocalMetadataParser.parse(item: item, watchedIDs: watchedIDs)
+            let parsed = LocalMetadataParser.parse(
+                item: item,
+                watchedIDs: watchedIDs,
+                resumePositions: resolvedResumePositions
+            )
             switch parsed.kind {
             case .movie:
                 movies.append(parsed.browseItem)
@@ -263,10 +269,12 @@ private enum LocalCatalogMetadataCache {
 }
 
 private enum LocalMetadataParser {
-    static func parse(item: LibraryItem, watchedIDs: Set<String>) -> ParsedLocalMedia {
+    static func parse(item: LibraryItem,
+                      watchedIDs: Set<String>,
+                      resumePositions: [String: Int64]) -> ParsedLocalMedia {
         let fileURL = URL(fileURLWithPath: item.filePath)
         let cached = LocalCatalogMetadataCache.metadata(for: item, fileURL: fileURL)
-        let progress = progress(for: item)
+        let progress = progress(for: item, resumePositions: resumePositions)
         let isWatched = watchedIDs.contains("local:file:\(item.filePath)")
 
         switch cached.kind {
@@ -462,8 +470,9 @@ private enum LocalMetadataParser {
             .joined(separator: " • ")
     }
 
-    private static func progress(for item: LibraryItem) -> Double? {
-        guard item.durationUs > 0, let position = ResumeStore.position(for: item.filePath) else { return nil }
+    private static func progress(for item: LibraryItem,
+                                 resumePositions: [String: Int64]) -> Double? {
+        guard item.durationUs > 0, let position = resumePositions[item.filePath] else { return nil }
         return min(max(Double(position) / Double(item.durationUs), 0), 1)
     }
     private static func firstRegexMatch(pattern: String, in text: String) -> RegexMatch? {

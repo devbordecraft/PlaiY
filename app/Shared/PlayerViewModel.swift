@@ -284,6 +284,8 @@ final class PlaybackTransport {
         didSet { cachedDurationText = formatTime(duration) }
     }
     var currentSubtitle: SubtitleData?
+    var currentSubtitleStartUs: Int64 = 0
+    var currentSubtitleEndUs: Int64 = 0
     var passthroughActive: Bool = false
     var spatialActive: Bool = false
     var videoWidth: Int = 0
@@ -414,6 +416,7 @@ class PlayerViewModel: ObservableObject {
     private var lastNowPlayingUpdate: CFTimeInterval = 0
     private var lastSubtitleUpdate: CFTimeInterval = 0
     private var lastPlexTimelineUpdate: CFTimeInterval = 0
+    private var lastSubtitleRevision: UInt64 = 0
 
     // Thumbnail async loading
     private let thumbQueue = DispatchQueue(label: "com.plaiy.seekthumb", qos: .userInitiated)
@@ -507,6 +510,54 @@ class PlayerViewModel: ObservableObject {
         lastThumbIndex = -1
         thumbRetryWork?.cancel()
         thumbRetryWork = nil
+    }
+
+    private func applyResolvedSubtitle(_ subtitle: ResolvedSubtitle?, revision: UInt64) {
+        if let subtitle {
+            transport.currentSubtitle = subtitle.data
+            transport.currentSubtitleStartUs = subtitle.startUs
+            transport.currentSubtitleEndUs = subtitle.endUs
+        } else {
+            transport.currentSubtitle = nil
+            transport.currentSubtitleStartUs = 0
+            transport.currentSubtitleEndUs = 0
+        }
+
+        lastSubtitleRevision = revision
+        lastSubtitleUpdate = CACurrentMediaTime()
+    }
+
+    private func clearResolvedSubtitle() {
+        transport.currentSubtitle = nil
+        transport.currentSubtitleStartUs = 0
+        transport.currentSubtitleEndUs = 0
+        lastSubtitleRevision = 0
+        lastSubtitleUpdate = 0
+    }
+
+    private func refreshSubtitle(at timestampUs: Int64, revision: UInt64) {
+        let subtitleTrace = PYSignpost.begin("SubtitleRefresh", category: .player)
+        applyResolvedSubtitle(bridge.getSubtitleFrame(at: timestampUs), revision: revision)
+        subtitleTrace.end()
+    }
+
+    private func shouldRefreshSubtitle(at timestampUs: Int64,
+                                       revision: UInt64,
+                                       now: CFTimeInterval) -> Bool {
+        if revision != lastSubtitleRevision {
+            return true
+        }
+
+        if transport.currentSubtitle != nil {
+            guard transport.currentSubtitleEndUs > transport.currentSubtitleStartUs else {
+                return now - lastSubtitleUpdate >= 0.05
+            }
+
+            return timestampUs < transport.currentSubtitleStartUs ||
+                timestampUs >= transport.currentSubtitleEndUs
+        }
+
+        return now - lastSubtitleUpdate >= 0.05
     }
 
     private func resetPlexState(advanceGeneration: Bool = true) {
@@ -801,7 +852,7 @@ class PlayerViewModel: ObservableObject {
         transport.duration = 0
         transport.currentPosition = 0
         currentPosition = 0
-        transport.currentSubtitle = nil
+        clearResolvedSubtitle()
         transport.seekPreviewImage = nil
         transport.videoWidth = 0
         transport.videoHeight = 0
@@ -871,6 +922,7 @@ class PlayerViewModel: ObservableObject {
         bridge.seek(to: target)
         transport.currentPosition = target
         currentPosition = target
+        clearResolvedSubtitle()
         updateSkipIntroVisibility(for: target)
         reportPlexTimeline(isPlaying ? .playing : .paused, positionUs: target)
     }
@@ -958,6 +1010,7 @@ class PlayerViewModel: ObservableObject {
         currentPlaybackItem = nil
         resetPlexState()
         NowPlayingManager.shared.clearNowPlaying()
+        clearResolvedSubtitle()
     }
 
     // MARK: - Display-Synchronized Tick
@@ -968,33 +1021,34 @@ class PlayerViewModel: ObservableObject {
     func tick() {
         guard isPlaying else { return }
 
-        let state = bridge.state
-        if state != playbackState {
+        let transportTrace = PYSignpost.begin("TransportSnapshot", category: .player)
+        let snapshot = bridge.getTransportSnapshot()
+        transportTrace.end()
+        if snapshot.state != playbackState {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                guard self.playbackState != state else { return }
-                self.applyPlaybackState(state)
+                guard self.playbackState != snapshot.state else { return }
+                self.applyPlaybackState(snapshot.state)
             }
         }
-        guard state == Int32(PY_STATE_PLAYING.rawValue) else { return }
+        guard snapshot.state == Int32(PY_STATE_PLAYING.rawValue) else { return }
 
         // Skip while the user is scrubbing the timeline to avoid fighting
         if transport.isScrubbing { return }
 
         // Update transport and plain property — no objectWillChange
-        transport.currentPosition = bridge.position
+        transport.currentPosition = snapshot.positionUs
         currentPosition = transport.currentPosition
-        transport.passthroughActive = bridge.isPassthroughActive
-        transport.spatialActive = bridge.isSpatialActive
+        transport.passthroughActive = snapshot.isPassthroughActive
+        transport.spatialActive = snapshot.isSpatialActive
         updateSkipIntroVisibility(for: transport.currentPosition, deferPublishedUpdate: true)
 
         let now = CACurrentMediaTime()
 
-        // Subtitle: throttle to ~20Hz — subtitles change every 0.5-5s,
-        // no need to cross the C bridge and alloc/free memory 120x/sec
-        if now - lastSubtitleUpdate >= 0.05 {
-            lastSubtitleUpdate = now
-            transport.currentSubtitle = bridge.getSubtitle(at: transport.currentPosition)
+        if shouldRefreshSubtitle(at: transport.currentPosition,
+                                 revision: snapshot.subtitleRevision,
+                                 now: now) {
+            refreshSubtitle(at: transport.currentPosition, revision: snapshot.subtitleRevision)
         }
 
         // Throttle NowPlaying updates to ~1Hz
@@ -1022,13 +1076,14 @@ class PlayerViewModel: ObservableObject {
         bridge.selectSubtitleTrack(Int32(streamIndex))
         activeSubtitleStream = streamIndex
         // Force immediate subtitle refresh so the user sees the result
-        transport.currentSubtitle = bridge.getSubtitle(at: bridge.position)
+        let snapshot = bridge.getTransportSnapshot()
+        refreshSubtitle(at: snapshot.positionUs, revision: snapshot.subtitleRevision)
     }
 
     func disableSubtitles() {
         bridge.selectSubtitleTrack(-1)
         activeSubtitleStream = -1
-        transport.currentSubtitle = nil
+        clearResolvedSubtitle()
     }
 
     func setPassthrough(_ enabled: Bool) {

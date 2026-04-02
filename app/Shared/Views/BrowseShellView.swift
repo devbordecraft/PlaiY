@@ -1,6 +1,11 @@
 import SwiftUI
 
 struct BrowseShellView: View {
+    private struct RefreshToken: Hashable {
+        let libraryRevision: UInt64
+        let sourcesRevision: UInt64
+    }
+
     @EnvironmentObject private var libraryVM: LibraryViewModel
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject var sourcesVM: SourcesViewModel
@@ -12,16 +17,11 @@ struct BrowseShellView: View {
     @State private var detailPath: [BrowseItem] = []
     @State private var showCustomizeHome = false
 
-    private var refreshSignature: String {
-        [
-            libraryVM.items.map {
-                "\($0.id):\($0.durationUs):\($0.videoWidth)x\($0.videoHeight):\($0.hdrType)"
-            }.joined(separator: "|"),
-            libraryVM.folders.joined(separator: "|"),
-            sourcesVM.sources.map {
-                "\($0.id):\($0.displayName):\($0.type.rawValue):\($0.baseURI):\($0.username):\($0.authToken ?? "")"
-            }.joined(separator: "|")
-        ].joined(separator: "||")
+    private var refreshToken: RefreshToken {
+        RefreshToken(
+            libraryRevision: libraryVM.contentRevision,
+            sourcesRevision: sourcesVM.sourcesRevision
+        )
     }
 
     var body: some View {
@@ -35,7 +35,7 @@ struct BrowseShellView: View {
         .background(BrowseBackdrop().ignoresSafeArea())
         .environment(\.colorScheme, .dark)
         .tint(BrowseTheme.accent)
-        .task(id: refreshSignature) {
+        .task(id: refreshToken) {
             browseStore.refresh(
                 libraryItems: libraryVM.items,
                 folders: libraryVM.folders,

@@ -40,8 +40,20 @@ struct MediaItemView: View {
     }
 
     private var metadataChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: 6) {
+                if !item.resolutionText.isEmpty {
+                    MediaMetadataChip(text: item.resolutionText)
+                }
+                if !item.hdrText.isEmpty {
+                    MediaMetadataChip(text: item.hdrText, tint: BrowseTheme.accent)
+                }
+                if !item.videoCodec.isEmpty {
+                    MediaMetadataChip(text: item.videoCodec.uppercased())
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
                 if !item.resolutionText.isEmpty {
                     MediaMetadataChip(text: item.resolutionText)
                 }

@@ -37,6 +37,10 @@ enum ResumeStore {
         return dict[path]
     }
 
+    static func snapshot(defaults: UserDefaults = storeDefaults) -> [String: Int64] {
+        defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
+    }
+
     static func clear(path: String, defaults: UserDefaults = storeDefaults) {
         var dict = defaults.dictionary(forKey: key) as? [String: Int64] ?? [:]
         dict.removeValue(forKey: path)

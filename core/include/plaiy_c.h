@@ -141,6 +141,16 @@ int         py_player_get_state(PYPlayer* p);
 int64_t     py_player_get_position(PYPlayer* p);
 int64_t     py_player_get_duration(PYPlayer* p);
 
+typedef struct {
+    int state;
+    int64_t position_us;
+    bool passthrough_active;
+    bool spatial_active;
+    uint64_t subtitle_revision;
+} PYPlayerTransportSnapshot;
+
+PYPlayerTransportSnapshot py_player_get_transport_snapshot(PYPlayer* p);
+
 // ---- Track info ----
 int         py_player_get_audio_track_count(PYPlayer* p);
 int         py_player_get_subtitle_track_count(PYPlayer* p);

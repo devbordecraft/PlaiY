@@ -59,6 +59,36 @@ private final class StateCallbackBox: NSObject {
     }
 }
 
+struct PlayerTransportSnapshot: Sendable {
+    let state: Int32
+    let positionUs: Int64
+    let isPassthroughActive: Bool
+    let isSpatialActive: Bool
+    let subtitleRevision: UInt64
+
+    init(state: Int32,
+         positionUs: Int64,
+         isPassthroughActive: Bool,
+         isSpatialActive: Bool,
+         subtitleRevision: UInt64) {
+        self.state = state
+        self.positionUs = positionUs
+        self.isPassthroughActive = isPassthroughActive
+        self.isSpatialActive = isSpatialActive
+        self.subtitleRevision = subtitleRevision
+    }
+
+    init(raw: PYPlayerTransportSnapshot) {
+        self.init(
+            state: Int32(raw.state),
+            positionUs: raw.position_us,
+            isPassthroughActive: raw.passthrough_active,
+            isSpatialActive: raw.spatial_active,
+            subtitleRevision: raw.subtitle_revision
+        )
+    }
+}
+
 private final class PlayerThreadExecutor {
     private final class WorkItem: NSObject {
         let operation: () -> Void
@@ -259,6 +289,12 @@ final class PlayerBridge: @unchecked Sendable {
     var duration: Int64 {
         sync { handle in
             py_player_get_duration(handle)
+        }
+    }
+
+    func getTransportSnapshot() -> PlayerTransportSnapshot {
+        sync { handle in
+            PlayerTransportSnapshot(raw: py_player_get_transport_snapshot(handle))
         }
     }
 
@@ -908,14 +944,18 @@ static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
     }
 
     // Subtitle
-    func getSubtitle(at timestamp: Int64) -> SubtitleData? {
+    func getSubtitleFrame(at timestamp: Int64) -> ResolvedSubtitle? {
         sync { handle in
             guard let sf = py_player_get_subtitle(handle, timestamp) else { return nil }
             defer { py_subtitle_free(sf) }
 
             let pointed = sf.pointee
             if let text = pointed.text {
-                return SubtitleData.text(String(cString: text))
+                return ResolvedSubtitle(
+                    data: .text(String(cString: text)),
+                    startUs: pointed.start_us,
+                    endUs: pointed.end_us
+                )
             } else if let regions = pointed.regions, pointed.region_count > 0 {
                 let count = Int(pointed.region_count)
                 let buffer = UnsafeBufferPointer(start: regions, count: count)
@@ -934,7 +974,11 @@ static func frameDoviHasReshaping(_ frame: UnsafeMutableRawPointer) -> Bool {
                     )
                 }
                 if !decoded.isEmpty {
-                    return SubtitleData.bitmap(regions: decoded)
+                    return ResolvedSubtitle(
+                        data: .bitmap(regions: decoded),
+                        startUs: pointed.start_us,
+                        endUs: pointed.end_us
+                    )
                 }
             }
             return nil
@@ -953,6 +997,12 @@ struct SubtitleBitmapRegion: Sendable {
 enum SubtitleData {
     case text(String)
     case bitmap(regions: [SubtitleBitmapRegion])
+}
+
+struct ResolvedSubtitle: Sendable {
+    let data: SubtitleData
+    let startUs: Int64
+    let endUs: Int64
 }
 
 struct LibraryBridgeError: Error, Equatable, Sendable {

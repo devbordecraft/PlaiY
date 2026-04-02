@@ -51,7 +51,7 @@ struct UserDefaultsLibraryFolderStore: LibraryFolderStore, @unchecked Sendable {
     }
 }
 
-struct LibraryItem: Identifiable, Codable {
+struct LibraryItem: Identifiable, Codable, Sendable {
     var id: String { filePath }
 
     let filePath: String
@@ -113,6 +113,7 @@ class LibraryViewModel: ObservableObject {
     @Published var items: [LibraryItem] = []
     @Published var folders: [String] = []
     @Published var isScanning = false
+    @Published private(set) var contentRevision: UInt64 = 0
 
     let bridge: any LibraryBridgeProtocol
     private let folderStore: any LibraryFolderStore
@@ -126,6 +127,12 @@ class LibraryViewModel: ObservableObject {
     ) {
         self.bridge = bridge
         self.folderStore = folderStore
+    }
+
+    private func applySnapshot(folders: [String], items: [LibraryItem]) {
+        self.folders = folders
+        self.items = items
+        contentRevision &+= 1
     }
 
     func addFolder(_ url: URL) {
@@ -156,8 +163,7 @@ class LibraryViewModel: ObservableObject {
                 )
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    self.folders = existingFolders
-                    self.items = currentItems
+                    self.applySnapshot(folders: existingFolders, items: currentItems)
                     folderStore.save(persistedFolders)
                     self.isScanning = false
                 }
@@ -177,8 +183,7 @@ class LibraryViewModel: ObservableObject {
                 )
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    self.folders = currentFolders
-                    self.items = currentItems
+                    self.applySnapshot(folders: currentFolders, items: currentItems)
                     folderStore.save(persistedFolders)
                     self.isScanning = false
                 }
@@ -234,8 +239,7 @@ class LibraryViewModel: ObservableObject {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.folders = restoredFolders
-                self.items = restoredItems
+                self.applySnapshot(folders: restoredFolders, items: restoredItems)
                 folderStore.save(Self.deduplicatedFolderRecords(persistedFolders))
                 self.isScanning = false
             }
@@ -265,8 +269,7 @@ class LibraryViewModel: ObservableObject {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.folders = updatedFolders
-                self.items = currentItems
+                self.applySnapshot(folders: updatedFolders, items: currentItems)
                 folderStore.save(persistedFolders)
                 self.isScanning = false
             }
@@ -276,14 +279,18 @@ class LibraryViewModel: ObservableObject {
     func refreshFolders() {
         let result = Self.readFolders(using: bridge)
         DispatchQueue.main.async { [weak self] in
-            self?.folders = result
+            guard let self else { return }
+            self.folders = result
+            self.contentRevision &+= 1
         }
     }
 
     func refreshItems() {
         let decoded = Self.decodeItems(using: bridge)
         DispatchQueue.main.async { [weak self] in
-            self?.items = decoded
+            guard let self else { return }
+            self.items = decoded
+            self.contentRevision &+= 1
         }
     }
 

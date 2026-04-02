@@ -416,6 +416,14 @@ struct PlaybackStats {
     uint16_t dv_l1_avg_pq = 0;
 };
 
+struct PlayerTransportSnapshot {
+    PlaybackState state = PlaybackState::Idle;
+    int64_t position_us = 0;
+    bool passthrough_active = false;
+    bool spatial_active = false;
+    uint64_t subtitle_revision = 0;
+};
+
 // Media library item
 struct MediaItem {
     std::string file_path;

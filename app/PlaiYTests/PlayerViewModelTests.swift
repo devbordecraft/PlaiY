@@ -266,9 +266,119 @@ final class PlayerViewModelTests: XCTestCase {
     }
 
     func testDisableSubtitles() {
+        vm.transport.currentSubtitle = .text("Hello")
+        vm.transport.currentSubtitleStartUs = 1_000_000
+        vm.transport.currentSubtitleEndUs = 2_000_000
+
         vm.disableSubtitles()
+
         XCTAssertEqual(mock.lastSelectedSubtitleTrack, -1)
         XCTAssertEqual(vm.activeSubtitleStream, -1)
+        XCTAssertNil(vm.transport.currentSubtitle)
+        XCTAssertEqual(vm.transport.currentSubtitleStartUs, 0)
+        XCTAssertEqual(vm.transport.currentSubtitleEndUs, 0)
+    }
+
+    func testSelectSubtitleTrackRefreshesImmediatelyAtTransportSnapshotPosition() {
+        mock.stubTransportPosition = 6_000_000
+        mock.stubTransportSubtitleRevision = 3
+        mock.subtitleFrameHandler = { timestamp in
+            XCTAssertEqual(timestamp, 6_000_000)
+            return ResolvedSubtitle(
+                data: .text("New subtitle"),
+                startUs: 5_500_000,
+                endUs: 6_500_000
+            )
+        }
+
+        vm.selectSubtitleTrack(streamIndex: 5)
+
+        XCTAssertEqual(mock.lastSelectedSubtitleTrack, 5)
+        XCTAssertEqual(vm.activeSubtitleStream, 5)
+        XCTAssertEqual(mock.transportSnapshotCallCount, 1)
+        XCTAssertEqual(mock.subtitleFrameCallCount, 1)
+        XCTAssertEqual(currentSubtitleText(), "New subtitle")
+    }
+
+    func testTickUsesTransportSnapshotForHighFrequencyState() {
+        vm.isPlaying = true
+        vm.transport.isPlaying = true
+
+        mock.stubState = Int32(PY_STATE_READY.rawValue)
+        mock.stubPosition = 1_000_000
+        mock.stubIsPassthroughActive = false
+        mock.stubIsSpatialActive = false
+        mock.stubTransportState = Int32(PY_STATE_PLAYING.rawValue)
+        mock.stubTransportPosition = 4_000_000
+        mock.stubTransportIsPassthroughActive = true
+        mock.stubTransportIsSpatialActive = true
+
+        vm.tick()
+
+        XCTAssertEqual(mock.transportSnapshotCallCount, 1)
+        XCTAssertEqual(vm.transport.currentPosition, 4_000_000)
+        XCTAssertEqual(vm.currentPosition, 4_000_000)
+        XCTAssertTrue(vm.transport.passthroughActive)
+        XCTAssertTrue(vm.transport.spatialActive)
+    }
+
+    func testTickDoesNotRefetchSubtitleWithinActiveWindowWhenRevisionIsUnchanged() {
+        vm.isPlaying = true
+        vm.transport.isPlaying = true
+
+        mock.stubTransportState = Int32(PY_STATE_PLAYING.rawValue)
+        mock.stubTransportPosition = 2_000_000
+        mock.stubTransportSubtitleRevision = 1
+        mock.subtitleFrameHandler = { _ in
+            ResolvedSubtitle(
+                data: .text("Hello"),
+                startUs: 1_000_000,
+                endUs: 3_000_000
+            )
+        }
+
+        vm.tick()
+        mock.stubTransportPosition = 2_500_000
+        vm.tick()
+
+        XCTAssertEqual(mock.subtitleFrameCallCount, 1)
+        XCTAssertEqual(vm.transport.currentSubtitleStartUs, 1_000_000)
+        XCTAssertEqual(vm.transport.currentSubtitleEndUs, 3_000_000)
+        XCTAssertEqual(currentSubtitleText(), "Hello")
+    }
+
+    func testTickRefetchesSubtitleWhenRevisionChangesInsideActiveWindow() {
+        vm.isPlaying = true
+        vm.transport.isPlaying = true
+
+        mock.stubTransportState = Int32(PY_STATE_PLAYING.rawValue)
+        mock.stubTransportPosition = 2_000_000
+        mock.stubTransportSubtitleRevision = 1
+        mock.subtitleFrameHandler = { [weak mock] _ in
+            guard let mock else { return nil }
+            if mock.subtitleFrameCallCount == 1 {
+                return ResolvedSubtitle(
+                    data: .text("First"),
+                    startUs: 1_000_000,
+                    endUs: 3_000_000
+                )
+            }
+            return ResolvedSubtitle(
+                data: .text("Second"),
+                startUs: 2_000_000,
+                endUs: 4_000_000
+            )
+        }
+
+        vm.tick()
+        mock.stubTransportPosition = 2_500_000
+        mock.stubTransportSubtitleRevision = 2
+        vm.tick()
+
+        XCTAssertEqual(mock.subtitleFrameCallCount, 2)
+        XCTAssertEqual(vm.transport.currentSubtitleStartUs, 2_000_000)
+        XCTAssertEqual(vm.transport.currentSubtitleEndUs, 4_000_000)
+        XCTAssertEqual(currentSubtitleText(), "Second")
     }
 
     // MARK: - Stop
@@ -462,5 +572,11 @@ final class PlayerViewModelTests: XCTestCase {
             shouldInterpolate: false,
             intent: .defaultIntent
         )
+    }
+
+    private func currentSubtitleText() -> String? {
+        guard let subtitle = vm.transport.currentSubtitle else { return nil }
+        guard case .text(let text) = subtitle else { return nil }
+        return text
     }
 }

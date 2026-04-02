@@ -75,21 +75,35 @@ final class BrowseStore: ObservableObject {
         currentLibraryItems = libraryItems
         currentFolders = folders
         currentSources = sources
-        localSnapshot = LocalCatalogBuilder.build(items: libraryItems, watchedIDs: watchedIDs)
-        normalizeHomeLayout()
 
         refreshTask?.cancel()
-        refreshTask = Task { [sources] in
-            await MainActor.run { self.isRefreshingPlex = true }
-            let result = await plexClient.fetchSnapshot(sources: sources)
+        let watchedIDs = self.watchedIDs
+        refreshTask = Task { [libraryItems, sources, watchedIDs] in
+            let resumePositions = ResumeStore.snapshot()
+            let localBuildTrace = PYSignpost.begin("LocalCatalogBuild", category: .browse)
+            let snapshot = await Task.detached(priority: .userInitiated) {
+                LocalCatalogBuilder.build(
+                    items: libraryItems,
+                    watchedIDs: watchedIDs,
+                    resumePositions: resumePositions
+                )
+            }.value
+            localBuildTrace.end()
             guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self.plexSnapshot = result.snapshot
-                self.isRefreshingPlex = false
-                onPlexAuthInvalid?(result.invalidAuthSourceIDs)
-                if !self.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.performSearch()
-                }
+
+            self.localSnapshot = snapshot
+            self.normalizeHomeLayout()
+            self.isRefreshingPlex = true
+
+            let plexRefreshTrace = PYSignpost.begin("PlexCatalogRefresh", category: .browse)
+            let result = await plexClient.fetchSnapshot(sources: sources)
+            plexRefreshTrace.end()
+            guard !Task.isCancelled else { return }
+            self.plexSnapshot = result.snapshot
+            self.isRefreshingPlex = false
+            onPlexAuthInvalid?(result.invalidAuthSourceIDs)
+            if !self.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.performSearch()
             }
         }
     }
@@ -98,14 +112,22 @@ final class BrowseStore: ObservableObject {
         guard !item.isPlex else { return }
         watchedIDs.insert("local:file:\(item.path)")
         watchStatusStore.save(watchedIDs)
-        localSnapshot = LocalCatalogBuilder.build(items: currentLibraryItems, watchedIDs: watchedIDs)
+        localSnapshot = LocalCatalogBuilder.build(
+            items: currentLibraryItems,
+            watchedIDs: watchedIDs,
+            resumePositions: ResumeStore.snapshot()
+        )
     }
 
     func markPlaybackRestarted(_ item: PlaybackItem) {
         guard !item.isPlex else { return }
         watchedIDs.remove("local:file:\(item.path)")
         watchStatusStore.save(watchedIDs)
-        localSnapshot = LocalCatalogBuilder.build(items: currentLibraryItems, watchedIDs: watchedIDs)
+        localSnapshot = LocalCatalogBuilder.build(
+            items: currentLibraryItems,
+            watchedIDs: watchedIDs,
+            resumePositions: ResumeStore.snapshot()
+        )
     }
 
     func toggleFavorite(_ item: BrowseItem) {

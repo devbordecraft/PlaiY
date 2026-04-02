@@ -1,4 +1,6 @@
 import Foundation
+import CoreGraphics
+import ImageIO
 import XCTest
 @testable import PlaiY
 
@@ -167,6 +169,30 @@ final class ArtworkRepositoryTests: XCTestCase {
         XCTAssertFalse(first === third)
     }
 
+    func testRepositoryDownsamplesLocalImagesForThumbnailRequests() async throws {
+        let cacheDirectory = makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+
+        let imageURL = cacheDirectory.appendingPathComponent("large-poster.png")
+        try Self.pngData(width: 400, height: 200).write(to: imageURL)
+
+        let repository = ArtworkRepository(cacheDirectoryURL: cacheDirectory.appendingPathComponent("remote-cache"))
+        let asset = MediaArtworkAsset.local(source: .poster, path: imageURL.path)
+
+        let thumbnail = try XCTUnwrap(await repository.image(for: asset, maxPixelSize: 64)).image
+        let cachedThumbnail = try XCTUnwrap(await repository.image(for: asset, maxPixelSize: 64)).image
+        let largerImage = try XCTUnwrap(await repository.image(for: asset, maxPixelSize: 256)).image
+
+        let thumbnailSize = Self.pixelSize(of: thumbnail)
+        let largerImageSize = Self.pixelSize(of: largerImage)
+
+        XCTAssertTrue(thumbnail === cachedThumbnail)
+        XCTAssertFalse(thumbnail === largerImage)
+        XCTAssertLessThanOrEqual(max(thumbnailSize.width, thumbnailSize.height), 64)
+        XCTAssertGreaterThan(max(largerImageSize.width, largerImageSize.height),
+                             max(thumbnailSize.width, thumbnailSize.height))
+    }
+
     func testSequenceLoaderFallsBackToLaterAssetAfterRemoteFailure() async throws {
         let cacheDirectory = makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: cacheDirectory) }
@@ -267,9 +293,51 @@ final class ArtworkRepositoryTests: XCTestCase {
         return (response, data)
     }
 
-    private static func pngData() throws -> Data {
-        try XCTUnwrap(
-            Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aW0AAAAASUVORK5CYII=")
-        )
+    private static func pngData(width: Int = 1, height: Int = 1) throws -> Data {
+        guard width > 0, height > 0 else {
+            throw NSError(domain: "ArtworkRepositoryTests", code: 3)
+        }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(data: nil,
+                                      width: width,
+                                      height: height,
+                                      bitsPerComponent: 8,
+                                      bytesPerRow: 0,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            throw NSError(domain: "ArtworkRepositoryTests", code: 4)
+        }
+
+        context.setFillColor(CGColor(red: 0.94, green: 0.42, blue: 0.19, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+        guard let cgImage = context.makeImage() else {
+            throw NSError(domain: "ArtworkRepositoryTests", code: 5)
+        }
+
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
+            throw NSError(domain: "ArtworkRepositoryTests", code: 6)
+        }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw NSError(domain: "ArtworkRepositoryTests", code: 7)
+        }
+        return data as Data
+    }
+
+    private static func pixelSize(of image: PlatformImage) -> CGSize {
+        #if os(macOS)
+        var proposed = CGRect(origin: .zero, size: image.size)
+        let cgImage = image.cgImage(forProposedRect: &proposed, context: nil, hints: nil)
+        return CGSize(width: CGFloat(cgImage?.width ?? Int(image.size.width)),
+                      height: CGFloat(cgImage?.height ?? Int(image.size.height)))
+        #else
+        if let cgImage = image.cgImage {
+            return CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+        }
+        return image.size
+        #endif
     }
 }

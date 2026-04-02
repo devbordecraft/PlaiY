@@ -118,6 +118,7 @@ public:
     void reset_video_adjustments();
 
     PlaybackStats get_playback_stats() const;
+    PlayerTransportSnapshot get_transport_snapshot() const;
 
     // Dolby Vision: set the AVSampleBufferDisplayLayer for DV output.
     // Must be called after open_file() and before play().

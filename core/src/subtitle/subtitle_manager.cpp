@@ -4,6 +4,7 @@
 #include "ass_renderer.h"
 #include "pgs_decoder.h"
 
+#include <atomic>
 #include <deque>
 #include <mutex>
 
@@ -25,6 +26,7 @@ struct SubtitleManager::Impl {
     int video_width = 1920;
     int video_height = 1080;
     double ass_font_scale = 1.0;
+    std::atomic<uint64_t> revision{1};
 };
 
 SubtitleManager::SubtitleManager() : impl_(std::make_unique<Impl>()) {}
@@ -48,6 +50,7 @@ Error SubtitleManager::load_external(const std::string& path) {
         std::lock_guard lock(impl_->mutex);
         impl_->srt_parser = std::move(parser);
         impl_->active_format = SubtitleFormat::SRT;
+        impl_->revision.fetch_add(1, std::memory_order_relaxed);
     } else if (ext == "ass" || ext == "ssa") {
         int vw, vh;
         double font_scale;
@@ -65,6 +68,7 @@ Error SubtitleManager::load_external(const std::string& path) {
         std::lock_guard lock(impl_->mutex);
         impl_->ass_renderer = std::move(renderer);
         impl_->active_format = SubtitleFormat::ASS;
+        impl_->revision.fetch_add(1, std::memory_order_relaxed);
     } else {
         return {ErrorCode::UnsupportedFormat, "Unknown subtitle format: " + ext};
     }
@@ -107,6 +111,7 @@ Error SubtitleManager::set_embedded_track(const TrackInfo& track) {
             return {ErrorCode::UnsupportedFormat, "Unsupported subtitle format"};
     }
 
+    impl_->revision.fetch_add(1, std::memory_order_relaxed);
     return Error::Ok();
 }
 
@@ -123,12 +128,14 @@ void SubtitleManager::feed_packet(const Packet& pkt) {
                 int64_t duration_us = (pkt.duration / pkt.time_base_den) * 1000000LL * pkt.time_base_num
                                     + (pkt.duration % pkt.time_base_den) * 1000000LL * pkt.time_base_num / pkt.time_base_den;
                 impl_->srt_parser->add_entry(start_us, start_us + duration_us, text);
+                impl_->revision.fetch_add(1, std::memory_order_relaxed);
             }
             break;
 
         case SubtitleFormat::ASS:
             if (impl_->ass_renderer) {
                 impl_->ass_renderer->feed_packet(pkt);
+                impl_->revision.fetch_add(1, std::memory_order_relaxed);
             }
             break;
 
@@ -143,6 +150,7 @@ void SubtitleManager::feed_packet(const Packet& pkt) {
                     while (impl_->pgs_frames.size() > 32) {
                         impl_->pgs_frames.pop_front();
                     }
+                    impl_->revision.fetch_add(1, std::memory_order_relaxed);
                 }
             }
             break;
@@ -190,6 +198,7 @@ void SubtitleManager::set_ass_font_scale(double scale) {
     if (impl_->ass_renderer) {
         impl_->ass_renderer->set_font_scale(scale);
     }
+    impl_->revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void SubtitleManager::set_video_size(int width, int height) {
@@ -199,6 +208,7 @@ void SubtitleManager::set_video_size(int width, int height) {
     if (impl_->ass_renderer) {
         impl_->ass_renderer->set_video_size(width, height);
     }
+    impl_->revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void SubtitleManager::flush() {
@@ -209,6 +219,7 @@ void SubtitleManager::flush() {
     // remain valid and events spanning the seek point won't be lost.
     if (impl_->pgs_decoder) impl_->pgs_decoder->flush();
     impl_->pgs_frames.clear();
+    impl_->revision.fetch_add(1, std::memory_order_relaxed);
 }
 
 void SubtitleManager::close() {
@@ -218,6 +229,11 @@ void SubtitleManager::close() {
     impl_->pgs_decoder.reset();
     impl_->pgs_frames.clear();
     impl_->active_format = SubtitleFormat::Unknown;
+    impl_->revision.fetch_add(1, std::memory_order_relaxed);
+}
+
+uint64_t SubtitleManager::revision() const {
+    return impl_->revision.load(std::memory_order_relaxed);
 }
 
 } // namespace py

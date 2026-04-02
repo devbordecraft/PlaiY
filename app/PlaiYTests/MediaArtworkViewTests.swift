@@ -61,9 +61,8 @@ final class MediaArtworkViewTests: XCTestCase {
         )
     }
 
-    func testLibraryDescriptorUsesBrowseArtworkAndResumeProgress() {
+    func testLibraryDescriptorUsesBrowseArtworkAndPrecomputedProgress() {
         let path = "/tmp/\(UUID().uuidString)/Alien.1979.mkv"
-        cleanupResumeKeys.append(path)
 
         let libraryItem = LibraryItem(
             filePath: path,
@@ -91,7 +90,7 @@ final class MediaArtworkViewTests: XCTestCase {
                 backdropPath: "/tmp/alien-fanart.jpg",
                 backdropURL: nil
             ),
-            progress: nil,
+            progress: 0.5,
             isWatched: false,
             sourceName: "Local Library",
             playbackItem: nil,
@@ -105,8 +104,6 @@ final class MediaArtworkViewTests: XCTestCase {
             seasonNumber: nil,
             episodeNumber: nil
         )
-
-        ResumeStore.save(path: path, positionUs: 100_000_000, durationUs: libraryItem.durationUs)
 
         let descriptor = MediaArtworkDescriptor.libraryItem(libraryItem, browseItem: browseItem)
 

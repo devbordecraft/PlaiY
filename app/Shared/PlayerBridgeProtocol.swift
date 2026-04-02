@@ -16,6 +16,7 @@ protocol PlayerBridgeProtocol: AnyObject, Sendable {
     var state: Int32 { get }
     var position: Int64 { get }
     var duration: Int64 { get }
+    func getTransportSnapshot() -> PlayerTransportSnapshot
 
     // Track management
     var audioTrackCount: Int32 { get }
@@ -67,7 +68,7 @@ protocol PlayerBridgeProtocol: AnyObject, Sendable {
     var seekThumbnailProgress: Int32 { get }
 
     // Subtitles
-    func getSubtitle(at timestamp: Int64) -> SubtitleData?
+    func getSubtitleFrame(at timestamp: Int64) -> ResolvedSubtitle?
 }
 
 extension PlayerBridge: PlayerBridgeProtocol {}

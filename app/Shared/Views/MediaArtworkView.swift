@@ -302,8 +302,8 @@ struct MediaArtworkDescriptor: Hashable {
             backdropPath: browseItem?.artwork.backdropPath,
             backdropURL: browseItem?.artwork.backdropURL,
             badge: browseItem?.badge ?? primaryBadge(for: item),
-            progress: browseItem?.progress ?? progress(for: item),
-            isWatched: browseItem?.isWatched ?? watched(for: item),
+            progress: browseItem?.progress,
+            isWatched: browseItem?.isWatched ?? false,
             palette: .local,
             fallbackIconName: "play.circle.fill"
         )
@@ -360,22 +360,6 @@ struct MediaArtworkDescriptor: Hashable {
         return nil
     }
 
-    private static func progress(for item: LibraryItem) -> Double? {
-        guard let position = ResumeStore.position(for: item.filePath),
-              item.durationUs > 0 else {
-            return nil
-        }
-        return min(max(Double(position) / Double(item.durationUs), 0), 1)
-    }
-
-    private static func watched(for item: LibraryItem) -> Bool {
-        guard let position = ResumeStore.position(for: item.filePath),
-              item.durationUs > 0 else {
-            return false
-        }
-        return Double(position) / Double(item.durationUs) >= 0.95
-    }
-
     private static func normalizedURLString(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         return value
@@ -383,6 +367,8 @@ struct MediaArtworkDescriptor: Hashable {
 }
 
 struct MediaArtworkView: View {
+    @Environment(\.displayScale) private var displayScale
+
     let descriptor: MediaArtworkDescriptor
     let style: MediaArtworkSurfaceStyle
 
@@ -395,32 +381,36 @@ struct MediaArtworkView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            descriptor.palette.gradient
+        GeometryReader { proxy in
+            ZStack(alignment: .bottomLeading) {
+                descriptor.palette.gradient
 
-            ArtworkImageSequenceView(
-                assets: orderedAssets,
-                success: { asset, image in
-                    platformImageView(
-                        image,
-                        rendering: descriptor.rendering(for: asset, in: style)
-                    )
-                },
-                loading: {
-                    loadingContent
-                },
-                fallback: {
-                    fallbackContent
-                }
-            )
+                ArtworkImageSequenceView(
+                    assets: orderedAssets,
+                    maxPixelSize: requestedMaxPixelSize(for: proxy.size),
+                    success: { asset, image in
+                        platformImageView(
+                            image,
+                            rendering: descriptor.rendering(for: asset, in: style)
+                        )
+                    },
+                    loading: {
+                        loadingContent
+                    },
+                    fallback: {
+                        fallbackContent
+                    }
+                )
 
-            LinearGradient(
-                colors: [.clear, .black.opacity(style.overlayOpacity)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+                LinearGradient(
+                    colors: [.clear, .black.opacity(style.overlayOpacity)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
 
-            artworkOverlay
+                artworkOverlay
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .aspectRatio(style.aspectRatio, contentMode: .fit)
         .clipShape(shape)
@@ -430,6 +420,24 @@ struct MediaArtworkView: View {
         .shadow(color: BrowseTheme.artworkShadow,
                 radius: style.shadowRadius,
                 y: style.shadowYOffset)
+    }
+
+    private func requestedMaxPixelSize(for size: CGSize) -> Int {
+        guard size.width > 0, size.height > 0 else {
+            switch style {
+            case .posterCard:
+                return 768
+            case .landscapeCard:
+                return 1280
+            case .landscapeRow:
+                return 1024
+            }
+        }
+
+        let rawPixelSize = max(size.width, size.height) * max(displayScale, 1)
+        let rounded = Int(rawPixelSize.rounded(.up))
+        let quantized = ((rounded + 63) / 64) * 64
+        return min(max(quantized, 128), 1536)
     }
 
     private var loadingContent: some View {
@@ -538,45 +546,30 @@ private struct ArtworkLoadingPlaceholder: View {
     let cornerRadius: CGFloat
     let iconName: String?
 
-    @State private var phase: CGFloat = -1
-
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Rectangle()
-                    .fill(BrowseTheme.artworkPlaceholderBase)
+        ZStack {
+            Rectangle()
+                .fill(BrowseTheme.artworkPlaceholderBase)
 
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                .clear,
-                                BrowseTheme.artworkPlaceholderHighlight,
-                                .clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: max(proxy.size.width * 0.42, 44))
-                    .rotationEffect(.degrees(18))
-                    .offset(x: phase * max(proxy.size.width * 1.4, 120))
-
-                if let iconName {
-                    Image(systemName: iconName)
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(BrowseTheme.primaryText.opacity(0.24))
-                }
-            }
-            .clipShape(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            LinearGradient(
+                colors: [
+                    .clear,
+                    BrowseTheme.artworkPlaceholderHighlight.opacity(0.9),
+                    .clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .task {
-                guard phase < 0 else { return }
-                withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
+            .opacity(0.7)
+
+            if let iconName {
+                Image(systemName: iconName)
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(BrowseTheme.primaryText.opacity(0.24))
             }
         }
+        .clipShape(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        )
     }
 }

@@ -1,5 +1,7 @@
 import CryptoKit
+import CoreGraphics
 import Foundation
+import ImageIO
 import SwiftUI
 
 final class ArtworkImageBox: @unchecked Sendable {
@@ -35,12 +37,12 @@ actor ArtworkRepository {
         memoryCache.countLimit = maxMemoryEntries
     }
 
-    func image(for asset: MediaArtworkAsset) async -> ArtworkImageBox? {
+    func image(for asset: MediaArtworkAsset, maxPixelSize: Int? = nil) async -> ArtworkImageBox? {
         switch asset {
         case let .local(_, path):
-            return loadLocalImage(path: path)
+            return loadLocalImage(path: path, maxPixelSize: maxPixelSize)
         case let .remote(_, url):
-            return await loadRemoteImage(url: url)
+            return await loadRemoteImage(url: url, maxPixelSize: maxPixelSize)
         }
     }
 
@@ -70,14 +72,17 @@ actor ArtworkRepository {
         return "remote|\(components.string ?? url.absoluteString)"
     }
 
-    private func loadLocalImage(path: String) -> ArtworkImageBox? {
-        let cacheKey = Self.localCacheKey(for: path)
+    private func loadLocalImage(path: String, maxPixelSize: Int?) -> ArtworkImageBox? {
+        let trace = PYSignpost.begin("ArtworkLocalLoad", category: .artwork)
+        defer { trace.end() }
+        let cacheKey = Self.localCacheKey(for: path, maxPixelSize: maxPixelSize)
         let key = cacheKey as NSString
         if let cached = memoryCache.object(forKey: key) {
             return cached
         }
 
-        guard let image = PlatformImage(contentsOfFile: path) else {
+        guard let image = Self.makeImage(at: URL(fileURLWithPath: path),
+                                         maxPixelSize: maxPixelSize) else {
             return nil
         }
 
@@ -86,14 +91,17 @@ actor ArtworkRepository {
         return box
     }
 
-    private func loadRemoteImage(url: URL) async -> ArtworkImageBox? {
+    private func loadRemoteImage(url: URL, maxPixelSize: Int?) async -> ArtworkImageBox? {
+        let trace = PYSignpost.begin("ArtworkRemoteLoad", category: .artwork)
+        defer { trace.end() }
         let cacheKey = Self.canonicalRemoteCacheKey(for: url, ignoredQueryItems: ignoredQueryItems)
-        let key = cacheKey as NSString
+        let decodedCacheKey = Self.decodedRemoteCacheKey(for: cacheKey, maxPixelSize: maxPixelSize)
+        let key = decodedCacheKey as NSString
         if let cached = memoryCache.object(forKey: key) {
             return cached
         }
 
-        if let task = inFlightRemoteLoads[cacheKey] {
+        if let task = inFlightRemoteLoads[decodedCacheKey] {
             return await task.value
         }
 
@@ -103,7 +111,7 @@ actor ArtworkRepository {
         let maxDiskSizeBytes = self.maxDiskSizeBytes
         let task = Task<ArtworkImageBox?, Never> {
             let diskURL = Self.diskCacheURL(for: cacheKey, in: cacheDirectoryURL)
-            if let cached = Self.loadRemoteImageFromDisk(at: diskURL) {
+            if let cached = Self.loadRemoteImageFromDisk(at: diskURL, maxPixelSize: maxPixelSize) {
                 return cached
             }
             return await Self.fetchRemoteImage(
@@ -112,13 +120,14 @@ actor ArtworkRepository {
                 session: session,
                 cacheDirectoryURL: cacheDirectoryURL,
                 maxDiskEntryCount: maxDiskEntryCount,
-                maxDiskSizeBytes: maxDiskSizeBytes
+                maxDiskSizeBytes: maxDiskSizeBytes,
+                maxPixelSize: maxPixelSize
             )
         }
 
-        inFlightRemoteLoads[cacheKey] = task
+        inFlightRemoteLoads[decodedCacheKey] = task
         let result = await task.value
-        inFlightRemoteLoads[cacheKey] = nil
+        inFlightRemoteLoads[decodedCacheKey] = nil
 
         if let result {
             memoryCache.setObject(result, forKey: key)
@@ -131,7 +140,8 @@ actor ArtworkRepository {
                                          session: URLSession,
                                          cacheDirectoryURL: URL,
                                          maxDiskEntryCount: Int,
-                                         maxDiskSizeBytes: Int64) async -> ArtworkImageBox? {
+                                         maxDiskSizeBytes: Int64,
+                                         maxPixelSize: Int?) async -> ArtworkImageBox? {
         let request = URLRequest(
             url: url,
             cachePolicy: .reloadIgnoringLocalCacheData,
@@ -142,7 +152,7 @@ actor ArtworkRepository {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode),
-                  let image = makeImage(from: data) else {
+                  let image = makeImage(from: data, maxPixelSize: maxPixelSize) else {
                 return nil
             }
 
@@ -158,9 +168,10 @@ actor ArtworkRepository {
         }
     }
 
-    private static func loadRemoteImageFromDisk(at url: URL) -> ArtworkImageBox? {
-        guard let data = try? Data(contentsOf: url),
-              let image = makeImage(from: data) else {
+    private static func loadRemoteImageFromDisk(at url: URL,
+                                                maxPixelSize: Int?) -> ArtworkImageBox? {
+        guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]),
+              let image = makeImage(from: data, maxPixelSize: maxPixelSize) else {
             if FileManager.default.fileExists(atPath: url.path) {
                 try? FileManager.default.removeItem(at: url)
             }
@@ -234,11 +245,52 @@ actor ArtworkRepository {
         )
     }
 
-    private static func makeImage(from data: Data) -> PlatformImage? {
-        PlatformImage(data: data)
+    private static func makeImage(at url: URL, maxPixelSize: Int?) -> PlatformImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return PlatformImage(contentsOfFile: url.path)
+        }
+        return makeImage(from: source, maxPixelSize: maxPixelSize) ?? PlatformImage(contentsOfFile: url.path)
     }
 
-    private static func localCacheKey(for path: String) -> String {
+    private static func makeImage(from data: Data, maxPixelSize: Int?) -> PlatformImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return PlatformImage(data: data)
+        }
+        return makeImage(from: source, maxPixelSize: maxPixelSize) ?? PlatformImage(data: data)
+    }
+
+    private static func makeImage(from source: CGImageSource, maxPixelSize: Int?) -> PlatformImage? {
+        let effectiveMaxPixelSize = maxPixelSize.flatMap { $0 > 0 ? $0 : nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceShouldCache: true,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+
+        let cgImage: CGImage?
+        if let effectiveMaxPixelSize {
+            var thumbnailOptions = options
+            thumbnailOptions[kCGImageSourceCreateThumbnailFromImageAlways] = true
+            thumbnailOptions[kCGImageSourceCreateThumbnailWithTransform] = true
+            thumbnailOptions[kCGImageSourceThumbnailMaxPixelSize] = effectiveMaxPixelSize
+            cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
+        } else {
+            cgImage = CGImageSourceCreateImageAtIndex(source, 0, options as CFDictionary)
+        }
+
+        guard let cgImage else { return nil }
+        return platformImage(from: cgImage)
+    }
+
+    private static func platformImage(from cgImage: CGImage) -> PlatformImage {
+        #if os(macOS)
+        return NSImage(cgImage: cgImage,
+                       size: NSSize(width: cgImage.width, height: cgImage.height))
+        #else
+        return UIImage(cgImage: cgImage)
+        #endif
+    }
+
+    private static func localCacheKey(for path: String, maxPixelSize: Int?) -> String {
         let url = URL(fileURLWithPath: path)
         let values = try? url.resourceValues(forKeys: [
             .fileSizeKey,
@@ -246,7 +298,12 @@ actor ArtworkRepository {
         ])
         let fileSize = Int64(values?.fileSize ?? -1)
         let modificationTime = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-        return "local|\(path)|\(fileSize)|\(modificationTime)"
+        return "local|\(path)|\(fileSize)|\(modificationTime)|\(maxPixelSize ?? 0)"
+    }
+
+    private static func decodedRemoteCacheKey(for canonicalKey: String,
+                                              maxPixelSize: Int?) -> String {
+        "\(canonicalKey)|\(maxPixelSize ?? 0)"
     }
 
     private static func diskCacheURL(for cacheKey: String, in directory: URL) -> URL {
@@ -279,6 +336,11 @@ struct ArtworkResolvedAsset {
     let image: PlatformImage
 }
 
+private struct ArtworkLoadRequest: Hashable {
+    let assets: [MediaArtworkAsset]
+    let maxPixelSize: Int?
+}
+
 @MainActor
 final class ArtworkSequenceLoader: ObservableObject {
     enum Phase {
@@ -291,15 +353,17 @@ final class ArtworkSequenceLoader: ObservableObject {
     @Published private(set) var phase: Phase = .idle
 
     private let repository: ArtworkRepository
-    private var assets: [MediaArtworkAsset] = []
+    private var request = ArtworkLoadRequest(assets: [], maxPixelSize: nil)
     private var loadTask: Task<Void, Never>?
 
     init(repository: ArtworkRepository = .shared) {
         self.repository = repository
     }
 
-    func load(assets: [MediaArtworkAsset]) {
-        if self.assets == assets {
+    func load(assets: [MediaArtworkAsset], maxPixelSize: Int? = nil) {
+        let request = ArtworkLoadRequest(assets: assets, maxPixelSize: maxPixelSize)
+
+        if self.request == request {
             switch phase {
             case .loading, .success:
                 return
@@ -308,7 +372,7 @@ final class ArtworkSequenceLoader: ObservableObject {
             }
         }
 
-        self.assets = assets
+        self.request = request
         loadTask?.cancel()
 
         guard !assets.isEmpty else {
@@ -318,12 +382,12 @@ final class ArtworkSequenceLoader: ObservableObject {
 
         phase = .loading
         loadTask = Task { [weak self, repository] in
-            for asset in assets {
+            for asset in request.assets {
                 guard !Task.isCancelled else { return }
-                if let box = await repository.image(for: asset) {
+                if let box = await repository.image(for: asset, maxPixelSize: request.maxPixelSize) {
                     guard !Task.isCancelled else { return }
                     await MainActor.run {
-                        guard let self, self.assets == assets else { return }
+                        guard let self, self.request == request else { return }
                         self.phase = .success(ArtworkResolvedAsset(asset: asset, image: box.image))
                     }
                     return
@@ -332,7 +396,7 @@ final class ArtworkSequenceLoader: ObservableObject {
 
             guard !Task.isCancelled else { return }
             await MainActor.run {
-                guard let self, self.assets == assets else { return }
+                guard let self, self.request == request else { return }
                 self.phase = .failure
             }
         }
@@ -346,6 +410,7 @@ final class ArtworkSequenceLoader: ObservableObject {
 
 struct ArtworkImageSequenceView<Success: View, Loading: View, Fallback: View>: View {
     let assets: [MediaArtworkAsset]
+    let maxPixelSize: Int?
     private let success: (MediaArtworkAsset, PlatformImage) -> Success
     private let loading: Loading
     private let fallback: Fallback
@@ -353,11 +418,13 @@ struct ArtworkImageSequenceView<Success: View, Loading: View, Fallback: View>: V
     @StateObject private var loader: ArtworkSequenceLoader
 
     init(assets: [MediaArtworkAsset],
+         maxPixelSize: Int? = nil,
          repository: ArtworkRepository = .shared,
          @ViewBuilder success: @escaping (MediaArtworkAsset, PlatformImage) -> Success,
          @ViewBuilder loading: () -> Loading,
          @ViewBuilder fallback: () -> Fallback) {
         self.assets = assets
+        self.maxPixelSize = maxPixelSize
         self.success = success
         self.loading = loading()
         self.fallback = fallback()
@@ -375,9 +442,9 @@ struct ArtworkImageSequenceView<Success: View, Loading: View, Fallback: View>: V
                 fallback
             }
         }
-        .task(id: assets) {
+        .task(id: ArtworkLoadRequest(assets: assets, maxPixelSize: maxPixelSize)) {
             await MainActor.run {
-                loader.load(assets: assets)
+                loader.load(assets: assets, maxPixelSize: maxPixelSize)
             }
         }
         .onDisappear {

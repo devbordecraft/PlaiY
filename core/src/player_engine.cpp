@@ -1009,6 +1009,17 @@ PlaybackStats PlayerEngine::get_playback_stats() const {
     return gather_playback_stats(ctx);
 }
 
+PlayerTransportSnapshot PlayerEngine::get_transport_snapshot() const {
+    const AudioOutputMode output_mode = impl_->audio_pipeline->output_mode();
+    return PlayerTransportSnapshot {
+        .state = impl_->state.load(std::memory_order_relaxed),
+        .position_us = impl_->clock.now_us(),
+        .passthrough_active = output_mode == AudioOutputMode::Passthrough,
+        .spatial_active = output_mode == AudioOutputMode::Spatial,
+        .subtitle_revision = impl_->subtitle_manager ? impl_->subtitle_manager->revision() : 0,
+    };
+}
+
 VideoFrame* PlayerEngine::acquire_video_frame(int64_t target_pts_us) {
     if (!impl_->frame_presenter) return nullptr;
     return impl_->frame_presenter->acquire(target_pts_us);

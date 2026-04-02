@@ -32,6 +32,7 @@ public:
 
     void flush();
     void close();
+    uint64_t revision() const;
 
 private:
     struct Impl;

@@ -1,5 +1,8 @@
 import Foundation
 import os.log
+#if DEBUG
+import os.signpost
+#endif
 
 @c
 private func pyLogCallback(
@@ -57,4 +60,55 @@ enum PYLog {
     static func error(_ message: String, tag: String = "App") {
         swiftLogger.error("[\(tag)] \(message)")
     }
+}
+
+enum PYSignpostCategory {
+    case browse
+    case player
+    case render
+    case artwork
+}
+
+struct PYSignpostInterval {
+    #if DEBUG
+    fileprivate let log: OSLog
+    fileprivate let name: StaticString
+    fileprivate let id: OSSignpostID
+
+    func end() {
+        os_signpost(.end, log: log, name: name, signpostID: id)
+    }
+    #else
+    func end() {}
+    #endif
+}
+
+enum PYSignpost {
+    static func begin(_ name: StaticString, category: PYSignpostCategory) -> PYSignpostInterval {
+        #if DEBUG
+        let log = log(for: category)
+        let id = OSSignpostID(log: log)
+        os_signpost(.begin, log: log, name: name, signpostID: id)
+        return PYSignpostInterval(log: log, name: name, id: id)
+        #else
+        return PYSignpostInterval()
+        #endif
+    }
+
+    #if DEBUG
+    private static func log(for category: PYSignpostCategory) -> OSLog {
+        let categoryName: String
+        switch category {
+        case .browse:
+            categoryName = "browse.perf"
+        case .player:
+            categoryName = "player.perf"
+        case .render:
+            categoryName = "render.perf"
+        case .artwork:
+            categoryName = "artwork.perf"
+        }
+        return OSLog(subsystem: "com.plaiy.app", category: categoryName)
+    }
+    #endif
 }

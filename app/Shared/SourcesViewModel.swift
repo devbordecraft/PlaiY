@@ -69,6 +69,7 @@ class SourcesViewModel: ObservableObject {
     @Published var isConnecting = false
     @Published var error: String?
     @Published private(set) var plexReconnectReasons: [String: String] = [:]
+    @Published private(set) var sourcesRevision: UInt64 = 0
 
     let bridge: any SourceManagerBridgeProtocol
     private let configStore: any SourceConfigStore
@@ -111,6 +112,7 @@ class SourcesViewModel: ObservableObject {
         guard let data = json.data(using: .utf8) else { return }
         sources = (try? JSONDecoder().decode([SourceConfig].self, from: data)) ?? []
         syncPlexReconnectState()
+        sourcesRevision &+= 1
     }
 
     private func sourceConfig(for sourceId: String) -> SourceConfig? {

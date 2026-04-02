@@ -287,6 +287,8 @@ class MetalViewCoordinator {
 
     func draw(in view: MTKView) {
         guard let pipelineState else { return }
+        let drawTrace = PYSignpost.begin("MetalDraw", category: .render)
+        defer { drawTrace.end() }
 
         // Acquire a video frame from the player BEFORE requesting a drawable.
         // This avoids wasting drawables when we have no new content.

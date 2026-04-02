@@ -210,6 +210,19 @@ int64_t py_player_get_duration(PYPlayer* p) {
     return p->engine.duration_us();
 }
 
+PYPlayerTransportSnapshot py_player_get_transport_snapshot(PYPlayer* p) {
+    PYPlayerTransportSnapshot out = {};
+    if (!p) return out;
+
+    const py::PlayerTransportSnapshot snapshot = p->engine.get_transport_snapshot();
+    out.state = static_cast<int>(snapshot.state);
+    out.position_us = snapshot.position_us;
+    out.passthrough_active = snapshot.passthrough_active;
+    out.spatial_active = snapshot.spatial_active;
+    out.subtitle_revision = snapshot.subtitle_revision;
+    return out;
+}
+
 int py_player_get_audio_track_count(PYPlayer* p) {
     if (!p) return 0;
     return p->engine.audio_track_count();
