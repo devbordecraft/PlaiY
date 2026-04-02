@@ -4,6 +4,8 @@
 #include "plaiy/logger.h"
 #include "video/video_decoder_factory.h"
 
+#include <nlohmann/json.hpp>
+
 #ifdef __APPLE__
 #include "seek_thumbnail_renderer.h"
 #endif
@@ -16,8 +18,10 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <sys/stat.h>
 #include <vector>
 
@@ -28,6 +32,8 @@ static constexpr int THUMB_MAX_HEIGHT = 180;
 namespace py {
 
 namespace {
+
+using json = nlohmann::json;
 
 struct ThumbnailDimensions {
     int src_w = 0;
@@ -59,6 +65,66 @@ std::string thumbnail_path_for_index(const std::string& cache_dir, int index) {
     char filename[64];
     snprintf(filename, sizeof(filename), "thumb_%04d.jpg", index);
     return cache_dir + "/" + filename;
+}
+
+std::string cache_manifest_path(const std::string& cache_dir) {
+    return cache_dir + "/manifest.json";
+}
+
+struct FileIdentity {
+    uintmax_t file_size = 0;
+    int64_t modified_ns = 0;
+    bool valid = false;
+};
+
+FileIdentity file_identity_for_path(const std::string& video_path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(video_path, ec) || ec) {
+        return {};
+    }
+
+    const uintmax_t size = std::filesystem::file_size(video_path, ec);
+    if (ec) {
+        return {};
+    }
+
+    const auto modified = std::filesystem::last_write_time(video_path, ec);
+    if (ec) {
+        return {};
+    }
+
+    const auto modified_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        modified.time_since_epoch()).count();
+    return FileIdentity{
+        .file_size = size,
+        .modified_ns = modified_ns,
+        .valid = true,
+    };
+}
+
+const char* thumbnail_mode_name(SeekThumbnailGenerator::ThumbnailMode mode) {
+    return mode == SeekThumbnailGenerator::ThumbnailMode::CustomMetalP5
+        ? "custom_p5"
+        : "legacy";
+}
+
+int count_contiguous_cached_thumbnails(const std::string& cache_dir) {
+    int count = 0;
+    while (true) {
+        std::error_code ec;
+        if (!std::filesystem::exists(thumbnail_path_for_index(cache_dir, count), ec) || ec) {
+            break;
+        }
+        ++count;
+    }
+    return count;
+}
+
+void clear_thumbnail_cache_dir(const std::string& cache_dir) {
+    std::error_code ec;
+    std::filesystem::remove_all(cache_dir, ec);
+    ec.clear();
+    std::filesystem::create_directories(cache_dir, ec);
 }
 
 AVCodecContext* create_jpeg_encoder(int width, int height) {
@@ -161,6 +227,15 @@ void SeekThumbnailGenerator::start(const std::string& video_path,
         PY_LOG_INFO(TAG, "DV Profile 5: seek thumbnails will use the custom Metal render pipeline");
     }
 
+    restore_cached_generation(video_path, cache_dir, interval_seconds);
+    if (total_count_.load() > 0 &&
+        generated_count_.load() >= total_count_.load()) {
+        progress_.store(100);
+        PY_LOG_INFO(TAG, "reused complete thumbnail cache: %d thumbnails",
+                    generated_count_.load());
+        return;
+    }
+
     worker_ = std::thread(&SeekThumbnailGenerator::generate_loop, this,
                           video_path, cache_dir, interval_seconds);
 }
@@ -209,6 +284,86 @@ void SeekThumbnailGenerator::store_decoded_thumbnail(int index, DecodedThumbnail
         decoded_cache_.erase(evict_index);
     }
     last_index_ = index;
+}
+
+bool SeekThumbnailGenerator::restore_cached_generation(const std::string& video_path,
+                                                       const std::string& cache_dir,
+                                                       int interval_seconds) {
+    std::ifstream manifest_stream(cache_manifest_path(cache_dir));
+    if (!manifest_stream.is_open()) {
+        return false;
+    }
+
+    json manifest_json;
+    try {
+        manifest_stream >> manifest_json;
+    } catch (const json::exception&) {
+        clear_thumbnail_cache_dir(cache_dir);
+        return false;
+    }
+
+    CacheManifest manifest;
+    manifest.video_path = manifest_json.value("video_path", "");
+    manifest.file_size = manifest_json.value("file_size", static_cast<uintmax_t>(0));
+    manifest.modified_ns = manifest_json.value("modified_ns", int64_t{0});
+    manifest.interval_seconds = manifest_json.value("interval_seconds", 0);
+    manifest.total_count = manifest_json.value("total_count", 0);
+    const std::string manifest_mode = manifest_json.value("mode", std::string{});
+
+    const FileIdentity identity = file_identity_for_path(video_path);
+    const bool manifest_matches =
+        identity.valid &&
+        manifest.video_path == video_path &&
+        manifest.file_size == identity.file_size &&
+        manifest.modified_ns == identity.modified_ns &&
+        manifest.interval_seconds == interval_seconds &&
+        manifest.total_count > 0 &&
+        manifest_mode == thumbnail_mode_name(mode_);
+
+    if (!manifest_matches) {
+        clear_thumbnail_cache_dir(cache_dir);
+        return false;
+    }
+
+    const int cached_count = std::min(count_contiguous_cached_thumbnails(cache_dir), manifest.total_count);
+    total_count_.store(manifest.total_count);
+    generated_count_.store(cached_count);
+    progress_.store(static_cast<int>(
+        100.0 * static_cast<double>(cached_count) /
+        static_cast<double>(std::max(manifest.total_count, 1))));
+
+    if (cached_count > 0) {
+        PY_LOG_INFO(TAG, "reused cached thumbnails: %d/%d (%s)",
+                    cached_count, manifest.total_count, video_path.c_str());
+    }
+    return true;
+}
+
+void SeekThumbnailGenerator::write_cache_manifest(const std::string& video_path,
+                                                  const std::string& cache_dir,
+                                                  int interval_seconds,
+                                                  int total_count) {
+    const FileIdentity identity = file_identity_for_path(video_path);
+    if (!identity.valid) {
+        return;
+    }
+
+    json manifest = {
+        {"video_path", video_path},
+        {"file_size", identity.file_size},
+        {"modified_ns", identity.modified_ns},
+        {"interval_seconds", interval_seconds},
+        {"mode", thumbnail_mode_name(mode_)},
+        {"total_count", total_count},
+    };
+
+    std::ofstream manifest_stream(cache_manifest_path(cache_dir),
+                                  std::ios::out | std::ios::trunc);
+    if (!manifest_stream.is_open()) {
+        PY_LOG_WARN(TAG, "Failed to write thumbnail manifest for %s", video_path.c_str());
+        return;
+    }
+    manifest_stream << manifest.dump();
 }
 
 bool SeekThumbnailGenerator::get_thumbnail(int64_t timestamp_us, int64_t duration_us,
@@ -339,8 +494,12 @@ void SeekThumbnailGenerator::generate_loop(std::string video_path,
     }
 
     if (!cancel_flag_.load()) {
-        progress_.store(100);
-        PY_LOG_INFO(TAG, "finished: %d thumbnails generated", generated_count_.load());
+        const int total = total_count_.load();
+        const int generated = generated_count_.load();
+        if (total > 0 && generated >= total) {
+            progress_.store(100);
+            PY_LOG_INFO(TAG, "finished: %d thumbnails generated", generated);
+        }
     }
 }
 
@@ -387,6 +546,7 @@ bool SeekThumbnailGenerator::generate_legacy_thumbnails(const std::string& video
     }
 
     total_count_.store(total);
+    write_cache_manifest(video_path, cache_dir, interval_seconds, total);
     PY_LOG_INFO(TAG, "generating %d legacy thumbnails (%dx%d) at %ds intervals for %s",
                 total, dims.dst_w, dims.dst_h, interval_seconds, video_path.c_str());
 
@@ -407,7 +567,8 @@ bool SeekThumbnailGenerator::generate_legacy_thumbnails(const std::string& video
     scaled->height = dims.dst_h;
     av_frame_get_buffer(scaled, 0);
 
-    for (int i = 0; i < total && !cancel_flag_.load(); i++) {
+    const int resume_index = std::min(generated_count_.load(), total);
+    for (int i = resume_index; i < total && !cancel_flag_.load(); i++) {
         int64_t target_ts = static_cast<int64_t>(i) * interval_seconds * AV_TIME_BASE;
         av_seek_frame(fmt, -1, target_ts, AVSEEK_FLAG_BACKWARD);
         avcodec_flush_buffers(dec);
@@ -444,7 +605,9 @@ bool SeekThumbnailGenerator::generate_legacy_thumbnails(const std::string& video
         sws_scale(sws, frame->data, frame->linesize, 0, frame->height,
                   scaled->data, scaled->linesize);
 
-        write_encoded_jpeg(enc, scaled, thumbnail_path_for_index(cache_dir, i));
+        if (!write_encoded_jpeg(enc, scaled, thumbnail_path_for_index(cache_dir, i))) {
+            continue;
+        }
 
         generated_count_.store(i + 1);
         progress_.store(static_cast<int>(100.0 * static_cast<double>(i + 1) / static_cast<double>(total)));
@@ -531,10 +694,12 @@ bool SeekThumbnailGenerator::generate_custom_p5_thumbnails(const std::string& vi
     }
 
     total_count_.store(total);
+    write_cache_manifest(video_path, cache_dir, interval_seconds, total);
     PY_LOG_INFO(TAG, "generating %d DV Profile 5 thumbnails via custom Metal renderer (%dx%d) at %ds intervals for %s",
                 total, dims.dst_w, dims.dst_h, interval_seconds, video_path.c_str());
 
-    for (int i = 0; i < total && !cancel_flag_.load(); i++) {
+    const int resume_index = std::min(generated_count_.load(), total);
+    for (int i = resume_index; i < total && !cancel_flag_.load(); i++) {
         const int64_t target_us = static_cast<int64_t>(i) * interval_seconds * 1000000LL;
         Error seek_err = demuxer.seek(target_us);
         if (seek_err) continue;
@@ -592,7 +757,9 @@ bool SeekThumbnailGenerator::generate_custom_p5_thumbnails(const std::string& vi
         sws_scale(bgra_to_jpeg, src_data, src_linesize, 0, dims.dst_h,
                   yuv->data, yuv->linesize);
 
-        write_encoded_jpeg(enc, yuv, thumbnail_path_for_index(cache_dir, i));
+        if (!write_encoded_jpeg(enc, yuv, thumbnail_path_for_index(cache_dir, i))) {
+            continue;
+        }
 
         generated_count_.store(i + 1);
         progress_.store(static_cast<int>(100.0 * static_cast<double>(i + 1) / static_cast<double>(total)));

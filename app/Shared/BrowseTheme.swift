@@ -15,6 +15,12 @@ enum BrowseTheme {
     static let backdropBottom = Color(red: 0.06, green: 0.07, blue: 0.10)
     static let backdropAccentA = Color.orange.opacity(0.22)
     static let backdropAccentB = Color(red: 0.16, green: 0.50, blue: 0.72).opacity(0.18)
+    static let artworkBorder = Color.white.opacity(0.08)
+    static let artworkBadgeBorder = Color.white.opacity(0.1)
+    static let artworkShadow = Color.black.opacity(0.26)
+    static let artworkPlaceholderBase = Color.white.opacity(0.08)
+    static let artworkPlaceholderHighlight = Color.white.opacity(0.18)
+    static let progressTrack = Color.black.opacity(0.35)
 }
 
 struct BrowseCardBackground: View {

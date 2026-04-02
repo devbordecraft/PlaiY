@@ -2,75 +2,32 @@ import SwiftUI
 
 struct MediaItemView: View {
     let item: LibraryItem
+    let browseItem: BrowseItem?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Library cover placeholder
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(.black)
-                    .aspectRatio(16.0/9.0, contentMode: .fit)
+        VStack(alignment: .leading, spacing: 12) {
+            MediaArtworkView(
+                descriptor: .libraryItem(item, browseItem: browseItem),
+                style: .landscapeCard
+            )
 
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.white.opacity(0.7))
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.title)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
 
-                // Duration badge + progress bar
-                VStack(spacing: 0) {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Text(item.durationText)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .foregroundStyle(.white)
-                            .glassEffect(.regular, in: .rect(cornerRadius: 4))
-                    }
-                    .padding(8)
+                metadataChips
 
-                    if let pos = ResumeStore.position(for: item.filePath),
-                       item.durationUs > 0 {
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .fill(.white.opacity(0.2))
-                                Rectangle()
-                                    .fill(.red)
-                                    .frame(width: geo.size.width * min(Double(pos) / Double(item.durationUs), 1.0))
-                            }
-                        }
-                        .frame(height: 3)
-                    }
+                if !item.fileSizeText.isEmpty {
+                    Text(item.fileSizeText)
+                        .font(.caption)
+                        .foregroundStyle(BrowseTheme.secondaryText)
                 }
             }
-
-            // Title
-            Text(item.title)
-                .font(.headline)
-                .lineLimit(2)
-
-            // Info badges
-            HStack(spacing: 6) {
-                if !item.resolutionText.isEmpty {
-                    BadgeView(text: item.resolutionText)
-                }
-                if !item.hdrText.isEmpty {
-                    BadgeView(text: item.hdrText, color: .orange)
-                }
-                if !item.videoCodec.isEmpty {
-                    BadgeView(text: item.videoCodec.uppercased())
-                }
-            }
-
-            // File size
-            Text(item.fileSizeText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(8)
-        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+        .padding(14)
+        .background(BrowseCardBackground(cornerRadius: 18))
         #if os(macOS)
         .onHover { hovering in
             if hovering {
@@ -81,19 +38,39 @@ struct MediaItemView: View {
         }
         #endif
     }
+
+    private var metadataChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                if !item.resolutionText.isEmpty {
+                    MediaMetadataChip(text: item.resolutionText)
+                }
+                if !item.hdrText.isEmpty {
+                    MediaMetadataChip(text: item.hdrText, tint: BrowseTheme.accent)
+                }
+                if !item.videoCodec.isEmpty {
+                    MediaMetadataChip(text: item.videoCodec.uppercased())
+                }
+            }
+        }
+    }
 }
 
-struct BadgeView: View {
+struct MediaMetadataChip: View {
     let text: String
-    var color: Color = .secondary
+    var tint: Color = BrowseTheme.primaryText
 
     var body: some View {
         Text(text)
             .font(.caption2)
             .fontWeight(.semibold)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .foregroundStyle(color)
-            .glassEffect(.regular, in: .rect(cornerRadius: 3))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .foregroundStyle(tint)
+            .background(BrowseTheme.elevatedFill, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(BrowseTheme.divider, lineWidth: 1)
+            )
     }
 }

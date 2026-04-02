@@ -6,15 +6,57 @@ import CoreGraphics
 @c
 private func deviceChangeTrampoline(_ userdata: UnsafeMutableRawPointer?) {
     guard let userdata else { return }
-    guard let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? () -> Void else { return }
-    cb()
+    Unmanaged<DeviceCallbackBox>.fromOpaque(userdata).takeUnretainedValue().invoke()
 }
 
 @c
 private func stateChangeTrampoline(_ state: Int32, _ userdata: UnsafeMutableRawPointer?) {
     guard let userdata else { return }
-    guard let cb = Unmanaged<AnyObject>.fromOpaque(userdata).takeUnretainedValue() as? (Int32) -> Void else { return }
-    cb(state)
+    Unmanaged<StateCallbackBox>.fromOpaque(userdata).takeUnretainedValue().invoke(state)
+}
+
+private final class DeviceCallbackBox: NSObject {
+    private let lock = NSLock()
+    private var callback: () -> Void
+
+    init(_ callback: @escaping () -> Void) {
+        self.callback = callback
+    }
+
+    func update(_ callback: @escaping () -> Void) {
+        lock.lock()
+        self.callback = callback
+        lock.unlock()
+    }
+
+    func invoke() {
+        lock.lock()
+        let callback = self.callback
+        lock.unlock()
+        callback()
+    }
+}
+
+private final class StateCallbackBox: NSObject {
+    private let lock = NSLock()
+    private var callback: (Int32) -> Void
+
+    init(_ callback: @escaping (Int32) -> Void) {
+        self.callback = callback
+    }
+
+    func update(_ callback: @escaping (Int32) -> Void) {
+        lock.lock()
+        self.callback = callback
+        lock.unlock()
+    }
+
+    func invoke(_ state: Int32) {
+        lock.lock()
+        let callback = self.callback
+        lock.unlock()
+        callback(state)
+    }
 }
 
 private final class PlayerThreadExecutor {
@@ -105,8 +147,8 @@ private final class PlayerThreadExecutor {
 final class PlayerBridge: @unchecked Sendable {
     private let executor: PlayerThreadExecutor
     private let handle: OpaquePointer
-    private var deviceCallbackContext: UnsafeMutableRawPointer?
-    private var stateCallbackContext: UnsafeMutableRawPointer?
+    private var deviceCallbackBox: DeviceCallbackBox?
+    private var stateCallbackBox: StateCallbackBox?
 
     private static func stringFromCString(_ ptr: UnsafePointer<CChar>?) -> String {
         guard let ptr else { return "" }
@@ -130,21 +172,14 @@ final class PlayerBridge: @unchecked Sendable {
     }
 
     deinit {
-        let deviceCallbackContext = deviceCallbackContext
-        let stateCallbackContext = stateCallbackContext
-
         sync { handle in
             py_player_set_device_change_callback(handle, nil, nil)
             py_player_set_state_callback(handle, nil, nil)
-            if let deviceCallbackContext {
-                Unmanaged<AnyObject>.fromOpaque(deviceCallbackContext).release()
-            }
-            if let stateCallbackContext {
-                Unmanaged<AnyObject>.fromOpaque(stateCallbackContext).release()
-            }
             py_player_destroy(handle)
         }
 
+        deviceCallbackBox = nil
+        stateCallbackBox = nil
         executor.shutdown()
     }
 
@@ -561,24 +596,28 @@ final class PlayerBridge: @unchecked Sendable {
     }
 
     func setDeviceChangeCallback(_ callback: @escaping () -> Void) {
-        if let prev = deviceCallbackContext {
-            Unmanaged<AnyObject>.fromOpaque(prev).release()
-        }
-        let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
-        deviceCallbackContext = context
+        let box = deviceCallbackBox ?? DeviceCallbackBox(callback)
+        box.update(callback)
+        deviceCallbackBox = box
         sync { handle in
-            py_player_set_device_change_callback(handle, deviceChangeTrampoline, context)
+            py_player_set_device_change_callback(
+                handle,
+                deviceChangeTrampoline,
+                Unmanaged.passUnretained(box).toOpaque()
+            )
         }
     }
 
     func setStateCallback(_ callback: @escaping (Int32) -> Void) {
-        if let prev = stateCallbackContext {
-            Unmanaged<AnyObject>.fromOpaque(prev).release()
-        }
-        let context = Unmanaged.passRetained(callback as AnyObject).toOpaque()
-        stateCallbackContext = context
+        let box = stateCallbackBox ?? StateCallbackBox(callback)
+        box.update(callback)
+        stateCallbackBox = box
         sync { handle in
-            py_player_set_state_callback(handle, stateChangeTrampoline, context)
+            py_player_set_state_callback(
+                handle,
+                stateChangeTrampoline,
+                Unmanaged.passUnretained(box).toOpaque()
+            )
         }
     }
 

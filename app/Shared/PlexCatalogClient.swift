@@ -51,7 +51,13 @@ actor PlexCatalogClient {
         case badResponse
     }
 
+    private struct DetailCacheKey: Hashable, Sendable {
+        let sourceID: String
+        let itemKey: String
+    }
+
     private let session: URLSession
+    private var detailCache: [DetailCacheKey: PlexDetailPayload] = [:]
 
     init(session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -75,6 +81,8 @@ actor PlexCatalogClient {
                 invalidAuthSourceIDs: []
             )
         }
+
+        invalidateDetailCache(for: Set(contexts.map { $0.config.id }))
 
         var movies: [BrowseItem] = []
         var shows: [BrowseItem] = []
@@ -174,10 +182,24 @@ actor PlexCatalogClient {
               let source = sources.first(where: { $0.id == sourceID }),
               let context = Self.context(for: source),
               let plexKey = item.plexKey ?? item.ratingKey.map({ "/library/metadata/\($0)" }) else {
+            if let sourceID = item.sourceID {
+                invalidateDetailCache(for: Set([sourceID]))
+            }
             return nil
         }
 
-        guard let itemResponse = try? await requestJSON(path: plexKey, context: context) else {
+        let cacheKey = DetailCacheKey(sourceID: sourceID, itemKey: plexKey)
+        if let cached = detailCache[cacheKey] {
+            return cached
+        }
+
+        let itemResponse: [String: Any]
+        do {
+            itemResponse = try await requestJSON(path: plexKey, context: context)
+        } catch PlexRequestError.unauthorized {
+            invalidateDetailCache(for: Set([sourceID]))
+            return nil
+        } catch {
             return nil
         }
         let meta = firstMetadata(from: itemResponse)
@@ -198,38 +220,54 @@ actor PlexCatalogClient {
         var sections: [BrowseDetailSection] = []
         switch item.kind {
         case .show:
-            if let ratingKey = item.ratingKey,
-               let childrenResponse = try? await requestJSON(path: "/library/metadata/\(ratingKey)/grandchildren", context: context) {
-                let episodes = metadataArray(from: childrenResponse).map { parseBrowseItem(meta: $0, context: context) }
-                let grouped = Dictionary(grouping: episodes) { $0.seasonNumber ?? 0 }
-                sections = grouped.keys.sorted().map { season in
-                    BrowseDetailSection(
-                        id: "season-\(season)",
-                        title: season > 0 ? "Season \(season)" : "Episodes",
-                        items: grouped[season]?.sorted(by: Self.episodeSort) ?? []
+            if let ratingKey = item.ratingKey {
+                do {
+                    let childrenResponse = try await requestJSON(
+                        path: "/library/metadata/\(ratingKey)/grandchildren",
+                        context: context
                     )
-                }
+                    let episodes = metadataArray(from: childrenResponse).map { parseBrowseItem(meta: $0, context: context) }
+                    let grouped = Dictionary(grouping: episodes) { $0.seasonNumber ?? 0 }
+                    sections = grouped.keys.sorted().map { season in
+                        BrowseDetailSection(
+                            id: "season-\(season)",
+                            title: season > 0 ? "Season \(season)" : "Episodes",
+                            items: grouped[season]?.sorted(by: Self.episodeSort) ?? []
+                        )
+                    }
+                } catch PlexRequestError.unauthorized {
+                    invalidateDetailCache(for: Set([sourceID]))
+                    return nil
+                } catch {}
             }
 
         case .episode:
             if item.sourceID != nil,
                item.ratingKey != nil {
-                if let parentKey = string(meta?["grandparentRatingKey"]),
-                   let siblingsResponse = try? await requestJSON(path: "/library/metadata/\(parentKey)/grandchildren", context: context) {
-                    let siblings = metadataArray(from: siblingsResponse).map { parseBrowseItem(meta: $0, context: context) }
-                    let season = item.seasonNumber ?? 0
-                    let filtered = siblings
-                        .filter { ($0.seasonNumber ?? 0) == season }
-                        .sorted(by: Self.episodeSort)
-                    if !filtered.isEmpty {
-                        sections = [
-                            BrowseDetailSection(
-                                id: "season-\(season)",
-                                title: season > 0 ? "Season \(season)" : "Episodes",
-                                items: filtered
-                            )
-                        ]
-                    }
+                if let parentKey = string(meta?["grandparentRatingKey"]) {
+                    do {
+                        let siblingsResponse = try await requestJSON(
+                            path: "/library/metadata/\(parentKey)/grandchildren",
+                            context: context
+                        )
+                        let siblings = metadataArray(from: siblingsResponse).map { parseBrowseItem(meta: $0, context: context) }
+                        let season = item.seasonNumber ?? 0
+                        let filtered = siblings
+                            .filter { ($0.seasonNumber ?? 0) == season }
+                            .sorted(by: Self.episodeSort)
+                        if !filtered.isEmpty {
+                            sections = [
+                                BrowseDetailSection(
+                                    id: "season-\(season)",
+                                    title: season > 0 ? "Season \(season)" : "Episodes",
+                                    items: filtered
+                                )
+                            ]
+                        }
+                    } catch PlexRequestError.unauthorized {
+                        invalidateDetailCache(for: Set([sourceID]))
+                        return nil
+                    } catch {}
                 }
             }
 
@@ -237,12 +275,19 @@ actor PlexCatalogClient {
             break
         }
 
-        return PlexDetailPayload(
+        let payload = PlexDetailPayload(
             refreshedItem: refreshedItem,
             summary: summary,
             metadata: metadata,
             sections: sections
         )
+        detailCache[cacheKey] = payload
+        return payload
+    }
+
+    private func invalidateDetailCache(for sourceIDs: Set<String>) {
+        guard !sourceIDs.isEmpty else { return }
+        detailCache = detailCache.filter { !sourceIDs.contains($0.key.sourceID) }
     }
 
     private func fetchCatalogItemsResult(for context: PlexContext) async -> CatalogFetchResult {
@@ -250,6 +295,7 @@ actor PlexCatalogClient {
             let items = try await fetchCatalogItems(for: context)
             return CatalogFetchResult(sourceID: context.config.id, items: items, invalidAuth: false)
         } catch PlexRequestError.unauthorized {
+            invalidateDetailCache(for: Set([context.config.id]))
             return CatalogFetchResult(sourceID: context.config.id, items: [], invalidAuth: true)
         } catch {
             return CatalogFetchResult(sourceID: context.config.id, items: [], invalidAuth: false)

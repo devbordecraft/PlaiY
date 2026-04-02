@@ -323,22 +323,20 @@ struct SourceBrowserView: View {
             sourcesVM.navigateInto(entry)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                artworkCard(entry, fallbackSystemName: "folder.fill", tint: .blue)
+                artworkCard(entry)
 
                 Text(entry.name)
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .lineLimit(2)
 
                 if let progressText = progressText(for: entry) {
                     Text(progressText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(BrowseTheme.secondaryText)
                 }
             }
-            .padding(8)
-            #if !os(tvOS)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
-            #endif
+            .padding(14)
+            .background(BrowseCardBackground(cornerRadius: 18))
         }
         #if os(tvOS)
         .buttonStyle(.card)
@@ -357,28 +355,26 @@ struct SourceBrowserView: View {
             onSelect(sourcesVM.playbackItem(for: entry))
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                artworkCard(entry, fallbackSystemName: "play.circle.fill", tint: .white)
+                artworkCard(entry)
 
                 Text(entry.name)
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .lineLimit(2)
 
                 if let progressText = progressText(for: entry) {
                     Text(progressText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(BrowseTheme.secondaryText)
                 }
 
                 if !entry.fileSizeText.isEmpty {
                     Text(entry.fileSizeText)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(BrowseTheme.secondaryText)
                 }
             }
-            .padding(8)
-            #if !os(tvOS)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
-            #endif
+            .padding(14)
+            .background(BrowseCardBackground(cornerRadius: 18))
         }
         #if os(tvOS)
         .buttonStyle(.card)
@@ -403,78 +399,10 @@ struct SourceBrowserView: View {
     }
 
     @ViewBuilder
-    private func artworkCard(_ entry: SourceEntry,
-                             fallbackSystemName: String,
-                             tint: Color) -> some View {
-        let cardShape = RoundedRectangle(cornerRadius: 8)
-
-        ZStack(alignment: .topTrailing) {
-            ZStack(alignment: .bottomLeading) {
-                backgroundFill(for: entry, tint: tint)
-
-                if let url = artworkURL(for: entry) {
-                    AsyncImage(url: URL(string: url)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        default:
-                            fallbackArtwork(systemName: fallbackSystemName, tint: tint)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                } else {
-                    fallbackArtwork(systemName: fallbackSystemName, tint: tint)
-                }
-
-                if let progress = entry.progressFraction {
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(.black.opacity(0.35))
-                            Rectangle()
-                                .fill(entry.isWatched ? .green : .red)
-                                .frame(width: geo.size.width * progress)
-                        }
-                    }
-                    .frame(height: 4)
-                    .clipShape(Capsule())
-                    .padding(8)
-                }
-            }
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-            .clipShape(cardShape)
-
-            if entry.isWatched {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.white, .green)
-                    .padding(8)
-            }
-        }
-    }
-
-    private func fallbackArtwork(systemName: String, tint: Color) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 36))
-            .foregroundStyle(tint.opacity(0.85))
-    }
-
-    private func artworkURL(for entry: SourceEntry) -> String? {
-        guard let plex = entry.plex else { return nil }
-        if !plex.thumbURL.isEmpty { return plex.thumbURL }
-        if !plex.artURL.isEmpty { return plex.artURL }
-        return nil
-    }
-
-    private func backgroundFill(for entry: SourceEntry, tint: Color) -> LinearGradient {
-        let opacity = entry.plex == nil ? 0.12 : 0.2
-        return LinearGradient(
-            colors: [tint.opacity(opacity), Color.black.opacity(0.24)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+    private func artworkCard(_ entry: SourceEntry) -> some View {
+        MediaArtworkView(
+            descriptor: .sourceEntry(entry),
+            style: .landscapeCard
         )
     }
 

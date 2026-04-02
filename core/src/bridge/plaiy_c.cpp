@@ -12,6 +12,10 @@
 #include <mutex>
 #include <exception>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 using json = nlohmann::json;
 
 // ---- Error mapping ----
@@ -53,6 +57,7 @@ struct PYPlayer {
     std::string media_info_json;
     std::string last_error_msg;
     std::mutex last_error_mutex;
+    std::mutex callback_mutex;
     py::SeekThumbnailGenerator seek_thumbs;
     std::string video_path;
     PYDeviceChangeCallback device_cb = nullptr;
@@ -256,12 +261,22 @@ PYPassthroughCapabilities py_player_query_passthrough_support(PYPlayer* p) {
 
 void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb, void* userdata) {
     if (!p) return;
-    p->device_cb = cb;
-    p->device_ud = userdata;
+    {
+        std::lock_guard lock(p->callback_mutex);
+        p->device_cb = cb;
+        p->device_ud = userdata;
+    }
 
     if (cb) {
         p->engine.set_device_change_callback([p]{
-            if (p->device_cb) p->device_cb(p->device_ud);
+            PYDeviceChangeCallback local_cb = nullptr;
+            void* local_ud = nullptr;
+            {
+                std::lock_guard lock(p->callback_mutex);
+                local_cb = p->device_cb;
+                local_ud = p->device_ud;
+            }
+            if (local_cb) local_cb(local_ud);
         });
     } else {
         p->engine.set_device_change_callback(nullptr);
@@ -270,12 +285,22 @@ void py_player_set_device_change_callback(PYPlayer* p, PYDeviceChangeCallback cb
 
 void py_player_set_state_callback(PYPlayer* p, PYStateChangeCallback cb, void* userdata) {
     if (!p) return;
-    p->state_cb = cb;
-    p->state_ud = userdata;
+    {
+        std::lock_guard lock(p->callback_mutex);
+        p->state_cb = cb;
+        p->state_ud = userdata;
+    }
 
     if (cb) {
         p->engine.set_state_callback([p](py::PlaybackState s){
-            if (p->state_cb) p->state_cb(static_cast<int>(s), p->state_ud);
+            PYStateChangeCallback local_cb = nullptr;
+            void* local_ud = nullptr;
+            {
+                std::lock_guard lock(p->callback_mutex);
+                local_cb = p->state_cb;
+                local_ud = p->state_ud;
+            }
+            if (local_cb) local_cb(static_cast<int>(s), local_ud);
         });
     } else {
         p->engine.set_state_callback(nullptr);
@@ -408,6 +433,8 @@ const char* py_player_get_media_info_json(PYPlayer* p) {
             tj["height"] = t.height;
             tj["frame_rate"] = t.frame_rate;
             tj["hdr_type"] = static_cast<int>(t.hdr_metadata.type);
+            tj["sar_num"] = t.sar_num;
+            tj["sar_den"] = t.sar_den;
         } else if (t.type == py::MediaType::Audio) {
             tj["sample_rate"] = t.sample_rate;
             tj["channels"] = t.channels;
@@ -1075,13 +1102,20 @@ bool py_source_type_supported(const char* type) {
     if (!type) return false;
 
     std::string type_str = type;
+    if (type_str == "smb") {
+#if defined(__APPLE__) && !TARGET_OS_TV
+        return true;
+#else
+        return false;
+#endif
+    }
     if (type_str == "http") {
         return py::DirectMediaSource::is_runtime_supported(py::MediaSourceType::HTTP);
     }
     if (type_str == "nfs") {
         return py::DirectMediaSource::is_runtime_supported(py::MediaSourceType::NFS);
     }
-    if (type_str == "local" || type_str == "smb" || type_str == "plex") {
+    if (type_str == "local" || type_str == "plex") {
         return true;
     }
     return false;

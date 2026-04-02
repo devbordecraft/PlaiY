@@ -30,8 +30,12 @@ final class SourceConfigTests: XCTestCase {
     }
 
     func testSourceTypeAvailability() {
+        #if os(tvOS)
+        XCTAssertFalse(SourceType.local.isAvailable)
+        #else
         XCTAssertTrue(SourceType.local.isAvailable)
-        XCTAssertTrue(SourceType.smb.isAvailable)
+        #endif
+        XCTAssertEqual(SourceType.smb.isAvailable, SourceManagerBridge.isSourceTypeSupported(.smb))
         XCTAssertEqual(SourceType.nfs.isAvailable, SourceManagerBridge.isSourceTypeSupported(.nfs))
         XCTAssertEqual(SourceType.http.isAvailable, SourceManagerBridge.isSourceTypeSupported(.http))
         XCTAssertTrue(SourceType.plex.isAvailable)

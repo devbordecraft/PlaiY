@@ -194,15 +194,83 @@ private struct ParsedLocalMedia {
     let browseItem: BrowseItem
 }
 
+private struct CachedLocalMetadata {
+    enum Kind {
+        case movie(title: String, year: Int?)
+        case episode(ParsedEpisode)
+    }
+
+    let kind: Kind
+    let artwork: BrowseArtwork
+    let addedAt: Date?
+}
+
+private struct LocalCatalogCacheKey: Hashable {
+    let filePath: String
+    let fileSize: Int64
+    let fileModificationDate: Date?
+    let directoryModificationDate: Date?
+    let showDirectoryModificationDate: Date?
+}
+
+private enum LocalCatalogMetadataCache {
+    private static let maxEntries = 4_096
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var entries: [LocalCatalogCacheKey: CachedLocalMetadata] = [:]
+    nonisolated(unsafe) private static var insertionOrder: [LocalCatalogCacheKey] = []
+
+    static func metadata(for item: LibraryItem, fileURL: URL) -> CachedLocalMetadata {
+        let directories = LocalArtworkResolver.artworkDirectories(for: fileURL)
+        let key = LocalCatalogCacheKey(
+            filePath: item.filePath,
+            fileSize: item.fileSize,
+            fileModificationDate: modificationDate(for: fileURL),
+            directoryModificationDate: modificationDate(for: directories.directory),
+            showDirectoryModificationDate: directories.showDirectory.flatMap(modificationDate(for:))
+        )
+
+        lock.lock()
+        if let cached = entries[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let metadata = LocalMetadataParser.buildCachedMetadata(fileURL: fileURL,
+                                                               addedAt: key.fileModificationDate)
+
+        lock.lock()
+        if entries[key] == nil {
+            entries[key] = metadata
+            insertionOrder.append(key)
+            trimIfNeeded()
+        }
+        let cached = entries[key] ?? metadata
+        lock.unlock()
+        return cached
+    }
+
+    private static func trimIfNeeded() {
+        while insertionOrder.count > maxEntries {
+            let evicted = insertionOrder.removeFirst()
+            entries.removeValue(forKey: evicted)
+        }
+    }
+
+    private static func modificationDate(for url: URL) -> Date? {
+        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    }
+}
+
 private enum LocalMetadataParser {
     static func parse(item: LibraryItem, watchedIDs: Set<String>) -> ParsedLocalMedia {
         let fileURL = URL(fileURLWithPath: item.filePath)
-        let fileName = fileURL.deletingPathExtension().lastPathComponent
-        let details = LocalArtworkResolver.resolve(for: fileURL)
+        let cached = LocalCatalogMetadataCache.metadata(for: item, fileURL: fileURL)
         let progress = progress(for: item)
         let isWatched = watchedIDs.contains("local:file:\(item.filePath)")
 
-        if let episode = parseEpisode(fileName: fileName, fileURL: fileURL) {
+        switch cached.kind {
+        case let .episode(episode):
             let playbackItem = PlaybackItem.local(path: item.filePath, displayName: episode.episodeTitle)
             let browseItem = BrowseItem(
                 id: "local:file:\(item.filePath)",
@@ -213,7 +281,7 @@ private enum LocalMetadataParser {
                 summary: nil,
                 metadataLine: metadataLine(for: item),
                 badge: item.hdrText.isEmpty ? item.resolutionText : item.hdrText,
-                artwork: details,
+                artwork: cached.artwork,
                 progress: progress,
                 isWatched: isWatched,
                 sourceName: "Local Library",
@@ -223,7 +291,7 @@ private enum LocalMetadataParser {
                 plexKey: nil,
                 sourceID: nil,
                 sourceTypeRawValue: SourceType.local.rawValue,
-                addedAt: fileDate(for: item.filePath),
+                addedAt: cached.addedAt,
                 year: nil,
                 seasonNumber: episode.season,
                 episodeNumber: episode.episode
@@ -232,37 +300,53 @@ private enum LocalMetadataParser {
                 kind: .episode(showID: episode.showID, showTitle: episode.showTitle, season: episode.season),
                 browseItem: browseItem
             )
+
+        case let .movie(title, year):
+            let playbackItem = PlaybackItem.local(path: item.filePath, displayName: title)
+            let movieItem = BrowseItem(
+                id: "local:file:\(item.filePath)",
+                kind: .movie,
+                source: .local,
+                title: title,
+                subtitle: item.durationText,
+                summary: nil,
+                metadataLine: metadataLine(for: item),
+                badge: item.hdrText.isEmpty ? item.resolutionText : item.hdrText,
+                artwork: cached.artwork,
+                progress: progress,
+                isWatched: isWatched,
+                sourceName: "Local Library",
+                playbackItem: playbackItem,
+                filePath: item.filePath,
+                ratingKey: nil,
+                plexKey: nil,
+                sourceID: nil,
+                sourceTypeRawValue: SourceType.local.rawValue,
+                addedAt: cached.addedAt,
+                year: year,
+                seasonNumber: nil,
+                episodeNumber: nil
+            )
+            return ParsedLocalMedia(kind: .movie, browseItem: movieItem)
+        }
+    }
+
+    static func buildCachedMetadata(fileURL: URL, addedAt: Date?) -> CachedLocalMetadata {
+        let fileName = fileURL.deletingPathExtension().lastPathComponent
+        let artwork = LocalArtworkResolver.resolve(for: fileURL)
+
+        if let episode = parseEpisode(fileName: fileName, fileURL: fileURL) {
+            return CachedLocalMetadata(kind: .episode(episode),
+                                       artwork: artwork,
+                                       addedAt: addedAt)
         }
 
         let year = parseYear(in: fileName)
         let movieTitle = cleanedMovieTitle(fileName: fileName, year: year)
         let title = year.map { "\(movieTitle) (\($0))" } ?? movieTitle
-        let playbackItem = PlaybackItem.local(path: item.filePath, displayName: title)
-        let movieItem = BrowseItem(
-            id: "local:file:\(item.filePath)",
-            kind: .movie,
-            source: .local,
-            title: title,
-            subtitle: item.durationText,
-            summary: nil,
-            metadataLine: metadataLine(for: item),
-            badge: item.hdrText.isEmpty ? item.resolutionText : item.hdrText,
-            artwork: details,
-            progress: progress,
-            isWatched: isWatched,
-            sourceName: "Local Library",
-            playbackItem: playbackItem,
-            filePath: item.filePath,
-            ratingKey: nil,
-            plexKey: nil,
-            sourceID: nil,
-            sourceTypeRawValue: SourceType.local.rawValue,
-            addedAt: fileDate(for: item.filePath),
-            year: year,
-            seasonNumber: nil,
-            episodeNumber: nil
-        )
-        return ParsedLocalMedia(kind: .movie, browseItem: movieItem)
+        return CachedLocalMetadata(kind: .movie(title: title, year: year),
+                                   artwork: artwork,
+                                   addedAt: addedAt)
     }
 
     private static func parseEpisode(fileName: String, fileURL: URL) -> ParsedEpisode? {
@@ -382,12 +466,6 @@ private enum LocalMetadataParser {
         guard item.durationUs > 0, let position = ResumeStore.position(for: item.filePath) else { return nil }
         return min(max(Double(position) / Double(item.durationUs), 0), 1)
     }
-
-    private static func fileDate(for path: String) -> Date? {
-        let url = URL(fileURLWithPath: path)
-        return try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-    }
-
     private static func firstRegexMatch(pattern: String, in text: String) -> RegexMatch? {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
         let range = NSRange(text.startIndex..., in: text)
@@ -430,15 +508,22 @@ private enum LocalArtworkResolver {
 
     static func resolve(for fileURL: URL) -> BrowseArtwork {
         let fileName = fileURL.deletingPathExtension().lastPathComponent
-        let directory = fileURL.deletingLastPathComponent()
-        let showDirectory = showDirectory(for: fileURL)
+        let directories = artworkDirectories(for: fileURL)
 
         return BrowseArtwork(
-            posterPath: resolvePoster(fileName: fileName, directory: directory, showDirectory: showDirectory),
+            posterPath: resolvePoster(fileName: fileName,
+                                      directory: directories.directory,
+                                      showDirectory: directories.showDirectory),
             posterURL: nil,
-            backdropPath: resolveBackdrop(directory: directory, showDirectory: showDirectory),
+            backdropPath: resolveBackdrop(directory: directories.directory,
+                                          showDirectory: directories.showDirectory),
             backdropURL: nil
         )
+    }
+
+    static func artworkDirectories(for fileURL: URL) -> (directory: URL, showDirectory: URL?) {
+        let directory = fileURL.deletingLastPathComponent()
+        return (directory: directory, showDirectory: showDirectory(for: fileURL))
     }
 
     private static func resolvePoster(fileName: String,

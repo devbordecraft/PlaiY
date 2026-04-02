@@ -288,6 +288,127 @@ final class PlexCatalogClientTests: XCTestCase {
         XCTAssertEqual(backdropComponents.queryItems?.first(where: { $0.name == "X-Plex-Token" })?.value, "tok+/%?=&")
     }
 
+    func testFetchDetailCachesAndSnapshotRefreshInvalidatesPayload() async throws {
+        let source = makeSourceConfig()
+        let client = PlexCatalogClient(session: makeSession())
+        let item = BrowseItem(
+            id: "plex:\(source.id):1",
+            kind: .show,
+            source: .plex,
+            title: "Severance",
+            subtitle: nil,
+            summary: nil,
+            metadataLine: nil,
+            badge: nil,
+            artwork: BrowseArtwork(),
+            progress: nil,
+            isWatched: false,
+            sourceName: source.displayName,
+            playbackItem: nil,
+            filePath: nil,
+            ratingKey: "1",
+            plexKey: "/library/metadata/1",
+            sourceID: source.id,
+            sourceTypeRawValue: SourceType.plex.rawValue,
+            addedAt: nil,
+            year: nil,
+            seasonNumber: nil,
+            episodeNumber: nil
+        )
+
+        var metadataRequests = 0
+        var grandchildrenRequests = 0
+
+        MockPlexURLProtocol.handler = { request in
+            let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            switch components.path {
+            case "/library/metadata/1":
+                metadataRequests += 1
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "Metadata": [
+                                [
+                                    "type": "show",
+                                    "ratingKey": "1",
+                                    "key": "/library/metadata/1",
+                                    "title": "Severance",
+                                    "summary": "Work-life split",
+                                    "leafCount": 2,
+                                    "viewedLeafCount": 0
+                                ]
+                            ]
+                        ]
+                    ]
+                )
+
+            case "/library/metadata/1/grandchildren":
+                grandchildrenRequests += 1
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "Metadata": [
+                                [
+                                    "type": "episode",
+                                    "ratingKey": "11",
+                                    "key": "/library/metadata/11",
+                                    "grandparentRatingKey": "1",
+                                    "title": "Good News About Hell",
+                                    "index": 1,
+                                    "parentIndex": 1
+                                ]
+                            ]
+                        ]
+                    ]
+                )
+
+            case "/library/sections":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "Directory": [
+                                ["key": "2", "type": "show"]
+                            ]
+                        ]
+                    ]
+                )
+
+            case "/library/sections/2/all":
+                return try Self.makeResponse(
+                    url: try XCTUnwrap(request.url),
+                    json: [
+                        "MediaContainer": [
+                            "totalSize": 1,
+                            "Metadata": [
+                                Self.showMetadata(ratingKey: 1, title: "Severance", leafCount: 2, viewedLeafCount: 0)
+                            ]
+                        ]
+                    ]
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let first = await client.fetchDetail(for: item, sources: [source])
+        let second = await client.fetchDetail(for: item, sources: [source])
+
+        XCTAssertEqual(first?.summary, "Work-life split")
+        XCTAssertEqual(second?.summary, "Work-life split")
+        XCTAssertEqual(metadataRequests, 1)
+        XCTAssertEqual(grandchildrenRequests, 1)
+
+        _ = await client.fetchSnapshot(sources: [source])
+        _ = await client.fetchDetail(for: item, sources: [source])
+
+        XCTAssertEqual(metadataRequests, 2)
+        XCTAssertEqual(grandchildrenRequests, 2)
+    }
+
     private func makeSourceConfig() -> SourceConfig {
         SourceConfig(
             id: sourceID,

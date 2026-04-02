@@ -6,6 +6,7 @@ import AppKit
 
 struct LibraryView: View {
     @EnvironmentObject var libraryVM: LibraryViewModel
+    var browseStore: BrowseStore? = nil
     let onSelect: (PlaybackItem) -> Void
     var onPlayAll: ([PlaybackItem]) -> Void = { _ in }
     let onSettings: () -> Void
@@ -135,11 +136,11 @@ struct LibraryView: View {
                             Button {
                                 onSelect(PlaybackItem.local(path: item.filePath, displayName: item.title))
                             } label: {
-                                MediaItemView(item: item)
+                                MediaItemView(item: item, browseItem: browseStore?.browseItem(forLocalPath: item.filePath))
                             }
                             .buttonStyle(.card)
                             #else
-                            MediaItemView(item: item)
+                            MediaItemView(item: item, browseItem: browseStore?.browseItem(forLocalPath: item.filePath))
                                 .onTapGesture {
                                     onSelect(PlaybackItem.local(path: item.filePath, displayName: item.title))
                                 }

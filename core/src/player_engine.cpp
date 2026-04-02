@@ -217,6 +217,8 @@ struct PlayerEngine::Impl {
     void video_decode_loop();
     void audio_decode_loop();
     void stop_threads();
+    void disable_audio();
+    void teardown_loaded_media();
     void apply_audio_output_runtime_state();
     bool wait_if_paused();
     void wake_workers();
@@ -449,34 +451,8 @@ void PlayerEngine::Impl::apply_pending_open_seek() {
 void PlayerEngine::Impl::reset_open_state() {
     if (audio_output) {
         audio_output->stop();
-        audio_output->close();
-        audio_output.reset();
     }
-
-    video_decoder.reset();
-    audio_decoder.reset();
-    frame_presenter.reset();
-    audio_pipeline->teardown();
-    subtitle_manager->close();
-    demuxer->close();
-
-#ifdef __APPLE__
-    if (dv_output) {
-        dv_output->close();
-        dv_output.reset();
-    }
-#endif
-    is_dv_output = false;
-
-    {
-        std::lock_guard lock(presented_frame_mutex);
-        presented_frame.reset();
-    }
-
-    media_info = {};
-    active_video_stream = -1;
-    active_audio_stream.store(-1, std::memory_order_release);
-    active_subtitle_stream.store(-1, std::memory_order_release);
+    teardown_loaded_media();
 }
 
 void PlayerEngine::play() {
@@ -624,32 +600,7 @@ void PlayerEngine::stop() {
     impl_->frames_rendered.store(0, std::memory_order_release);
     impl_->frames_dropped.store(0, std::memory_order_release);
 
-    if (impl_->audio_output) {
-        impl_->audio_output->close();
-        impl_->audio_output.reset();
-    }
-
-    impl_->video_decoder.reset();
-    impl_->audio_decoder.reset();
-    impl_->audio_pipeline->teardown();
-    impl_->audio_ring.release();
-    impl_->subtitle_manager->close();
-    impl_->demuxer->close();
-
-#ifdef __APPLE__
-    if (impl_->dv_output) {
-        impl_->dv_output->close();
-        impl_->dv_output.reset();
-    }
-    impl_->is_dv_output = false;
-#endif
-
-    {
-        std::lock_guard lock(impl_->presented_frame_mutex);
-        impl_->presented_frame.reset();
-    }
-
-    impl_->media_info = {};
+    impl_->teardown_loaded_media();
     impl_->set_state(PlaybackState::Idle);
 }
 
@@ -670,7 +621,8 @@ const MediaInfo& PlayerEngine::media_info() const {
 }
 
 void PlayerEngine::select_audio_track(int stream_index) {
-    if (stream_index == impl_->active_audio_stream.load(std::memory_order_acquire)) return;
+    const int previous_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
+    if (stream_index == previous_stream) return;
 
     // Validate it's a valid audio track
     if (stream_index >= 0 &&
@@ -683,16 +635,35 @@ void PlayerEngine::select_audio_track(int stream_index) {
     auto s = impl_->state.load();
     bool is_playing = (s == PlaybackState::Playing || s == PlaybackState::Paused);
 
+    if (stream_index < 0) {
+        impl_->active_audio_stream.store(-1, std::memory_order_release);
+        impl_->disable_audio();
+        PY_LOG_INFO(TAG, "Audio track disabled");
+        return;
+    }
+
+    const auto& new_track = impl_->media_info.tracks[static_cast<size_t>(stream_index)];
+
+    if (!is_playing) {
+        impl_->disable_audio();
+        impl_->active_audio_stream.store(stream_index, std::memory_order_release);
+        setup_audio_output(new_track);
+        PY_LOG_INFO(TAG, "Audio track primed to stream %d", stream_index);
+        return;
+    }
+
     // If in passthrough mode, or switching to a track that requires a mode change,
     // use the full restart path for clean teardown/rebuild.
     bool needs_restart = false;
     if (is_playing && impl_->audio_pipeline->output_mode() == AudioOutputMode::Passthrough) {
         needs_restart = true;  // Always restart when leaving passthrough
-    } else if (is_playing && impl_->audio_pipeline->is_passthrough_preferred() && stream_index >= 0) {
-        const auto& new_track = impl_->media_info.tracks[static_cast<size_t>(stream_index)];
+    } else if (is_playing && impl_->audio_pipeline->is_passthrough_preferred()) {
         if (is_passthrough_eligible(new_track.codec_id, new_track.codec_profile)) {
             needs_restart = true;  // Need to switch from PCM to passthrough
         }
+    }
+    if (!needs_restart && (previous_stream < 0 || !impl_->audio_output)) {
+        needs_restart = true;
     }
 
     impl_->active_audio_stream.store(stream_index, std::memory_order_release);
@@ -770,7 +741,10 @@ void PlayerEngine::setup_audio_output(const TrackInfo& track) {
 
 void PlayerEngine::restart_audio_pipeline() {
     int active_audio_stream = impl_->active_audio_stream.load(std::memory_order_acquire);
-    if (active_audio_stream < 0) return;
+    if (active_audio_stream < 0) {
+        impl_->disable_audio();
+        return;
+    }
 
     const auto& track = impl_->media_info.tracks[static_cast<size_t>(active_audio_stream)];
     bool start_output = impl_->state.load(std::memory_order_relaxed) == PlaybackState::Playing;
@@ -1054,6 +1028,74 @@ void PlayerEngine::set_state_callback(StateCallback cb) {
 
 void PlayerEngine::set_error_callback(ErrorCallback cb) {
     impl_->error_callback = std::move(cb);
+}
+
+void PlayerEngine::Impl::disable_audio() {
+    if (audio_output) {
+        audio_output->stop();
+    }
+
+    if (running.load(std::memory_order_relaxed)) {
+        audio_restart_requested.store(true, std::memory_order_release);
+        audio_packet_queue.abort();
+        pause_cv.notify_all();
+        audio_ring_not_full.notify_all();
+
+        if (audio_decode_thread.joinable()) {
+            audio_decode_thread.join();
+        }
+
+        audio_restart_requested.store(false, std::memory_order_release);
+        audio_packet_queue.reset();
+    }
+
+    if (audio_output) {
+        audio_output->close();
+        audio_output.reset();
+    }
+
+    audio_decoder.reset();
+    audio_pipeline->teardown();
+    audio_ring.release();
+    pending_audio_stream = -1;
+    audio_track_changed.store(false, std::memory_order_release);
+    audio_pts_for_ring.store(clock.now_us(), std::memory_order_release);
+}
+
+void PlayerEngine::Impl::teardown_loaded_media() {
+    if (audio_output) {
+        audio_output->close();
+        audio_output.reset();
+    }
+
+    video_decoder.reset();
+    audio_decoder.reset();
+    frame_presenter.reset();
+    audio_pipeline->teardown();
+    audio_ring.release();
+    pending_audio_stream = -1;
+    audio_track_changed.store(false, std::memory_order_release);
+
+    subtitle_manager->close();
+    demuxer->close();
+
+#ifdef __APPLE__
+    if (dv_output) {
+        dv_output->close();
+        dv_output.reset();
+    }
+#endif
+    is_dv_output = false;
+
+    {
+        std::lock_guard lock(presented_frame_mutex);
+        presented_frame.reset();
+    }
+
+    media_info = {};
+    active_video_stream = -1;
+    active_audio_stream.store(-1, std::memory_order_release);
+    active_subtitle_stream.store(-1, std::memory_order_release);
 }
 
 void PlayerEngine::Impl::apply_audio_output_runtime_state() {

@@ -67,6 +67,28 @@ final class BrowseStoreTests: XCTestCase {
         XCTAssertEqual(store.searchResults.first?.kind, .episode)
     }
 
+    func testBrowseItemKindsUseLandscapeSearchThumbnailStyles() {
+        XCTAssertEqual(BrowseItemKind.movie.searchThumbnailStyle, .landscape)
+        XCTAssertEqual(BrowseItemKind.show.searchThumbnailStyle, .landscape)
+        XCTAssertEqual(BrowseItemKind.episode.searchThumbnailStyle, .landscape)
+        XCTAssertEqual(BrowseItemKind.folder.searchThumbnailStyle, .landscape)
+        XCTAssertEqual(BrowseItemKind.source.searchThumbnailStyle, .landscape)
+    }
+
+    @MainActor
+    func testSearchKeepsMixedMovieShowAndEpisodeResults() {
+        let movie = makeLibraryItem(path: "/tmp/\(UUID().uuidString)/Dark.City.1998.mkv")
+        let episode = makeLibraryItem(path: "/tmp/\(UUID().uuidString)/Dark/Season 1/Dark.S01E02.Dark.Matter.mkv")
+        cleanupResumeKeys.append(contentsOf: [movie.filePath, episode.filePath])
+
+        let store = makeStore()
+        store.refresh(libraryItems: [movie, episode], folders: [], sources: [])
+        store.updateSearch(text: "dark")
+
+        XCTAssertEqual(store.searchResults.map(\.title), ["Dark", "Dark City (1998)", "Dark Matter"])
+        XCTAssertEqual(store.searchResults.map(\.kind), [.show, .movie, .episode])
+    }
+
     @MainActor
     func testToggleFavoritePersistsResolvedFavoriteItems() {
         let item = makeLibraryItem(path: "/tmp/\(UUID().uuidString)/Alien.1979.mkv")

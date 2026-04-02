@@ -45,9 +45,9 @@ enum SourceType: Int, Codable, CaseIterable, Sendable {
             #else
             true
             #endif
-        case .http, .nfs:
+        case .http, .nfs, .smb:
             SourceManagerBridge.isSourceTypeSupported(self)
-        case .smb, .plex:
+        case .plex:
             true
         }
     }

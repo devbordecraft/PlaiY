@@ -388,12 +388,13 @@ private struct BrowseSearchSection: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
                 .font(.system(size: 22, weight: .bold, design: .rounded))
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180, maximum: 260), spacing: 18)], spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(items, id: \.id) { item in
                     Button {
                         onSelectItem(item)
                     } label: {
-                        BrowsePosterCard(item: item, compact: true)
+                        BrowseSearchResultRow(item: item)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                 }
@@ -489,6 +490,7 @@ private struct FilesHubView: View {
 
             if browseStore.filesMode == .library {
                 LibraryView(
+                    browseStore: browseStore,
                     onSelect: { item in
                         if let browseItem = browseStore.browseItem(forLocalPath: item.path) {
                             onOpenLocalItem(browseItem)
@@ -570,6 +572,121 @@ private struct BrowseShelfView: View {
     }
 }
 
+private struct BrowseSearchResultRow: View {
+    let item: BrowseItem
+
+    private let thumbnailSlotWidth: CGFloat = 160
+    private let thumbnailSlotHeight: CGFloat = 114
+
+    private var sourceLabel: String {
+        item.sourceName ?? item.source.searchResultLabel
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            horizontalLayout
+            verticalLayout
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background(BrowseCardBackground(cornerRadius: 22))
+    }
+
+    private var horizontalLayout: some View {
+        HStack(alignment: .center, spacing: 18) {
+            thumbnailSlot
+
+            VStack(alignment: .leading, spacing: 12) {
+                chipRow
+                textBlock
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            chevron
+        }
+        .frame(minHeight: thumbnailSlotHeight)
+    }
+
+    private var verticalLayout: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            thumbnailSlot
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            chipRow
+            textBlock
+
+            HStack {
+                Spacer(minLength: 0)
+                chevron
+            }
+        }
+    }
+
+    private var thumbnailSlot: some View {
+        MediaArtworkView(
+            descriptor: .browseItem(item),
+            style: .landscapeRow
+        )
+        .frame(width: thumbnailSlotWidth)
+        .frame(width: thumbnailSlotWidth, height: thumbnailSlotHeight, alignment: .leading)
+    }
+
+    private var chipRow: some View {
+        HStack(spacing: 8) {
+            searchChip(item.kind.searchResultLabel)
+            searchChip(sourceLabel)
+        }
+    }
+
+    private func searchChip(_ title: String) -> some View {
+        Text(title)
+            .font(.caption)
+            .fontWeight(.semibold)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(BrowseTheme.elevatedFill, in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(BrowseTheme.divider, lineWidth: 1)
+            )
+    }
+
+    private var textBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.title)
+                .font(.system(size: 19, weight: .bold, design: .rounded))
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let subtitle = item.subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(BrowseTheme.secondaryText)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let metadata = item.metadataLine {
+                Text(metadata)
+                    .font(.caption)
+                    .foregroundStyle(BrowseTheme.tertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .foregroundStyle(BrowseTheme.tertiaryText)
+    }
+}
+
 private struct BrowsePosterCard: View {
     let item: BrowseItem
     let compact: Bool
@@ -578,23 +695,17 @@ private struct BrowsePosterCard: View {
         compact ? 190 : 220
     }
 
-    private var artAspectRatio: CGFloat {
-        item.kind == .episode ? 1.4 : 0.68
+    private var artStyle: MediaArtworkSurfaceStyle {
+        item.kind == .episode ? .landscapeCard : .posterCard
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ZStack(alignment: .topTrailing) {
-                BrowseArtworkView(item: item, aspectRatio: artAspectRatio)
-                    .frame(width: cardWidth)
-
-                if item.isWatched {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.white, .green)
-                        .padding(10)
-                }
-            }
+            MediaArtworkView(
+                descriptor: .browseItem(item),
+                style: artStyle
+            )
+            .frame(width: cardWidth)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
@@ -618,128 +729,6 @@ private struct BrowsePosterCard: View {
             }
         }
         .frame(width: cardWidth, alignment: .leading)
-    }
-}
-
-private struct BrowseArtworkView: View {
-    let item: BrowseItem
-    let aspectRatio: CGFloat
-    private let cardShape = RoundedRectangle(cornerRadius: 24, style: .continuous)
-
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            backgroundGradient
-
-            content
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.55)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-
-            VStack(alignment: .leading, spacing: 6) {
-                if let badge = item.badge {
-                    Text(badge)
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.45), in: Capsule())
-                        .foregroundStyle(.white)
-                }
-
-                Spacer()
-
-                if let progress = item.progress {
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(.white.opacity(0.2))
-                            Capsule()
-                                .fill(BrowseTheme.accent.gradient)
-                                .frame(width: proxy.size.width * progress)
-                        }
-                    }
-                    .frame(height: 4)
-                }
-            }
-            .padding(12)
-        }
-        .aspectRatio(aspectRatio, contentMode: .fit)
-        .clipShape(cardShape)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if let posterPath = item.artwork.posterPath,
-           let image = platformImage(at: posterPath) {
-            platformImageView(image)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-        } else if let posterURL = item.artwork.posterURL,
-                  let url = URL(string: posterURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                default:
-                    fallbackContent
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-        } else {
-            fallbackContent
-        }
-    }
-
-    private var fallbackContent: some View {
-        Color.clear
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottomLeading) {
-                Text(item.title)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(3)
-                    .padding(16)
-            }
-    }
-
-    private var backgroundGradient: LinearGradient {
-        let colors: [Color]
-        switch item.source {
-        case .local:
-            colors = [Color(red: 0.98, green: 0.58, blue: 0.27), Color(red: 0.31, green: 0.16, blue: 0.12)]
-        case .plex:
-            colors = [Color(red: 0.43, green: 0.35, blue: 0.76), Color(red: 0.11, green: 0.13, blue: 0.24)]
-        case .pin:
-            colors = [Color(red: 0.22, green: 0.64, blue: 0.74), Color(red: 0.08, green: 0.22, blue: 0.29)]
-        }
-        return LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private func platformImage(at path: String) -> PlatformImage? {
-        #if os(macOS)
-        return PlatformImage(contentsOfFile: path)
-        #else
-        return PlatformImage(contentsOfFile: path)
-        #endif
-    }
-
-    @ViewBuilder
-    private func platformImageView(_ image: PlatformImage) -> some View {
-        #if os(macOS)
-        Image(nsImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-        #else
-        Image(uiImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-        #endif
     }
 }
 
@@ -1017,52 +1006,43 @@ private struct BrowseItemDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func platformImage(at path: String) -> PlatformImage? {
-        #if os(macOS)
-        return PlatformImage(contentsOfFile: path)
-        #else
-        return PlatformImage(contentsOfFile: path)
-        #endif
-    }
-
     @ViewBuilder
-    private func platformImageView(_ image: PlatformImage) -> some View {
+    private func platformImageView(_ image: PlatformImage,
+                                   rendering: MediaArtworkRendering) -> some View {
         #if os(macOS)
         Image(nsImage: image)
             .resizable()
-            .aspectRatio(contentMode: .fill)
+            .aspectRatio(contentMode: rendering.placement.contentMode)
+            .padding(rendering.padding)
         #else
         Image(uiImage: image)
             .resizable()
-            .aspectRatio(contentMode: .fill)
+            .aspectRatio(contentMode: rendering.placement.contentMode)
+            .padding(rendering.padding)
         #endif
     }
 
-    @ViewBuilder
     private func heroBackground(for model: BrowseDetailModel) -> some View {
-        if let backdropPath = model.item.artwork.backdropPath,
-           let image = platformImage(at: backdropPath) {
-            platformImageView(image)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-        } else if let backdropURL = model.item.artwork.backdropURL,
-                  let url = URL(string: backdropURL) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                default:
-                    BrowseBackdrop()
-                }
+        let descriptor = MediaArtworkDescriptor.browseItem(model.item)
+        let assets = descriptor.orderedAssets(for: .landscapeCard)
+
+        return ArtworkImageSequenceView(
+            assets: assets,
+            success: { asset, image in
+                platformImageView(
+                    image,
+                    rendering: descriptor.rendering(for: asset, in: .landscapeCard)
+                )
+            },
+            loading: {
+                BrowseBackdrop()
+            },
+            fallback: {
+                BrowseBackdrop()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-        } else {
-            BrowseBackdrop()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     private func heroHorizontalContent(for model: BrowseDetailModel) -> some View {
@@ -1103,13 +1083,11 @@ private struct BrowseItemDetailView: View {
     }
 
     private func heroPosterPanel(for model: BrowseDetailModel, width: CGFloat = 180) -> some View {
-        BrowseArtworkView(item: model.item, aspectRatio: 0.68)
-            .frame(width: width)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.28), radius: 18, y: 10)
+        MediaArtworkView(
+            descriptor: .browseItem(model.item),
+            style: .posterCard
+        )
+        .frame(width: width)
     }
 
     private func heroTextPanel(for model: BrowseDetailModel) -> some View {
@@ -1246,12 +1224,11 @@ private struct BrowseDetailSectionRow: View {
     }
 
     private func thumbnailContent(width: CGFloat) -> some View {
-        BrowseArtworkView(item: item, aspectRatio: 1.4)
-            .frame(width: width)
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(.white.opacity(0.05), lineWidth: 1)
-            )
+        MediaArtworkView(
+            descriptor: .browseItem(item),
+            style: .landscapeRow
+        )
+        .frame(width: width)
     }
 
     private var chevron: some View {

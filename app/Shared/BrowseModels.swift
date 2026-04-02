@@ -115,10 +115,41 @@ enum BrowseItemKind: String, Codable, Hashable, Sendable {
     case source
 }
 
+enum BrowseSearchThumbnailStyle: String, Hashable, Sendable {
+    case poster
+    case landscape
+}
+
+extension BrowseItemKind {
+    var searchThumbnailStyle: BrowseSearchThumbnailStyle {
+        .landscape
+    }
+
+    var searchResultLabel: String {
+        switch self {
+        case .movie: "Movie"
+        case .show: "Show"
+        case .episode: "Episode"
+        case .folder: "Folder"
+        case .source: "Source"
+        }
+    }
+}
+
 enum BrowseItemSource: String, Codable, Hashable, Sendable {
     case local
     case plex
     case pin
+}
+
+extension BrowseItemSource {
+    var searchResultLabel: String {
+        switch self {
+        case .local: "Local Library"
+        case .plex: "Plex"
+        case .pin: "Pinned"
+        }
+    }
 }
 
 struct BrowseArtwork: Hashable, Sendable {

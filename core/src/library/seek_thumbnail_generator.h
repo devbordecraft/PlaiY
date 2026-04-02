@@ -56,6 +56,15 @@ private:
         std::list<int>::iterator lru_it;
     };
 
+    struct CacheManifest {
+        std::string video_path;
+        uintmax_t file_size = 0;
+        int64_t modified_ns = 0;
+        int interval_seconds = 0;
+        ThumbnailMode mode = ThumbnailMode::LegacySwscale;
+        int total_count = 0;
+    };
+
     void generate_loop(std::string video_path, std::string cache_dir,
                        int interval_seconds);
     bool try_get_cached_thumbnail(int index,
@@ -63,6 +72,13 @@ private:
                                   int* out_width,
                                   int* out_height);
     void store_decoded_thumbnail(int index, DecodedThumbnail thumbnail);
+    bool restore_cached_generation(const std::string& video_path,
+                                   const std::string& cache_dir,
+                                   int interval_seconds);
+    void write_cache_manifest(const std::string& video_path,
+                              const std::string& cache_dir,
+                              int interval_seconds,
+                              int total_count);
     bool generate_legacy_thumbnails(const std::string& video_path,
                                     const std::string& cache_dir,
                                     int interval_seconds);

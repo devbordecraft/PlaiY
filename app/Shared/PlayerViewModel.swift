@@ -428,6 +428,7 @@ class PlayerViewModel: ObservableObject {
     private var plexSyncHealthy = false
     private var plexIntroMarker: PlexMarker?
     private var onPlexAuthInvalid: ((String) -> Void)?
+    private var plexSessionGeneration: UInt64 = 0
     private var pendingOpenContext: PendingOpenContext?
     private var deferredPlayOnReady = false
     private var openRequestID: UInt64 = 0
@@ -508,7 +509,10 @@ class PlayerViewModel: ObservableObject {
         thumbRetryWork = nil
     }
 
-    private func resetPlexState() {
+    private func resetPlexState(advanceGeneration: Bool = true) {
+        if advanceGeneration {
+            plexSessionGeneration &+= 1
+        }
         plexSync = nil
         plexSyncHealthy = false
         plexIntroMarker = nil
@@ -516,8 +520,13 @@ class PlayerViewModel: ObservableObject {
         lastPlexTimelineUpdate = 0
     }
 
+    private func isActivePlexSession(generation: UInt64, itemID: String) -> Bool {
+        plexSessionGeneration == generation && currentPlaybackItem?.id == itemID
+    }
+
     private func configurePlexSync(for item: PlaybackItem) {
-        resetPlexState()
+        resetPlexState(advanceGeneration: false)
+        let sessionGeneration = plexSessionGeneration
 
         guard let context = item.plexContext,
               let session = PlexSyncSession(context: context) else {
@@ -534,7 +543,7 @@ class PlayerViewModel: ObservableObject {
             guard let self else { return }
             let snapshotResult = await session.refreshMetadata()
             await MainActor.run {
-                guard self.currentPlaybackItem?.id == item.id else { return }
+                guard self.isActivePlexSession(generation: sessionGeneration, itemID: item.id) else { return }
                 switch snapshotResult {
                 case .success(let snapshot):
                     self.plexSyncHealthy = true
@@ -581,8 +590,9 @@ class PlayerViewModel: ObservableObject {
     private func reportPlexTimeline(_ state: PlexTimelineState,
                                     positionUs: Int64,
                                     continuing: Bool = false) {
-        guard let plexSync else { return }
-        let sourceId = currentPlaybackItem?.plexContext?.sourceId
+        guard let plexSync, let item = currentPlaybackItem else { return }
+        let sourceId = item.plexContext?.sourceId
+        let sessionGeneration = plexSessionGeneration
 
         lastPlexTimelineUpdate = CACurrentMediaTime()
         let durationUs = transport.duration
@@ -595,9 +605,13 @@ class PlayerViewModel: ObservableObject {
                 continuing: continuing
             )
             await MainActor.run {
-                self?.plexSyncHealthy = status == .success
+                guard let self,
+                      self.isActivePlexSession(generation: sessionGeneration, itemID: item.id) else {
+                    return
+                }
+                self.plexSyncHealthy = status == .success
                 if status == .unauthorized, let sourceId {
-                    self?.onPlexAuthInvalid?(sourceId)
+                    self.onPlexAuthInvalid?(sourceId)
                 }
             }
         }
@@ -606,8 +620,9 @@ class PlayerViewModel: ObservableObject {
     private func finalizePlexPlayback(positionUs: Int64,
                                       continuing: Bool,
                                       finished: Bool) {
-        guard let plexSync else { return }
-        let sourceId = currentPlaybackItem?.plexContext?.sourceId
+        guard let plexSync, let item = currentPlaybackItem else { return }
+        let sourceId = item.plexContext?.sourceId
+        let sessionGeneration = plexSessionGeneration
 
         lastPlexTimelineUpdate = CACurrentMediaTime()
         let durationUs = transport.duration
@@ -621,10 +636,14 @@ class PlayerViewModel: ObservableObject {
             )
             let scrobbleStatus = finished ? await plexSync.scrobble() : .success
             await MainActor.run {
-                self?.plexSyncHealthy = timelineStatus == .success && scrobbleStatus == .success
+                guard let self,
+                      self.isActivePlexSession(generation: sessionGeneration, itemID: item.id) else {
+                    return
+                }
+                self.plexSyncHealthy = timelineStatus == .success && scrobbleStatus == .success
                 if (timelineStatus == .unauthorized || scrobbleStatus == .unauthorized),
                    let sourceId {
-                    self?.onPlexAuthInvalid?(sourceId)
+                    self.onPlexAuthInvalid?(sourceId)
                 }
             }
         }
